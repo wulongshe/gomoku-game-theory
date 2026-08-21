@@ -12,7 +12,7 @@ export default defineConfig({
         },
         test: {
           name: 'engine',
-          include: ['src/engine/**/*.test.ts'],
+          include: ['tests/engine/**/*.test.ts'],
         },
       },
       './vitest.workers.config.ts',

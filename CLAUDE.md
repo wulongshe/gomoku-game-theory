@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Workflow
+
+- Never commit without explicit user confirmation for that specific commit.
+
 ## Code Style
 
 - Do not write comments for information that can be derived from the code itself.

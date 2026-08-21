@@ -8,7 +8,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from './game'
+} from '@/engine/game'
 
 function withStones(stones: Partial<Record<Seat, Point[]>>): GameState {
   const game = createGame()
