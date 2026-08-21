@@ -13,3 +13,21 @@ export type ServerMessage =
   | { type: 'frame_settled'; state: GameState; deadline: number | null }
   | { type: 'opponent_left' }
   | { type: 'error'; message: string }
+
+export function parseClientMessage(raw: string): ClientMessage | null {
+  let data: unknown
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (typeof data !== 'object' || data === null) return null
+  const msg = data as Record<string, unknown>
+  if (msg.type !== 'submit' || !Number.isInteger(msg.frame)) return null
+  const frame = msg.frame as number
+  if (msg.point === null) return { type: 'submit', frame, point: null }
+  if (typeof msg.point !== 'object' || msg.point === null) return null
+  const point = msg.point as Record<string, unknown>
+  if (!Number.isInteger(point.x) || !Number.isInteger(point.y)) return null
+  return { type: 'submit', frame, point: { x: point.x as number, y: point.y as number } }
+}
