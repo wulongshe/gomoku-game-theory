@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import { cloudflareTest } from '@cloudflare/vitest-pool-workers'
 
@@ -7,6 +8,11 @@ export default defineConfig({
       wrangler: { configPath: './wrangler.jsonc' },
     }),
   ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
     name: 'worker',
     include: ['src/worker/**/*.test.ts'],

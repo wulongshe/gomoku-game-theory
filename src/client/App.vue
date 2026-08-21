@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BOARD_SIZE, FRAME_SECONDS } from '../engine/game'
+import { BOARD_SIZE, FRAME_SECONDS } from '@/engine/game'
 
 const status = ref('')
 

@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
-import { ROOM_CODE_PATTERN } from '../shared/protocol'
+import { ROOM_CODE_PATTERN } from '@/shared/protocol'
 
 describe('POST /api/rooms', () => {
   it('returns a short room code', async () => {

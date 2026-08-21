@@ -10,6 +10,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   }
 }

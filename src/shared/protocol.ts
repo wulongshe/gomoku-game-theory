@@ -1,4 +1,4 @@
-import type { GameState, Point, Seat } from '../engine/game'
+import type { GameState, Point, Seat } from '@/engine/game'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6

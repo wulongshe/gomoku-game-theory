@@ -1,4 +1,4 @@
-import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '../shared/protocol'
+import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@/shared/protocol'
 
 export { Room } from './room'
 
