@@ -1,16 +1,17 @@
-import { customAlphabet } from 'nanoid'
-import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@/shared/protocol'
+import { newRoomCode } from './roomCode'
 
 export { Room } from './room'
+export { Lobby } from './lobby'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
-
-const newRoomCode = customAlphabet(ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH)
 
 async function handle(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       return Response.json({ code: newRoomCode() })
+    }
+    if (url.pathname === '/api/match/ws') {
+      return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
     }
     const wsMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})\/ws$/)
     if (wsMatch) {

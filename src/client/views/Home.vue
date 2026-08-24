@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { createRoom } from '~/api'
+import { createRoom, matchWsUrl } from '~/api'
 import { FRAME_SECONDS } from '@/engine/game'
+import type { LobbyServerMessage } from '@/shared/protocol'
 
 const creating = ref(false)
+const matching = ref(false)
+let matched = false
+
+const now = useTimestamp({ interval: 1000 })
+const matchStart = ref(0)
+const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchStart.value) / 1000)))
 
 async function create() {
   creating.value = true
@@ -13,6 +22,31 @@ async function create() {
     location.assign(`/room/${await createRoom()}`)
   } catch {
     creating.value = false
+  }
+}
+
+const { open: openMatch, close: closeMatch } = useWebSocket(matchWsUrl(), {
+  immediate: false,
+  onMessage(_, event) {
+    const msg = JSON.parse(event.data) as LobbyServerMessage
+    if (msg.type === 'matched') {
+      matched = true
+      location.assign(`/room/${msg.code}`)
+    }
+  },
+  onDisconnected() {
+    if (!matched) matching.value = false
+  },
+})
+
+function toggleMatch() {
+  if (matching.value) {
+    closeMatch()
+    matching.value = false
+  } else {
+    matching.value = true
+    matchStart.value = Date.now()
+    openMatch()
   }
 }
 
@@ -63,10 +97,23 @@ const RULES = [
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <AppButton class="w-full" :disabled="creating" @click="create">
-        {{ creating ? '创建中…' : '开一局，让对手猜猜你的下一手' }}
+      <button
+        class="w-full cursor-pointer rounded-xl border border-stone-300 bg-white/80 px-6 py-3 text-lg font-medium text-stone-700 shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+        :disabled="creating"
+        @click="toggleMatch"
+      >
+        <span class="flex items-center justify-center gap-2">
+          <IconSpinner v-if="matching" class="size-5" />
+          <span>{{ matching ? `匹配中…${matchSeconds}s，点击取消` : '随机匹配' }}</span>
+        </span>
+      </button>
+      <AppButton class="w-full" :disabled="creating || matching" @click="create">
+        <span class="flex items-center justify-center gap-2">
+          <IconSpinner v-if="creating" class="size-5" />
+          <span>{{ creating ? '创建中…' : '创建房间' }}</span>
+        </span>
       </AppButton>
-      <p class="text-xs text-stone-400">免下载 · 免注册 · 复制链接发给朋友，10 秒开局</p>
+      <p class="text-xs text-stone-400">免下载 · 免注册，10 秒开局</p>
     </div>
   </main>
 </template>

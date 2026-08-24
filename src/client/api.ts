@@ -6,6 +6,13 @@ export async function createRoom(): Promise<string> {
 }
 
 export function roomWsUrl(code: string, token: string): string {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}/api/rooms/${code}/ws?token=${token}`
+  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}`
+}
+
+export function matchWsUrl(): string {
+  return `${wsProto()}://${location.host}/api/match/ws`
+}
+
+function wsProto(): string {
+  return location.protocol === 'https:' ? 'wss' : 'ws'
 }

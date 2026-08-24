@@ -10,6 +10,8 @@ export type ClientMessage =
   | { type: 'rematch_decline' }
   | { type: 'leave' }
 
+export type LobbyServerMessage = { type: 'matched'; code: string }
+
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
   | {
