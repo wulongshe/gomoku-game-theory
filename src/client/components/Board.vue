@@ -37,8 +37,8 @@ function pos(i: number): number {
 const stones = computed(() =>
   ALL_POINTS.filter((p) => {
     const cell = cellAt(props.state, p)
-    return cell === 'p1' || cell === 'p2'
-  }).map((p) => ({ ...p, cell: cellAt(props.state, p) as 'p1' | 'p2' })),
+    return cell === 'black' || cell === 'white'
+  }).map((p) => ({ ...p, cell: cellAt(props.state, p) as 'black' | 'white' })),
 )
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
@@ -56,11 +56,11 @@ function isLastMove(p: Point): boolean {
     aria-label="棋盘"
   >
     <defs>
-      <radialGradient id="stone-p1" cx="35%" cy="30%" r="80%">
+      <radialGradient id="stone-black" cx="35%" cy="30%" r="80%">
         <stop offset="0%" stop-color="#5a5a5a" />
         <stop offset="100%" stop-color="#111111" />
       </radialGradient>
-      <radialGradient id="stone-p2" cx="35%" cy="30%" r="80%">
+      <radialGradient id="stone-white" cx="35%" cy="30%" r="80%">
         <stop offset="0%" stop-color="#ffffff" />
         <stop offset="100%" stop-color="#d6d3d1" />
       </radialGradient>
@@ -110,7 +110,7 @@ function isLastMove(p: Point): boolean {
         :cy="pos(stone.y)"
         :r="STONE_R"
         :fill="`url(#stone-${stone.cell})`"
-        :stroke="stone.cell === 'p2' ? '#a8a29e' : 'none'"
+        :stroke="stone.cell === 'white' ? '#a8a29e' : 'none'"
         stroke-width="1"
       />
       <circle
@@ -118,7 +118,7 @@ function isLastMove(p: Point): boolean {
         :cx="pos(stone.x)"
         :cy="pos(stone.y)"
         r="5"
-        :fill="stone.cell === 'p1' ? '#ffffff' : '#1c1917'"
+        :fill="stone.cell === 'black' ? '#ffffff' : '#1c1917'"
         opacity="0.85"
       />
     </g>
@@ -148,7 +148,7 @@ function isLastMove(p: Point): boolean {
         :cy="pos(selected.y)"
         :r="STONE_R + 4"
         fill="none"
-        :stroke="seat === 'p1' ? '#1c1917' : '#ffffff'"
+        :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
         stroke-width="2.5"
         class="animate-[breathe_1.6s_ease-in-out_infinite]"
       />

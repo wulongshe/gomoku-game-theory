@@ -49,10 +49,10 @@ export class Room extends DurableObject<Env> {
 
     const players = (await this.ctx.storage.get<Players>('players')) ?? {}
     let seat: Seat
-    if (players.p1 === token) seat = 'p1'
-    else if (players.p2 === token) seat = 'p2'
-    else if (!players.p1) seat = 'p1'
-    else if (!players.p2) seat = 'p2'
+    if (players.black === token) seat = 'black'
+    else if (players.white === token) seat = 'white'
+    else if (!players.black) seat = 'black'
+    else if (!players.white) seat = 'white'
     else return new Response('Room is full', { status: 409 })
 
     if (players[seat] !== token) {
@@ -82,7 +82,7 @@ export class Room extends DurableObject<Env> {
         state: game,
         deadline: game.phase === 'playing' ? deadline : null,
         frameSeconds: await this.frameSeconds(),
-        submitted: { p1: !!choices.p1?.final, p2: !!choices.p2?.final },
+        submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
       })
       for (const other of this.ctx.getWebSockets()) {
@@ -90,7 +90,7 @@ export class Room extends DurableObject<Env> {
       }
     } else {
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
-      if (ready.p1 && ready.p2 && this.ctx.getWebSockets().length === 2) {
+      if (ready.black && ready.white && this.ctx.getWebSockets().length === 2) {
         await this.startGame()
       } else {
         await this.broadcastLobby()
@@ -102,7 +102,7 @@ export class Room extends DurableObject<Env> {
 
   private async broadcastLobby(exclude?: WebSocket): Promise<void> {
     const sockets = this.ctx.getWebSockets().filter((ws) => ws !== exclude)
-    const present = { p1: false, p2: false }
+    const present = { black: false, white: false }
     for (const ws of sockets) {
       const attachment = ws.deserializeAttachment() as Attachment
       if (!attachment.replaced) present[attachment.seat] = true
@@ -111,7 +111,7 @@ export class Room extends DurableObject<Env> {
     const message: ServerMessage = {
       type: 'lobby',
       present,
-      ready: { p1: !!ready.p1, p2: !!ready.p2 },
+      ready: { black: !!ready.black, white: !!ready.white },
     }
     for (const ws of sockets) {
       this.send(ws, message)
@@ -134,7 +134,7 @@ export class Room extends DurableObject<Env> {
       state: game,
       deadline,
       frameSeconds,
-      submitted: { p1: false, p2: false },
+      submitted: { black: false, white: false },
       yourChoice: null,
     })
   }
@@ -157,7 +157,7 @@ export class Room extends DurableObject<Env> {
         ready[seat] = true
         await this.ctx.storage.put('ready', ready)
       }
-      if (ready.p1 && ready.p2 && this.ctx.getWebSockets().length === 2) {
+      if (ready.black && ready.white && this.ctx.getWebSockets().length === 2) {
         return this.startGame()
       }
       return this.broadcastLobby()
@@ -194,7 +194,7 @@ export class Room extends DurableObject<Env> {
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws) this.send(other, { type: 'opponent_submitted' })
       }
-      if (choices.p1?.final && choices.p2?.final) {
+      if (choices.black?.final && choices.white?.final) {
         await this.settle(game, choices)
       }
     }
@@ -202,7 +202,7 @@ export class Room extends DurableObject<Env> {
 
   private async handleLeave(seat: Seat, game: GameState | undefined): Promise<void> {
     if (game && game.phase === 'playing') {
-      const resigned: GameState = { ...game, phase: seat === 'p1' ? 'p2_won' : 'p1_won' }
+      const resigned: GameState = { ...game, phase: seat === 'black' ? 'white_won' : 'black_won' }
       this.broadcast({ type: 'frame_settled', state: resigned, deadline: null })
     }
     for (const socket of this.ctx.getWebSockets()) {
@@ -223,7 +223,7 @@ export class Room extends DurableObject<Env> {
         if (other !== ws) this.send(other, { type: 'rematch_requested' })
       }
     }
-    if (rematch.p1 && rematch.p2) {
+    if (rematch.black && rematch.white) {
       await this.startGame()
     }
   }
@@ -258,8 +258,8 @@ export class Room extends DurableObject<Env> {
 
   private async settle(game: GameState, choices: Choices): Promise<void> {
     const next = settleFrame(game, {
-      p1: choices.p1?.point ?? null,
-      p2: choices.p2?.point ?? null,
+      black: choices.black?.point ?? null,
+      white: choices.white?.point ?? null,
     })
     if (next.phase === 'playing') {
       const deadline = Date.now() + (await this.frameSeconds()) * 1000

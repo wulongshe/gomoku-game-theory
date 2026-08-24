@@ -25,7 +25,7 @@ const roomUrl = location.href
 type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 
 const stage = ref<Stage>('connecting')
-const seat = ref<Seat>('p1')
+const seat = ref<Seat>('black')
 const game = ref<GameState | null>(null)
 const deadline = ref<number | null>(null)
 const selected = ref<Point | null>(null)
@@ -90,7 +90,7 @@ function diffNewStones(next: GameState): Point[] {
   const prev = game.value?.board
   if (!prev) return []
   return next.board.flatMap((cell, i) =>
-    (cell === 'p1' || cell === 'p2') && prev[i] === 'empty'
+    (cell === 'black' || cell === 'white') && prev[i] === 'empty'
       ? [{ x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) }]
       : [],
   )
@@ -103,7 +103,7 @@ function handleMessage(msg: ServerMessage) {
       stage.value = 'waiting'
       break
     case 'lobby': {
-      const opp = seat.value === 'p1' ? 'p2' : 'p1'
+      const opp = seat.value === 'black' ? 'white' : 'black'
       myReady.value = msg.ready[seat.value]
       oppReady.value = msg.ready[opp]
       oppLeft.value = !msg.present[opp]
@@ -115,7 +115,7 @@ function handleMessage(msg: ServerMessage) {
       deadline.value = msg.deadline
       frameSeconds.value = msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
-      oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
+      oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
       lastMoves.value = []
       rematchAsked.value = false
@@ -185,17 +185,17 @@ const oppStatus = computed(() => {
   return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500' }
 })
 
-const seatLabel = computed(() => (seat.value === 'p1' ? '你执黑' : '你执白'))
-const oppSeatLabel = computed(() => (seat.value === 'p1' ? '对方执白' : '对方执黑'))
+const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执白'))
+const oppSeatLabel = computed(() => (seat.value === 'black' ? '对方执白' : '对方执黑'))
 
 const winnerSeat = computed<Seat | null>(() => {
-  if (game.value?.phase === 'p1_won') return 'p1'
-  if (game.value?.phase === 'p2_won') return 'p2'
+  if (game.value?.phase === 'black_won') return 'black'
+  if (game.value?.phase === 'white_won') return 'white'
   return null
 })
 
 const winnerLabel = computed(() =>
-  winnerSeat.value ? (winnerSeat.value === 'p1' ? '黑方获胜' : '白方获胜') : '和棋',
+  winnerSeat.value ? (winnerSeat.value === 'black' ? '黑方获胜' : '白方获胜') : '和棋',
 )
 
 const resultChar = computed(() => {
@@ -342,8 +342,8 @@ function exitRoom() {
           <div class="flex w-full flex-col gap-2">
             <div
               v-for="player in [
-                { label: seatLabel, black: seat === 'p1', ready: myReady },
-                { label: oppSeatLabel, black: seat !== 'p1', ready: oppReady },
+                { label: seatLabel, black: seat === 'black', ready: myReady },
+                { label: oppSeatLabel, black: seat !== 'black', ready: oppReady },
               ]"
               :key="player.label"
               class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-3"
@@ -380,7 +380,7 @@ function exitRoom() {
           <span class="flex items-center gap-1.5 font-medium text-stone-700">
             <span
               class="inline-block size-3.5 rounded-full"
-              :class="seat === 'p1' ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
+              :class="seat === 'black' ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
             />
             {{ seatLabel }}
           </span>

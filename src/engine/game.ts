@@ -1,9 +1,9 @@
 export const BOARD_SIZE = 15
 export const FRAME_SECONDS = 30
 
-export type Seat = 'p1' | 'p2'
-export type CellState = 'empty' | 'p1' | 'p2' | 'forbidden'
-export type Phase = 'playing' | 'p1_won' | 'p2_won' | 'draw'
+export type Seat = 'black' | 'white'
+export type CellState = 'empty' | 'black' | 'white' | 'forbidden'
+export type Phase = 'playing' | 'black_won' | 'white_won' | 'draw'
 
 export interface Point {
   x: number
@@ -17,8 +17,8 @@ export interface GameState {
 }
 
 export interface FrameChoices {
-  p1: Point | null
-  p2: Point | null
+  black: Point | null
+  white: Point | null
 }
 
 export function createGame(): GameState {
@@ -76,28 +76,28 @@ function hasFiveThrough(board: CellState[], seat: Seat, point: Point): boolean {
 
 export function settleFrame(state: GameState, choices: FrameChoices): GameState {
   if (state.phase !== 'playing') throw new Error('game is over')
-  for (const seat of ['p1', 'p2'] as const) {
+  for (const seat of ['black', 'white'] as const) {
     const point = choices[seat]
     if (point && !isLegalChoice(state, point)) throw new Error(`illegal choice for ${seat}`)
   }
 
   const board = [...state.board]
-  const { p1, p2 } = choices
+  const { black, white } = choices
 
-  if (p1 && p2 && p1.x === p2.x && p1.y === p2.y) {
-    board[p1.y * BOARD_SIZE + p1.x] = 'forbidden'
+  if (black && white && black.x === white.x && black.y === white.y) {
+    board[black.y * BOARD_SIZE + black.x] = 'forbidden'
   } else {
-    if (p1) board[p1.y * BOARD_SIZE + p1.x] = 'p1'
-    if (p2) board[p2.y * BOARD_SIZE + p2.x] = 'p2'
+    if (black) board[black.y * BOARD_SIZE + black.x] = 'black'
+    if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
   }
 
-  const p1Won = p1 !== null && board[p1.y * BOARD_SIZE + p1.x] === 'p1' && hasFiveThrough(board, 'p1', p1)
-  const p2Won = p2 !== null && board[p2.y * BOARD_SIZE + p2.x] === 'p2' && hasFiveThrough(board, 'p2', p2)
+  const blackWon = black !== null && board[black.y * BOARD_SIZE + black.x] === 'black' && hasFiveThrough(board, 'black', black)
+  const whiteWon = white !== null && board[white.y * BOARD_SIZE + white.x] === 'white' && hasFiveThrough(board, 'white', white)
 
   let phase: Phase = 'playing'
-  if (p1Won && p2Won) phase = 'draw'
-  else if (p1Won) phase = 'p1_won'
-  else if (p2Won) phase = 'p2_won'
+  if (blackWon && whiteWon) phase = 'draw'
+  else if (blackWon) phase = 'black_won'
+  else if (whiteWon) phase = 'white_won'
   else if (!board.includes('empty')) phase = 'draw'
 
   return { board, phase, frame: state.frame + 1 }
