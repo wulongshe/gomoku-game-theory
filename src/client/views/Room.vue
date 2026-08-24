@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useClipboard, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import Board from '~/components/Board.vue'
 import SharePoster from '~/components/SharePoster.vue'
+import IconCross from '~/components/icons/IconCross.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
-import { roomWsUrl } from '~/api'
+import { roomExists, roomWsUrl } from '~/api'
 import {
   BOARD_SIZE,
   FRAME_SECONDS,
@@ -40,6 +41,7 @@ const errorNotice = ref('')
 const lastMoves = ref<Point[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
+const notFound = ref(false)
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
 const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
@@ -47,7 +49,8 @@ const now = useTimestamp({ interval: 250 })
 const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true })
 
 let replaced = false
-const { send } = useWebSocket(roomWsUrl(props.code, token.value), {
+const { send, open } = useWebSocket(roomWsUrl(props.code, token.value), {
+  immediate: false,
   autoReconnect: {
     retries: (retried) => retried < 5 && !replaced && !roomClosed.value,
     delay: 1000,
@@ -64,6 +67,19 @@ const { send } = useWebSocket(roomWsUrl(props.code, token.value), {
     if (stage.value === 'over') return
     stage.value = replaced || roomClosed.value ? 'error' : 'connecting'
   },
+})
+
+onMounted(async () => {
+  let exists = true
+  try {
+    exists = await roomExists(props.code)
+  } catch {}
+  if (exists) {
+    open()
+  } else {
+    notFound.value = true
+    stage.value = 'error'
+  }
 })
 
 function diffNewStones(next: GameState): Point[] {
@@ -403,8 +419,27 @@ function exitRoom() {
           <AppButton @click="reload">重新连接</AppButton>
         </template>
         <template v-else>
-          <p class="text-stone-600">无法加入房间 {{ props.code }}</p>
-          <a class="text-stone-800 underline underline-offset-4" href="/">返回首页</a>
+          <div
+            class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 text-center shadow-sm backdrop-blur"
+          >
+            <span class="flex size-14 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <IconCross class="size-6" />
+            </span>
+            <div class="flex flex-col gap-1">
+              <p class="text-lg font-semibold text-stone-800">
+                {{ notFound ? '房间不存在或已关闭' : '无法加入房间' }}
+              </p>
+              <p class="text-sm text-stone-500">
+                {{ notFound ? '链接可能已失效，房主离开后房间会自动关闭' : '连接失败，请检查网络后重试' }}
+              </p>
+            </div>
+            <p class="rounded-full bg-stone-100 px-4 py-1 text-sm tracking-[0.2em] text-stone-400">
+              {{ props.code }}
+            </p>
+            <a class="w-full" href="/">
+              <AppButton class="w-full">返回首页</AppButton>
+            </a>
+          </div>
         </template>
       </div>
     </template>

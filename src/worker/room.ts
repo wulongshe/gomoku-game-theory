@@ -11,6 +11,7 @@ import {
 import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
 
 const FRAME_MS = FRAME_SECONDS * 1000
+const IDLE_TTL_MS = 10 * 60 * 1000
 
 interface Attachment {
   seat: Seat
@@ -23,10 +24,23 @@ type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
 export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
+    if (request.method === 'POST') {
+      await this.ctx.storage.put('created', true)
+      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      return new Response(null, { status: 204 })
+    }
+    const url = new URL(request.url)
+    const created = (await this.ctx.storage.get<boolean>('created')) ?? false
+    if (!url.pathname.endsWith('/ws')) {
+      return Response.json({ exists: created })
+    }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 })
     }
-    const token = new URL(request.url).searchParams.get('token')
+    if (!created) {
+      return new Response('Room not found', { status: 404 })
+    }
+    const token = url.searchParams.get('token')
     if (!token) {
       return new Response('Missing token', { status: 400 })
     }
@@ -175,7 +189,9 @@ export class Room extends DurableObject<Env> {
       return this.close()
     }
     const game = await this.ctx.storage.get<GameState>('game')
-    if (!game || game.phase !== 'playing') return
+    if (!game || game.phase !== 'playing') {
+      return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
     await this.settle(game, choices)
   }
@@ -189,7 +205,8 @@ export class Room extends DurableObject<Env> {
     }
     if (remaining.length === 0) {
       const game = await this.ctx.storage.get<GameState>('game')
-      if (!game || game.phase !== 'playing') await this.close()
+      if (game && game.phase !== 'playing') await this.close()
+      else if (!game) await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     }
   }
 
@@ -206,7 +223,7 @@ export class Room extends DurableObject<Env> {
       this.broadcast({ type: 'frame_settled', state: next, deadline })
     } else {
       await this.ctx.storage.delete('choices')
-      await this.ctx.storage.deleteAlarm()
+      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       await this.ctx.storage.put('game', next)
       this.broadcast({ type: 'frame_settled', state: next, deadline: null })
     }

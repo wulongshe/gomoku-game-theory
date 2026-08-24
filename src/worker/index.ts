@@ -8,15 +8,16 @@ const CANONICAL_HOST = 'gomoku.recode.top'
 async function handle(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
-      return Response.json({ code: newRoomCode() })
+      const code = newRoomCode()
+      await env.ROOM.get(env.ROOM.idFromName(code)).fetch('https://room/create', { method: 'POST' })
+      return Response.json({ code })
     }
     if (url.pathname === '/api/match/ws') {
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
     }
-    const wsMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})\/ws$/)
-    if (wsMatch) {
-      const stub = env.ROOM.get(env.ROOM.idFromName(wsMatch[1]))
-      return stub.fetch(request)
+    const roomMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})(\/ws)?$/)
+    if (roomMatch && request.method === 'GET') {
+      return env.ROOM.get(env.ROOM.idFromName(roomMatch[1])).fetch(request)
     }
     return new Response('Not Found', { status: 404 })
   }

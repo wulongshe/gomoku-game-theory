@@ -10,6 +10,10 @@ interface Client {
   rematch(): void
 }
 
+async function createRoom(code: string): Promise<void> {
+  await env.ROOM.get(env.ROOM.idFromName(code)).fetch('https://room/create', { method: 'POST' })
+}
+
 async function connect(code: string, token: string): Promise<Client> {
   const res = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?token=${token}`, {
     headers: { Upgrade: 'websocket' },
@@ -45,6 +49,7 @@ async function connect(code: string, token: string): Promise<Client> {
 }
 
 async function startGame(code: string): Promise<[Client, Client]> {
+  await createRoom(code)
   const a = await connect(code, 'token-a')
   const b = await connect(code, 'token-b')
   expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
@@ -62,7 +67,24 @@ async function settledOnBoth(a: Client, b: Client) {
 }
 
 describe('Room', () => {
+  it('rejects joining a room that was never created', async () => {
+    const res = await SELF.fetch('https://example.com/api/rooms/NOROOM/ws?token=token-a', {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('keeps a waiting room alive while its creator reconnects', async () => {
+    await createRoom('ROOM18')
+    const a = await connect('ROOM18', 'token-a')
+    expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
+    a.ws.close()
+    const a2 = await connect('ROOM18', 'token-a')
+    expect(await a2.next('joined')).toMatchObject({ seat: 'p1' })
+  })
+
   it('seats two players and starts the game', async () => {
+    await createRoom('ROOM01')
     const a = await connect('ROOM01', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
     const b = await connect('ROOM01', 'token-b')
@@ -221,8 +243,10 @@ describe('Room', () => {
       const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
       expect(entries.size).toBe(0)
     })
-    const c = await connect('ROOM16', 'token-c')
-    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM16/ws?token=token-c', {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(res.status).toBe(404)
   })
 
   it('recycles a finished room after the last player leaves', async () => {
@@ -245,8 +269,8 @@ describe('Room', () => {
       expect(entries.size).toBe(0)
     })
 
-    const c = await connect('ROOM15', 'token-c')
-    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM15')
+    expect(await res.json()).toEqual({ exists: false })
   })
 
   it('lets a player reconnect mid-game and restores the frame snapshot', async () => {
@@ -292,7 +316,7 @@ describe('Room', () => {
     b.ws.close()
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM11')))).toBe(true)
 
-    const c = await connect('ROOM11', 'token-c')
-    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM11')
+    expect(await res.json()).toEqual({ exists: false })
   })
 })

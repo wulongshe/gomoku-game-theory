@@ -21,11 +21,20 @@ describe('https enforcement', () => {
 })
 
 describe('POST /api/rooms', () => {
-  it('returns a short room code', async () => {
+  it('returns a short room code and marks the room as created', async () => {
     const res = await SELF.fetch('https://example.com/api/rooms', { method: 'POST' })
     expect(res.status).toBe(200)
     const { code } = await res.json<{ code: string }>()
     expect(code).toMatch(ROOM_CODE_PATTERN)
+    const check = await SELF.fetch(`https://example.com/api/rooms/${code}`)
+    expect(await check.json()).toEqual({ exists: true })
+  })
+})
+
+describe('GET /api/rooms/:code', () => {
+  it('reports a never-created room as missing', async () => {
+    const res = await SELF.fetch('https://example.com/api/rooms/ZZZZZ2')
+    expect(await res.json()).toEqual({ exists: false })
   })
 })
 

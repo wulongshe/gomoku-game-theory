@@ -39,6 +39,8 @@ describe('Lobby', () => {
     expect(msgA.type).toBe('matched')
     expect(msgA.code).toMatch(ROOM_CODE_PATTERN)
     expect(msgB).toEqual(msgA)
+    const check = await SELF.fetch(`https://example.com/api/rooms/${msgA.code}`)
+    expect(await check.json()).toEqual({ exists: true })
   })
 
   it('pairs players in connection order across matches', async () => {

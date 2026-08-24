@@ -12,10 +12,11 @@ export class Lobby extends DurableObject<Env> {
 
     const waiting = this.ctx.getWebSockets().find((ws) => ws !== pair[1])
     if (waiting) {
-      const matched = JSON.stringify({
-        type: 'matched',
-        code: newRoomCode(),
-      } satisfies LobbyServerMessage)
+      const code = newRoomCode()
+      await this.env.ROOM.get(this.env.ROOM.idFromName(code)).fetch('https://room/create', {
+        method: 'POST',
+      })
+      const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
       for (const ws of [waiting, pair[1]]) {
         try {
           ws.send(matched)
