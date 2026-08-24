@@ -22,6 +22,8 @@ type Players = Partial<Record<Seat, string>>
 
 type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
+type SeatFlags = Partial<Record<Seat, boolean>>
+
 export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.method === 'POST') {
@@ -85,17 +87,40 @@ export class Room extends DurableObject<Env> {
       for (const other of this.ctx.getWebSockets()) {
         if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
       }
-    } else if (this.ctx.getWebSockets().length === 2) {
-      await this.startGame()
+    } else {
+      const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+      if (ready.p1 && ready.p2 && this.ctx.getWebSockets().length === 2) {
+        await this.startGame()
+      } else {
+        await this.broadcastLobby()
+      }
     }
 
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
 
+  private async broadcastLobby(exclude?: WebSocket): Promise<void> {
+    const sockets = this.ctx.getWebSockets().filter((ws) => ws !== exclude)
+    const present = { p1: false, p2: false }
+    for (const ws of sockets) {
+      const attachment = ws.deserializeAttachment() as Attachment
+      if (!attachment.replaced) present[attachment.seat] = true
+    }
+    const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+    const message: ServerMessage = {
+      type: 'lobby',
+      present,
+      ready: { p1: !!ready.p1, p2: !!ready.p2 },
+    }
+    for (const ws of sockets) {
+      this.send(ws, message)
+    }
+  }
+
   private async startGame(): Promise<void> {
     const game = createGame()
     const deadline = Date.now() + FRAME_MS
-    await this.ctx.storage.delete(['choices', 'rematch'])
+    await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
     await this.ctx.storage.put({ game, deadline })
     await this.ctx.storage.setAlarm(deadline)
     this.broadcast({
@@ -117,6 +142,18 @@ export class Room extends DurableObject<Env> {
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(seat, game)
+    }
+    if (msg.type === 'ready') {
+      if (game) return
+      const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+      if (!ready[seat]) {
+        ready[seat] = true
+        await this.ctx.storage.put('ready', ready)
+      }
+      if (ready.p1 && ready.p2 && this.ctx.getWebSockets().length === 2) {
+        return this.startGame()
+      }
+      return this.broadcastLobby()
     }
     if (msg.type === 'rematch') {
       return this.handleRematch(ws, seat, game)
@@ -171,7 +208,7 @@ export class Room extends DurableObject<Env> {
     if (!game || game.phase === 'playing') {
       return this.send(ws, { type: 'error', message: 'game not finished' })
     }
-    const rematch = (await this.ctx.storage.get<Partial<Record<Seat, boolean>>>('rematch')) ?? {}
+    const rematch = (await this.ctx.storage.get<SeatFlags>('rematch')) ?? {}
     if (!rematch[seat]) {
       rematch[seat] = true
       await this.ctx.storage.put('rematch', rematch)
@@ -203,10 +240,12 @@ export class Room extends DurableObject<Env> {
     for (const other of remaining) {
       this.send(other, { type: 'opponent_left' })
     }
+    const game = await this.ctx.storage.get<GameState>('game')
     if (remaining.length === 0) {
-      const game = await this.ctx.storage.get<GameState>('game')
       if (game && game.phase !== 'playing') await this.close()
       else if (!game) await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    } else if (!game) {
+      await this.broadcastLobby(ws)
     }
   }
 

@@ -22,7 +22,7 @@ const props = defineProps<{ code: string }>()
 
 const roomUrl = location.href
 
-type Stage = 'connecting' | 'waiting' | 'playing' | 'over' | 'error'
+type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 
 const stage = ref<Stage>('connecting')
 const seat = ref<Seat>('p1')
@@ -42,6 +42,8 @@ const lastMoves = ref<Point[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
 const notFound = ref(false)
+const myReady = ref(false)
+const oppReady = ref(false)
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
 const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
@@ -98,6 +100,14 @@ function handleMessage(msg: ServerMessage) {
       seat.value = msg.seat
       stage.value = 'waiting'
       break
+    case 'lobby': {
+      const opp = seat.value === 'p1' ? 'p2' : 'p1'
+      myReady.value = msg.ready[seat.value]
+      oppReady.value = msg.ready[opp]
+      oppLeft.value = !msg.present[opp]
+      stage.value = msg.present[opp] ? 'ready' : 'waiting'
+      break
+    }
     case 'start':
       game.value = msg.state
       deadline.value = msg.deadline
@@ -173,6 +183,7 @@ const oppStatus = computed(() => {
 })
 
 const seatLabel = computed(() => (seat.value === 'p1' ? '你执黑' : '你执白'))
+const oppSeatLabel = computed(() => (seat.value === 'p1' ? '对方执白' : '对方执黑'))
 
 const winnerSeat = computed<Seat | null>(() => {
   if (game.value?.phase === 'p1_won') return 'p1'
@@ -211,6 +222,12 @@ function submitChoice() {
   if (!game.value || !selected.value || submitted.value) return
   sendChoice(selected.value, true)
   submitted.value = true
+}
+
+function sendReady() {
+  if (myReady.value) return
+  send(JSON.stringify({ type: 'ready' } satisfies ClientMessage))
+  myReady.value = true
 }
 
 function requestRematch() {
@@ -301,6 +318,48 @@ function exitRoom() {
         <p class="flex items-center gap-2 text-sm text-stone-500">
           <span class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400" />
           等待对方加入…
+        </p>
+      </div>
+    </template>
+
+    <template v-else-if="stage === 'ready'">
+      <div class="flex flex-1 flex-col items-center justify-center gap-5">
+        <div
+          class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur"
+        >
+          <p class="text-sm text-stone-500">房间号</p>
+          <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
+          <div class="flex w-full flex-col gap-2">
+            <div
+              v-for="player in [
+                { label: seatLabel, black: seat === 'p1', ready: myReady },
+                { label: oppSeatLabel, black: seat !== 'p1', ready: oppReady },
+              ]"
+              :key="player.label"
+              class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-3"
+            >
+              <span class="flex items-center gap-2 text-sm font-medium text-stone-700">
+                <span
+                  class="inline-block size-3.5 rounded-full"
+                  :class="player.black ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
+                />
+                {{ player.label }}
+              </span>
+              <span
+                class="text-sm font-medium"
+                :class="player.ready ? 'text-emerald-600' : 'text-stone-400'"
+              >
+                {{ player.ready ? '已准备 ✓' : '未准备' }}
+              </span>
+            </div>
+          </div>
+          <AppButton class="w-full" :disabled="myReady" @click="sendReady">
+            {{ myReady ? '已准备，等待对方…' : '准备' }}
+          </AppButton>
+        </div>
+        <p class="flex items-center gap-2 text-sm text-stone-500">
+          <span class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400" />
+          {{ myReady ? '等待对方准备…' : '对方已加入，双方准备后开局' }}
         </p>
       </div>
     </template>

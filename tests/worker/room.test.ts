@@ -7,6 +7,7 @@ interface Client {
   ws: WebSocket
   next(type: ServerMessage['type']): Promise<ServerMessage>
   submit(frame: number, point: Point | null, final?: boolean): void
+  ready(): void
   rematch(): void
 }
 
@@ -42,6 +43,9 @@ async function connect(code: string, token: string): Promise<Client> {
     submit(frame, point, final = true) {
       ws.send(JSON.stringify({ type: 'submit', frame, point, final }))
     },
+    ready() {
+      ws.send(JSON.stringify({ type: 'ready' }))
+    },
     rematch() {
       ws.send(JSON.stringify({ type: 'rematch' }))
     },
@@ -54,6 +58,8 @@ async function startGame(code: string): Promise<[Client, Client]> {
   const b = await connect(code, 'token-b')
   expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
   expect(await b.next('joined')).toMatchObject({ seat: 'p2' })
+  a.ready()
+  b.ready()
   await a.next('start')
   await b.next('start')
   return [a, b]
@@ -83,11 +89,20 @@ describe('Room', () => {
     expect(await a2.next('joined')).toMatchObject({ seat: 'p1' })
   })
 
-  it('seats two players and starts the game', async () => {
+  it('seats two players and starts once both are ready', async () => {
     await createRoom('ROOM01')
     const a = await connect('ROOM01', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
+    expect(await a.next('lobby')).toMatchObject({ present: { p1: true, p2: false } })
     const b = await connect('ROOM01', 'token-b')
+    expect(await b.next('joined')).toMatchObject({ seat: 'p2' })
+    expect(await b.next('lobby')).toMatchObject({
+      present: { p1: true, p2: true },
+      ready: { p1: false, p2: false },
+    })
+    a.ready()
+    expect(await b.next('lobby')).toMatchObject({ ready: { p1: true, p2: false } })
+    b.ready()
     const start = await a.next('start')
     expect(start).toMatchObject({
       state: { frame: 1, phase: 'playing' },
@@ -95,6 +110,22 @@ describe('Room', () => {
       yourChoice: null,
     })
     expect(await b.next('start')).toEqual(start)
+  })
+
+  it('keeps a ready flag across a pre-game reconnect', async () => {
+    await createRoom('ROOM19')
+    const a = await connect('ROOM19', 'token-a')
+    expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
+    a.ready()
+    a.ws.close()
+    const a2 = await connect('ROOM19', 'token-a')
+    expect(await a2.next('joined')).toMatchObject({ seat: 'p1' })
+    const b = await connect('ROOM19', 'token-b')
+    expect(await b.next('joined')).toMatchObject({ seat: 'p2' })
+    expect(await b.next('lobby')).toMatchObject({ ready: { p1: true, p2: false } })
+    b.ready()
+    await a2.next('start')
+    await b.next('start')
   })
 
   it('rejects a third player', async () => {

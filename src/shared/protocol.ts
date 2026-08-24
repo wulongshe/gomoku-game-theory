@@ -6,6 +6,7 @@ export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
+  | { type: 'ready' }
   | { type: 'rematch' }
   | { type: 'rematch_decline' }
   | { type: 'leave' }
@@ -14,6 +15,7 @@ export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
+  | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | {
       type: 'start'
       state: GameState
@@ -38,6 +40,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (typeof data !== 'object' || data === null) return null
   const msg = data as Record<string, unknown>
+  if (msg.type === 'ready') return { type: 'ready' }
   if (msg.type === 'rematch') return { type: 'rematch' }
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }
