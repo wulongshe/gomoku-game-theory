@@ -6,6 +6,12 @@
   "assets": {
     "not_found_handling": "single-page-application"
   },
+  "routes": [
+    {
+      "pattern": "gomoku.recode.top",
+      "custom_domain": true
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {
