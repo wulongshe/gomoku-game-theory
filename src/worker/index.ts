@@ -1,11 +1,9 @@
+import { customAlphabet } from 'nanoid'
 import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@/shared/protocol'
 
 export { Room } from './room'
 
-function newRoomCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(ROOM_CODE_LENGTH))
-  return [...bytes].map((b) => ROOM_CODE_ALPHABET[b % ROOM_CODE_ALPHABET.length]).join('')
-}
+const newRoomCode = customAlphabet(ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH)
 
 export default {
   async fetch(request, env) {

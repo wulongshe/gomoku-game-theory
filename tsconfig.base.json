@@ -12,7 +12,8 @@
     "noEmit": true,
     "composite": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "~/*": ["./src/client/*"]
     }
   }
 }

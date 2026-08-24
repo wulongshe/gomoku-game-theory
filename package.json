@@ -24,6 +24,8 @@
     "wrangler": "^4.0.0"
   },
   "dependencies": {
+    "@vueuse/core": "^14.4.0",
+    "nanoid": "^6.0.1",
     "vue": "^3.5.41"
   }
 }

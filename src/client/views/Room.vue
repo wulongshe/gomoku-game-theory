@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import Board from '../components/Board.vue'
+import { computed, ref } from 'vue'
+import { useClipboard, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
+import { nanoid } from 'nanoid'
+import AppButton from '~/components/AppButton.vue'
+import Board from '~/components/Board.vue'
+import { roomWsUrl } from '~/api'
 import { isLegalChoice, type GameState, type Point, type Seat } from '@/engine/game'
 import type { ClientMessage, ServerMessage } from '@/shared/protocol'
 
@@ -18,76 +22,67 @@ const selected = ref<Point | null>(null)
 const submitted = ref(false)
 const oppSubmitted = ref(false)
 const notice = ref('')
-const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
-const now = ref(Date.now())
 
-let ws: WebSocket | undefined
-let ticker: ReturnType<typeof setInterval> | undefined
+const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
+const now = useTimestamp({ interval: 250 })
+const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true })
 
-function roomToken(): string {
-  const key = `room-token:${props.code}`
-  let token = sessionStorage.getItem(key)
-  if (!token) {
-    token =
-      typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
-    sessionStorage.setItem(key, token)
+let replaced = false
+const { send } = useWebSocket(roomWsUrl(props.code, token.value), {
+    autoReconnect: {
+      retries: (retried) => retried < 5 && !replaced && stage.value !== 'over',
+      delay: 1000,
+      onFailed() {
+        stage.value = 'error'
+      },
+    },
+    onMessage(_ws, event) {
+      handleMessage(JSON.parse(event.data as string) as ServerMessage)
+    },
+    onDisconnected(_ws, event) {
+      if (event.reason === 'replaced by reconnect') replaced = true
+      if (stage.value === 'over') return
+      stage.value = replaced ? 'error' : 'connecting'
+    },
+})
+
+function handleMessage(msg: ServerMessage) {
+  switch (msg.type) {
+    case 'joined':
+      seat.value = msg.seat
+      stage.value = 'waiting'
+      break
+    case 'start':
+      game.value = msg.state
+      deadline.value = msg.deadline
+      submitted.value = msg.submitted[seat.value]
+      oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
+      selected.value = msg.yourChoice
+      stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
+      break
+    case 'frame_settled':
+      game.value = msg.state
+      deadline.value = msg.deadline
+      selected.value = null
+      submitted.value = false
+      oppSubmitted.value = false
+      notice.value = ''
+      if (msg.state.phase !== 'playing') stage.value = 'over'
+      break
+    case 'opponent_submitted':
+      oppSubmitted.value = true
+      break
+    case 'opponent_left':
+      notice.value = '对方已离开'
+      break
+    case 'opponent_returned':
+      notice.value = ''
+      break
+    case 'error':
+      notice.value = msg.message
+      break
   }
-  return token
 }
-
-onMounted(() => {
-  ticker = setInterval(() => (now.value = Date.now()), 250)
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  ws = new WebSocket(`${proto}://${location.host}/api/rooms/${props.code}/ws?token=${roomToken()}`)
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data as string) as ServerMessage
-    switch (msg.type) {
-      case 'joined':
-        seat.value = msg.seat
-        stage.value = 'waiting'
-        break
-      case 'start':
-        game.value = msg.state
-        deadline.value = msg.deadline
-        submitted.value = msg.submitted[seat.value]
-        oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
-        selected.value = msg.yourChoice
-        stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
-        break
-      case 'frame_settled':
-        game.value = msg.state
-        deadline.value = msg.deadline
-        selected.value = null
-        submitted.value = false
-        oppSubmitted.value = false
-        notice.value = ''
-        if (msg.state.phase !== 'playing') stage.value = 'over'
-        break
-      case 'opponent_submitted':
-        oppSubmitted.value = true
-        break
-      case 'opponent_left':
-        notice.value = '对方已离开'
-        break
-      case 'opponent_returned':
-        notice.value = ''
-        break
-      case 'error':
-        notice.value = msg.message
-        break
-    }
-  })
-  ws.addEventListener('close', () => {
-    if (stage.value !== 'over') stage.value = 'error'
-  })
-})
-
-onUnmounted(() => {
-  clearInterval(ticker)
-  ws?.close()
-})
 
 const secondsLeft = computed(() =>
   deadline.value === null ? null : Math.max(0, Math.ceil((deadline.value - now.value) / 1000)),
@@ -113,40 +108,10 @@ function reload() {
 }
 
 function submitChoice() {
-  if (!ws || !game.value || !selected.value || submitted.value) return
+  if (!game.value || !selected.value || submitted.value) return
   const msg: ClientMessage = { type: 'submit', frame: game.value.frame, point: selected.value }
-  ws.send(JSON.stringify(msg))
+  send(JSON.stringify(msg))
   submitted.value = true
-}
-
-function fallbackCopy(text: string): boolean {
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  textarea.setSelectionRange(0, text.length)
-  let ok = false
-  try {
-    ok = document.execCommand('copy')
-  } catch {}
-  textarea.remove()
-  return ok
-}
-
-async function copyLink() {
-  const url = location.href
-  let ok = false
-  if (window.isSecureContext && navigator.clipboard) {
-    try {
-      await navigator.clipboard.writeText(url)
-      ok = true
-    } catch {}
-  }
-  if (!ok) ok = fallbackCopy(url)
-  copyState.value = ok ? 'copied' : 'failed'
 }
 </script>
 
@@ -159,15 +124,10 @@ async function copyLink() {
     <template v-else-if="stage === 'waiting'">
       <h1 class="text-2xl font-bold text-stone-800">房间 {{ props.code }}</h1>
       <p class="text-stone-600">把链接发给对方,对方打开即可开始</p>
-      <button
-        class="rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600"
-        @click="copyLink"
-      >
-        {{ copyState === 'copied' ? '已复制 ✓' : '复制链接' }}
-      </button>
-      <p v-if="copyState === 'failed'" class="text-sm text-stone-600">
-        复制失败,请长按选中下方链接复制:
-      </p>
+      <AppButton v-if="copySupported" @click="copy(roomUrl)">
+        {{ copied ? '已复制 ✓' : '复制链接' }}
+      </AppButton>
+      <p v-else class="text-sm text-stone-600">请长按选中下方链接复制:</p>
       <p class="max-w-full break-all rounded bg-stone-200 px-3 py-2 text-sm text-stone-700 select-all">
         {{ roomUrl }}
       </p>
@@ -197,13 +157,9 @@ async function copyLink() {
       />
 
       <template v-if="stage === 'playing'">
-        <button
-          class="w-full max-w-md rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600 disabled:opacity-50"
-          :disabled="!selected || submitted"
-          @click="submitChoice"
-        >
+        <AppButton class="w-full max-w-md" :disabled="!selected || submitted" @click="submitChoice">
           {{ submitted ? '已提交,等待对方' : selected ? '确认提交' : '请选择落点' }}
-        </button>
+        </AppButton>
         <p class="min-h-5 text-sm text-stone-500">
           <span v-if="oppSubmitted">对方已提交 · </span>{{ notice }}
         </p>
@@ -211,12 +167,7 @@ async function copyLink() {
 
       <template v-else>
         <p class="text-xl font-bold text-stone-800">{{ resultText }}</p>
-        <button
-          class="w-full max-w-md rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600"
-          @click="reload"
-        >
-          再来一局
-        </button>
+        <AppButton class="w-full max-w-md" @click="reload">再来一局</AppButton>
         <a class="text-stone-800 underline" href="/">返回首页</a>
       </template>
     </template>
@@ -224,12 +175,7 @@ async function copyLink() {
     <template v-else>
       <template v-if="game">
         <p class="text-stone-600">连接已断开</p>
-        <button
-          class="rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600"
-          @click="reload"
-        >
-          重新连接
-        </button>
+        <AppButton @click="reload">重新连接</AppButton>
       </template>
       <template v-else>
         <p class="text-stone-600">无法加入房间 {{ props.code }}</p>
