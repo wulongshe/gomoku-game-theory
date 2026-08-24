@@ -178,10 +178,51 @@ describe('Room', () => {
     expect(await b.next('start')).toEqual(fresh)
   })
 
+  it('relays a rematch decline and allows re-inviting', async () => {
+    const [a, b] = await startGame('ROOM17')
+    for (let i = 0; i < 4; i++) {
+      a.submit(i + 1, { x: i, y: 0 })
+      b.submit(i + 1, { x: i, y: 7 + (i % 2) })
+      await settledOnBoth(a, b)
+    }
+    a.submit(5, { x: 4, y: 0 })
+    b.submit(5, { x: 4, y: 7 })
+    await settledOnBoth(a, b)
+
+    a.rematch()
+    await b.next('rematch_requested')
+    b.ws.send(JSON.stringify({ type: 'rematch_decline' }))
+    await a.next('rematch_declined')
+
+    a.rematch()
+    await b.next('rematch_requested')
+    b.rematch()
+    const fresh = await a.next('start')
+    if (fresh.type !== 'start') throw new Error('unreachable')
+    expect(fresh.state.frame).toBe(1)
+  })
+
   it('rejects rematch while the game is in progress', async () => {
     const [a] = await startGame('ROOM14')
     a.rematch()
     expect(await a.next('error')).toMatchObject({ message: 'game not finished' })
+  })
+
+  it('forfeits the game and closes the room on leave', async () => {
+    const [a, b] = await startGame('ROOM16')
+    a.ws.send(JSON.stringify({ type: 'leave' }))
+    const settled = await b.next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(settled.state.phase).toBe('p2_won')
+    expect(settled.deadline).toBeNull()
+
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM16'))
+    await vi.waitFor(async () => {
+      const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
+      expect(entries.size).toBe(0)
+    })
+    const c = await connect('ROOM16', 'token-c')
+    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
   })
 
   it('recycles a finished room after the last player leaves', async () => {

@@ -101,8 +101,20 @@ export class Room extends DurableObject<Env> {
     }
     const { seat } = ws.deserializeAttachment() as Attachment
     const game = await this.ctx.storage.get<GameState>('game')
+    if (msg.type === 'leave') {
+      return this.handleLeave(seat, game)
+    }
     if (msg.type === 'rematch') {
       return this.handleRematch(ws, seat, game)
+    }
+    if (msg.type === 'rematch_decline') {
+      if (game && game.phase !== 'playing') {
+        await this.ctx.storage.delete('rematch')
+        for (const other of this.ctx.getWebSockets()) {
+          if (other !== ws) this.send(other, { type: 'rematch_declined' })
+        }
+      }
+      return
     }
     if (!game || game.phase !== 'playing') {
       return this.send(ws, { type: 'error', message: 'game not in progress' })
@@ -128,6 +140,17 @@ export class Room extends DurableObject<Env> {
         await this.settle(game, choices)
       }
     }
+  }
+
+  private async handleLeave(seat: Seat, game: GameState | undefined): Promise<void> {
+    if (game && game.phase === 'playing') {
+      const resigned: GameState = { ...game, phase: seat === 'p1' ? 'p2_won' : 'p1_won' }
+      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null })
+    }
+    for (const socket of this.ctx.getWebSockets()) {
+      socket.close(1000, 'room closed')
+    }
+    await this.close()
   }
 
   private async handleRematch(ws: WebSocket, seat: Seat, game: GameState | undefined): Promise<void> {

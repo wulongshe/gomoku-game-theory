@@ -7,6 +7,8 @@ export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
   | { type: 'rematch' }
+  | { type: 'rematch_decline' }
+  | { type: 'leave' }
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
@@ -22,6 +24,7 @@ export type ServerMessage =
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
   | { type: 'rematch_requested' }
+  | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
@@ -34,6 +37,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (typeof data !== 'object' || data === null) return null
   const msg = data as Record<string, unknown>
   if (msg.type === 'rematch') return { type: 'rematch' }
+  if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
+  if (msg.type === 'leave') return { type: 'leave' }
   if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
     return null
   }
