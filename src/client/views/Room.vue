@@ -303,6 +303,12 @@ function exitRoom() {
         >
           <p class="text-sm text-stone-500">房间号</p>
           <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
+          <p class="flex items-center gap-2 text-sm text-stone-500">
+            <span
+              class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400"
+            />
+            等待对方加入…
+          </p>
           <SharePoster
             ref="posterEl"
             :url="roomUrl"
@@ -323,10 +329,6 @@ function exitRoom() {
             {{ roomUrl }}
           </p>
         </div>
-        <p class="flex items-center gap-2 text-sm text-stone-500">
-          <span class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400" />
-          等待对方加入…
-        </p>
       </div>
     </template>
 
