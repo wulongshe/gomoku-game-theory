@@ -5,7 +5,7 @@ import AppButton from '~/components/AppButton.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/api'
-import { FRAME_SECONDS } from '@/engine/game'
+import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/copy'
 import type { LobbyServerMessage } from '@/shared/protocol'
 
 const creating = ref(false)
@@ -50,23 +50,6 @@ function toggleMatch() {
   }
 }
 
-const RULES = [
-  {
-    icon: '⚡',
-    title: '同时落子，没有先手',
-    text: `每回合 ${FRAME_SECONDS} 秒同时出手，公平对决，拼的是判断`,
-  },
-  {
-    icon: '🧠',
-    title: '撞子成禁，读心制胜',
-    text: '双方落同一点，作废变禁点，猜透对方才能抢下要点',
-  },
-  {
-    icon: '⭐',
-    title: '五连即胜，零门槛',
-    text: '规则你早就会：连成五子就赢，上手只要 10 秒',
-  },
-]
 </script>
 
 <template>
@@ -75,9 +58,9 @@ const RULES = [
   >
     <div class="flex flex-col items-center gap-3">
       <IconStones class="h-8 drop-shadow" />
-      <h1 class="text-3xl font-bold tracking-wide text-stone-800">同步五子棋</h1>
-      <p class="font-medium text-stone-600">下棋，更是读心</p>
-      <p class="text-sm text-stone-500">经典五子棋 × 同时落子，每一手都是心理博弈</p>
+      <h1 class="text-3xl font-bold tracking-wide text-stone-800">{{ TITLE }}</h1>
+      <p class="font-medium text-stone-600">{{ TAGLINE }}</p>
+      <p class="text-sm text-stone-500">{{ SUBTITLE }}</p>
     </div>
 
     <div class="flex w-full max-w-md flex-col gap-2">
@@ -97,16 +80,12 @@ const RULES = [
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <button
-        class="w-full cursor-pointer rounded-xl border border-stone-300 bg-white/80 px-6 py-3 text-lg font-medium text-stone-700 shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
-        :disabled="creating"
-        @click="toggleMatch"
-      >
+      <AppButton secondary class="w-full" :disabled="creating" @click="toggleMatch">
         <span class="flex items-center justify-center gap-2">
           <IconSpinner v-if="matching" class="size-5" />
           <span>{{ matching ? `匹配中…${matchSeconds}s，点击取消` : '随机匹配' }}</span>
         </span>
-      </button>
+      </AppButton>
       <AppButton class="w-full" :disabled="creating || matching" @click="create">
         <span class="flex items-center justify-center gap-2">
           <IconSpinner v-if="creating" class="size-5" />

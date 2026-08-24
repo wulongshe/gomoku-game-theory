@@ -4,6 +4,7 @@ import { useClipboard, useStorage, useTimestamp, useWebSocket } from '@vueuse/co
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import Board from '~/components/Board.vue'
+import SharePoster from '~/components/SharePoster.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import { roomWsUrl } from '~/api'
 import {
@@ -40,6 +41,7 @@ const lastMoves = ref<Point[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
 
+const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
 const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
 const now = useTimestamp({ interval: 250 })
 const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true })
@@ -260,12 +262,21 @@ function exitRoom() {
         >
           <p class="text-sm text-stone-500">房间号</p>
           <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
-          <p class="text-sm text-stone-500">把链接发给对方，对方打开即可开始</p>
-          <AppButton v-if="copySupported" class="w-full" @click="copy(roomUrl)">
-            {{ copied ? '已复制 ✓' : '复制邀请链接' }}
-          </AppButton>
-          <p v-else class="text-sm text-stone-600">请长按选中下方链接复制：</p>
+          <SharePoster
+            ref="posterEl"
+            :url="roomUrl"
+            :code="props.code"
+            class="h-auto w-64 rounded-xl shadow-md"
+          />
+          <p class="text-sm text-stone-500">对方扫码或打开链接即可开始</p>
+          <div class="flex w-full gap-2">
+            <AppButton v-if="copySupported" class="flex-1" @click="copy(roomUrl)">
+              {{ copied ? '已复制 ✓' : '复制链接' }}
+            </AppButton>
+            <AppButton secondary class="flex-1" @click="posterEl?.share()">分享海报</AppButton>
+          </div>
           <p
+            v-if="!copySupported"
             class="max-w-full rounded-lg bg-stone-100 px-3 py-2 text-xs break-all text-stone-500 select-all"
           >
             {{ roomUrl }}
