@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
-import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/copy'
+import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 
 const props = defineProps<{ url: string; code: string }>()
 

@@ -4,8 +4,8 @@ import { useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { createRoom, matchWsUrl } from '~/api'
-import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/copy'
+import { createRoom, matchWsUrl } from '~/apis'
+import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import type { LobbyServerMessage } from '@/shared/protocol'
 
 const creating = ref(false)

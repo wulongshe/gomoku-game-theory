@@ -7,7 +7,7 @@ import Board from '~/components/Board.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import IconCross from '~/components/icons/IconCross.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
-import { roomExists, roomWsUrl } from '~/api'
+import { roomExists, roomWsUrl } from '~/apis'
 import {
   BOARD_SIZE,
   FRAME_SECONDS,
