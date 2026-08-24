@@ -1,4 +1,4 @@
-export const TITLE = '同步五子棋'
+export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
 

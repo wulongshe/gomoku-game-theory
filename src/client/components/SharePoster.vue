@@ -51,7 +51,7 @@ async function toPngBlob(): Promise<Blob> {
 
 async function share() {
   const blob = await toPngBlob()
-  const file = new File([blob], `同步五子棋-${props.code}.png`, { type: 'image/png' })
+  const file = new File([blob], `博弈五子棋-${props.code}.png`, { type: 'image/png' })
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] })
