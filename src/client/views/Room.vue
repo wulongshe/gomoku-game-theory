@@ -244,6 +244,10 @@ function submitChoice() {
   submitted.value = true
 }
 
+watch(autoSubmit, (on) => {
+  if (on && stage.value === 'playing') submitChoice()
+})
+
 function sendReady() {
   if (myReady.value) return
   send(JSON.stringify({ type: 'ready' } satisfies ClientMessage))
