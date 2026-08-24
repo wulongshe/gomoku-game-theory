@@ -34,7 +34,11 @@ export class Room extends DurableObject<Env> {
     }
     const created = (await this.ctx.storage.get<boolean>('created')) ?? false
     if (!url.pathname.endsWith('/ws')) {
-      return Response.json({ exists: created })
+      const players = (await this.ctx.storage.get<Players>('players')) ?? {}
+      const token = url.searchParams.get('token')
+      const hasSeat =
+        !players.black || !players.white || token === players.black || token === players.white
+      return Response.json({ exists: created, full: !hasSeat })
     }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 })

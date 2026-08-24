@@ -150,6 +150,14 @@ describe('Room', () => {
     expect(res.status).toBe(409)
   })
 
+  it('reports a full room, except to already seated tokens', async () => {
+    await startGame('ROOM21')
+    const stranger = await SELF.fetch('https://example.com/api/rooms/ROOM21?token=token-x')
+    expect(await stranger.json()).toEqual({ exists: true, full: true })
+    const seated = await SELF.fetch('https://example.com/api/rooms/ROOM21?token=token-a')
+    expect(await seated.json()).toEqual({ exists: true, full: false })
+  })
+
   it('settles as soon as both submit, hiding the opponent choice until then', async () => {
     const [a, b] = await startGame('ROOM03')
     a.submit(1, { x: 7, y: 7 })
@@ -315,7 +323,7 @@ describe('Room', () => {
     })
 
     const res = await SELF.fetch('https://example.com/api/rooms/ROOM15')
-    expect(await res.json()).toEqual({ exists: false })
+    expect(await res.json()).toEqual({ exists: false, full: false })
   })
 
   it('lets a player reconnect mid-game and restores the frame snapshot', async () => {
@@ -362,6 +370,6 @@ describe('Room', () => {
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM11')))).toBe(true)
 
     const res = await SELF.fetch('https://example.com/api/rooms/ROOM11')
-    expect(await res.json()).toEqual({ exists: false })
+    expect(await res.json()).toEqual({ exists: false, full: false })
   })
 })

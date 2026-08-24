@@ -7,7 +7,7 @@ import Board from '~/components/Board.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import IconCross from '~/components/icons/IconCross.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
-import { roomExists, roomWsUrl } from '~/apis'
+import { roomStatus, roomWsUrl } from '~/apis'
 import {
   BOARD_SIZE,
   FRAME_SECONDS,
@@ -42,13 +42,18 @@ const lastMoves = ref<Point[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
 const notFound = ref(false)
+const roomFull = ref(false)
 const myReady = ref(false)
 const oppReady = ref(false)
 const frameSeconds = ref(FRAME_SECONDS)
 const autoSubmit = useStorage('auto-submit', false)
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
-const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
+const token = useStorage(`room-token:${props.code}`, nanoid())
+
+function forgetToken() {
+  localStorage.removeItem(`room-token:${props.code}`)
+}
 const now = useTimestamp({ interval: 250 })
 const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true })
 
@@ -67,22 +72,29 @@ const { send, open } = useWebSocket(roomWsUrl(props.code, token.value), {
   },
   onDisconnected(_ws, event) {
     if (event.reason === 'replaced by reconnect') replaced = true
-    if (event.reason === 'room closed') roomClosed.value = true
+    if (event.reason === 'room closed') {
+      roomClosed.value = true
+      forgetToken()
+    }
     if (stage.value === 'over') return
     stage.value = replaced || roomClosed.value ? 'error' : 'connecting'
   },
 })
 
 onMounted(async () => {
-  let exists = true
+  let status = { exists: true, full: false }
   try {
-    exists = await roomExists(props.code)
+    status = await roomStatus(props.code, token.value)
   } catch {}
-  if (exists) {
-    open()
-  } else {
+  if (!status.exists) {
     notFound.value = true
     stage.value = 'error'
+    forgetToken()
+  } else if (status.full) {
+    roomFull.value = true
+    stage.value = 'error'
+  } else {
+    open()
   }
 })
 
@@ -267,12 +279,20 @@ function declineRematch() {
   send(JSON.stringify({ type: 'rematch_decline' } satisfies ClientMessage))
 }
 
+const errorInfo = computed(() => {
+  if (notFound.value)
+    return { title: '房间不存在或已关闭', desc: '链接可能已失效，房主离开后房间会自动关闭' }
+  if (roomFull.value) return { title: '房间已满', desc: '两个座位都已有人，回首页自己开一局吧' }
+  return { title: '无法加入房间', desc: '连接失败，请检查网络后重试' }
+})
+
 function reload() {
   location.reload()
 }
 
 function exitRoom() {
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
+  forgetToken()
   setTimeout(() => location.assign('/'), 150)
 }
 </script>
@@ -516,12 +536,8 @@ function exitRoom() {
               <IconCross class="size-6" />
             </span>
             <div class="flex flex-col gap-1">
-              <p class="text-lg font-semibold text-stone-800">
-                {{ notFound ? '房间不存在或已关闭' : '无法加入房间' }}
-              </p>
-              <p class="text-sm text-stone-500">
-                {{ notFound ? '链接可能已失效，房主离开后房间会自动关闭' : '连接失败，请检查网络后重试' }}
-              </p>
+              <p class="text-lg font-semibold text-stone-800">{{ errorInfo.title }}</p>
+              <p class="text-sm text-stone-500">{{ errorInfo.desc }}</p>
             </div>
             <p class="rounded-full bg-stone-100 px-4 py-1 text-sm tracking-[0.2em] text-stone-400">
               {{ props.code }}

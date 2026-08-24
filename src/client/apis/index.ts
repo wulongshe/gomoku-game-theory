@@ -5,11 +5,15 @@ export async function createRoom(frameSeconds: number): Promise<string> {
   return code
 }
 
-export async function roomExists(code: string): Promise<boolean> {
-  const res = await fetch(`/api/rooms/${code}`)
-  if (!res.ok) throw new Error(`roomExists failed: ${res.status}`)
-  const { exists } = (await res.json()) as { exists: boolean }
-  return exists
+export interface RoomStatus {
+  exists: boolean
+  full: boolean
+}
+
+export async function roomStatus(code: string, token: string): Promise<RoomStatus> {
+  const res = await fetch(`/api/rooms/${code}?token=${token}`)
+  if (!res.ok) throw new Error(`roomStatus failed: ${res.status}`)
+  return (await res.json()) as RoomStatus
 }
 
 export function roomWsUrl(code: string, token: string): string {

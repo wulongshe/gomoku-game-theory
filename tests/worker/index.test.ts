@@ -27,7 +27,7 @@ describe('POST /api/rooms', () => {
     const { code } = await res.json<{ code: string }>()
     expect(code).toMatch(ROOM_CODE_PATTERN)
     const check = await SELF.fetch(`https://example.com/api/rooms/${code}`)
-    expect(await check.json()).toEqual({ exists: true })
+    expect(await check.json()).toEqual({ exists: true, full: false })
   })
 
   it('rejects an unsupported frame duration', async () => {
@@ -39,7 +39,7 @@ describe('POST /api/rooms', () => {
 describe('GET /api/rooms/:code', () => {
   it('reports a never-created room as missing', async () => {
     const res = await SELF.fetch('https://example.com/api/rooms/ZZZZZ2')
-    expect(await res.json()).toEqual({ exists: false })
+    expect(await res.json()).toEqual({ exists: false, full: false })
   })
 })
 
