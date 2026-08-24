@@ -2,7 +2,7 @@
 import Home from './views/Home.vue'
 import Room from './views/Room.vue'
 
-const code = location.pathname.match(/^\/r\/([A-Z0-9]{6})$/)?.[1] ?? null
+const code = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/)?.[1] ?? null
 </script>
 
 <template>

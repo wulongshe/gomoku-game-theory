@@ -9,7 +9,7 @@ async function createRoom() {
   try {
     const res = await fetch('/api/rooms', { method: 'POST' })
     const { code } = (await res.json()) as { code: string }
-    location.assign(`/r/${code}`)
+    location.assign(`/room/${code}`)
   } catch {
     creating.value = false
   }

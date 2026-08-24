@@ -211,6 +211,12 @@ async function copyLink() {
 
       <template v-else>
         <p class="text-xl font-bold text-stone-800">{{ resultText }}</p>
+        <button
+          class="w-full max-w-md rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600"
+          @click="reload"
+        >
+          再来一局
+        </button>
         <a class="text-stone-800 underline" href="/">返回首页</a>
       </template>
     </template>
