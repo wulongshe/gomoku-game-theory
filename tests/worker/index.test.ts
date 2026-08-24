@@ -2,6 +2,24 @@ import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { ROOM_CODE_PATTERN } from '@/shared/protocol'
 
+describe('https enforcement', () => {
+  it('redirects http on the canonical host to https', async () => {
+    const res = await SELF.fetch('http://gomoku.recode.top/api/rooms', {
+      method: 'POST',
+      redirect: 'manual',
+    })
+    expect(res.status).toBe(301)
+    expect(res.headers.get('Location')).toBe('https://gomoku.recode.top/api/rooms')
+  })
+
+  it('adds HSTS on canonical-host responses and skips other hosts', async () => {
+    const canonical = await SELF.fetch('https://gomoku.recode.top/api/rooms', { method: 'POST' })
+    expect(canonical.headers.get('Strict-Transport-Security')).toContain('max-age=')
+    const other = await SELF.fetch('https://example.com/api/rooms', { method: 'POST' })
+    expect(other.headers.get('Strict-Transport-Security')).toBeNull()
+  })
+})
+
 describe('POST /api/rooms', () => {
   it('returns a short room code', async () => {
     const res = await SELF.fetch('https://example.com/api/rooms', { method: 'POST' })
