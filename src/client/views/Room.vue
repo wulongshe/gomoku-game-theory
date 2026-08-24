@@ -179,7 +179,7 @@ const remainingRatio = computed(() => {
 })
 
 const secondsLeft = computed(() =>
-  deadline.value === null ? null : Math.max(0, Math.ceil((deadline.value - now.value) / 1000)),
+  deadline.value === null ? null : Math.max(1, Math.ceil((deadline.value - now.value) / 1000)),
 )
 
 const urgency = computed(() => {
