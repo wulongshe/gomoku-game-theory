@@ -4,8 +4,8 @@ import {
   FRAME_SECONDS,
   isLegalChoice,
   settleFrame,
-  type FrameChoices,
   type GameState,
+  type Point,
   type Seat,
 } from '@/engine/game'
 import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
@@ -18,6 +18,8 @@ interface Attachment {
 }
 
 type Players = Partial<Record<Seat, string>>
+
+type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
 export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
@@ -58,13 +60,13 @@ export class Room extends DurableObject<Env> {
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
       const deadline = (await this.ctx.storage.get<number>('deadline'))!
-      const choices = (await this.ctx.storage.get<Partial<FrameChoices>>('choices')) ?? {}
+      const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
       this.send(pair[1], {
         type: 'start',
         state: game,
         deadline,
-        submitted: { p1: 'p1' in choices, p2: 'p2' in choices },
-        yourChoice: choices[seat] ?? null,
+        submitted: { p1: !!choices.p1?.final, p2: !!choices.p2?.final },
+        yourChoice: choices[seat]?.point ?? null,
       })
       for (const other of this.ctx.getWebSockets()) {
         if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
@@ -100,21 +102,23 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'stale frame' })
     }
     const { seat } = ws.deserializeAttachment() as Attachment
-    const choices = (await this.ctx.storage.get<Partial<FrameChoices>>('choices')) ?? {}
-    if (seat in choices) {
+    const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
+    if (choices[seat]?.final) {
       return this.send(ws, { type: 'error', message: 'already submitted' })
     }
     if (msg.point && !isLegalChoice(game, msg.point)) {
       return this.send(ws, { type: 'error', message: 'illegal point' })
     }
 
-    choices[seat] = msg.point
+    choices[seat] = { point: msg.point, final: msg.final }
     await this.ctx.storage.put('choices', choices)
-    for (const other of this.ctx.getWebSockets()) {
-      if (other !== ws) this.send(other, { type: 'opponent_submitted' })
-    }
-    if ('p1' in choices && 'p2' in choices) {
-      await this.settle(game, choices)
+    if (msg.final) {
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws) this.send(other, { type: 'opponent_submitted' })
+      }
+      if (choices.p1?.final && choices.p2?.final) {
+        await this.settle(game, choices)
+      }
     }
   }
 
@@ -124,7 +128,7 @@ export class Room extends DurableObject<Env> {
     }
     const game = await this.ctx.storage.get<GameState>('game')
     if (!game || game.phase !== 'playing') return
-    const choices = (await this.ctx.storage.get<Partial<FrameChoices>>('choices')) ?? {}
+    const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
     await this.settle(game, choices)
   }
 
@@ -140,8 +144,11 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async settle(game: GameState, choices: Partial<FrameChoices>): Promise<void> {
-    const next = settleFrame(game, { p1: choices.p1 ?? null, p2: choices.p2 ?? null })
+  private async settle(game: GameState, choices: Choices): Promise<void> {
+    const next = settleFrame(game, {
+      p1: choices.p1?.point ?? null,
+      p2: choices.p2?.point ?? null,
+    })
     if (next.phase === 'playing') {
       const deadline = Date.now() + FRAME_MS
       await this.ctx.storage.delete('choices')

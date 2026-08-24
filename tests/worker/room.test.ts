@@ -6,7 +6,7 @@ import type { ServerMessage } from '@/shared/protocol'
 interface Client {
   ws: WebSocket
   next(type: ServerMessage['type']): Promise<ServerMessage>
-  submit(frame: number, point: Point | null): void
+  submit(frame: number, point: Point | null, final?: boolean): void
 }
 
 async function connect(code: string, token: string): Promise<Client> {
@@ -34,8 +34,8 @@ async function connect(code: string, token: string): Promise<Client> {
         if (!msg) await new Promise<void>((resolve) => waiters.push(resolve))
       }
     },
-    submit(frame, point) {
-      ws.send(JSON.stringify({ type: 'submit', frame, point }))
+    submit(frame, point, final = true) {
+      ws.send(JSON.stringify({ type: 'submit', frame, point, final }))
     },
   }
 }
@@ -99,13 +99,39 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('forbidden')
   })
 
-  it('treats a frame timeout as a pass', async () => {
+  it('treats a frame timeout without any choice as a pass', async () => {
     const [a, b] = await startGame('ROOM05')
     a.submit(1, { x: 7, y: 7 })
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM05')))).toBe(true)
     const settled = await settledOnBoth(a, b)
     expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('p1')
     expect(settled.state.board.filter((cell) => cell !== 'empty')).toHaveLength(1)
+  })
+
+  it('auto-submits an unconfirmed draft at the frame deadline', async () => {
+    const [a, b] = await startGame('ROOM12')
+    a.submit(1, { x: 2, y: 2 }, false)
+    a.submit(1, { x: 5, y: 5 }, false)
+    a.submit(99, { x: 0, y: 0 }, false)
+    expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
+    b.submit(1, { x: 9, y: 9 })
+    await a.next('opponent_submitted')
+    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM12')))).toBe(true)
+    const settled = await settledOnBoth(a, b)
+    expect(cellAt(settled.state, { x: 5, y: 5 })).toBe('p1')
+    expect(cellAt(settled.state, { x: 2, y: 2 })).toBe('empty')
+    expect(cellAt(settled.state, { x: 9, y: 9 })).toBe('p2')
+  })
+
+  it('keeps drafts private and does not settle early on drafts', async () => {
+    const [a, b] = await startGame('ROOM13')
+    a.submit(1, { x: 2, y: 2 }, false)
+    b.submit(1, { x: 9, y: 9 })
+    await a.next('opponent_submitted')
+    a.submit(1, { x: 3, y: 3 }, false)
+    a.submit(1, { x: 3, y: 3 })
+    const settled = await settledOnBoth(a, b)
+    expect(cellAt(settled.state, { x: 3, y: 3 })).toBe('p1')
   })
 
   it('rejects stale frames, double submits, and illegal points', async () => {

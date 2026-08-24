@@ -4,7 +4,7 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 
-export type ClientMessage = { type: 'submit'; frame: number; point: Point | null }
+export type ClientMessage = { type: 'submit'; frame: number; point: Point | null; final: boolean }
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
@@ -30,11 +30,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (typeof data !== 'object' || data === null) return null
   const msg = data as Record<string, unknown>
-  if (msg.type !== 'submit' || !Number.isInteger(msg.frame)) return null
+  if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
+    return null
+  }
   const frame = msg.frame as number
-  if (msg.point === null) return { type: 'submit', frame, point: null }
+  const final = msg.final
+  if (msg.point === null) return { type: 'submit', frame, point: null, final }
   if (typeof msg.point !== 'object' || msg.point === null) return null
   const point = msg.point as Record<string, unknown>
   if (!Number.isInteger(point.x) || !Number.isInteger(point.y)) return null
-  return { type: 'submit', frame, point: { x: point.x as number, y: point.y as number } }
+  return { type: 'submit', frame, point: { x: point.x as number, y: point.y as number }, final }
 }

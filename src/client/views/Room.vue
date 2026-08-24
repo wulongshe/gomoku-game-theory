@@ -97,10 +97,17 @@ const resultText = computed(() => {
   return won ? '你赢了!' : '你输了'
 })
 
+function sendChoice(point: Point, final: boolean) {
+  if (!game.value) return
+  const msg: ClientMessage = { type: 'submit', frame: game.value.frame, point, final }
+  send(JSON.stringify(msg))
+}
+
 function select(point: Point) {
   if (stage.value !== 'playing' || submitted.value || !game.value) return
   if (!isLegalChoice(game.value, point)) return
   selected.value = point
+  sendChoice(point, false)
 }
 
 function reload() {
@@ -109,8 +116,7 @@ function reload() {
 
 function submitChoice() {
   if (!game.value || !selected.value || submitted.value) return
-  const msg: ClientMessage = { type: 'submit', frame: game.value.frame, point: selected.value }
-  send(JSON.stringify(msg))
+  sendChoice(selected.value, true)
   submitted.value = true
 }
 </script>
@@ -162,6 +168,9 @@ function submitChoice() {
         </AppButton>
         <p class="min-h-5 text-sm text-stone-500">
           <span v-if="oppSubmitted">对方已提交 · </span>{{ notice }}
+        </p>
+        <p v-if="selected && !submitted" class="text-xs text-stone-400">
+          未确认时,帧末将自动提交已选落点
         </p>
       </template>
 
