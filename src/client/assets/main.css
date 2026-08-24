@@ -30,15 +30,15 @@
 
 @keyframes stamp {
   from {
-    transform: scale(2.4) rotate(-8deg);
+    scale: 2.4;
     opacity: 0;
   }
   60% {
-    transform: scale(0.92) rotate(-8deg);
+    scale: 0.92;
     opacity: 1;
   }
   to {
-    transform: scale(1) rotate(-8deg);
+    scale: 1;
     opacity: 1;
   }
 }
