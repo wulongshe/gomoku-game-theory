@@ -1,5 +1,5 @@
-import { env, runDurableObjectAlarm, SELF } from 'cloudflare:test'
-import { describe, expect, it } from 'vitest'
+import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
+import { describe, expect, it, vi } from 'vitest'
 import { cellAt, type Point } from '@/engine/game'
 import type { ServerMessage } from '@/shared/protocol'
 
@@ -7,6 +7,7 @@ interface Client {
   ws: WebSocket
   next(type: ServerMessage['type']): Promise<ServerMessage>
   submit(frame: number, point: Point | null, final?: boolean): void
+  rematch(): void
 }
 
 async function connect(code: string, token: string): Promise<Client> {
@@ -36,6 +37,9 @@ async function connect(code: string, token: string): Promise<Client> {
     },
     submit(frame, point, final = true) {
       ws.send(JSON.stringify({ type: 'submit', frame, point, final }))
+    },
+    rematch() {
+      ws.send(JSON.stringify({ type: 'rematch' }))
     },
   }
 }
@@ -151,7 +155,7 @@ describe('Room', () => {
     await b.next('opponent_left')
   })
 
-  it('plays to a win, then closes the room', async () => {
+  it('plays to a win, then rematches in the same room', async () => {
     const [a, b] = await startGame('ROOM08')
     for (let i = 0; i < 4; i++) {
       a.submit(i + 1, { x: i, y: 0 })
@@ -164,10 +168,44 @@ describe('Room', () => {
     expect(settled.state.phase).toBe('p1_won')
     expect(settled.deadline).toBeNull()
 
-    const rejoin = await SELF.fetch('https://example.com/api/rooms/ROOM08/ws?token=token-c', {
-      headers: { Upgrade: 'websocket' },
+    a.rematch()
+    expect(await b.next('rematch_requested')).toBeTruthy()
+    b.rematch()
+    const fresh = await a.next('start')
+    if (fresh.type !== 'start') throw new Error('unreachable')
+    expect(fresh.state.frame).toBe(1)
+    expect(fresh.state.board.every((cell) => cell === 'empty')).toBe(true)
+    expect(await b.next('start')).toEqual(fresh)
+  })
+
+  it('rejects rematch while the game is in progress', async () => {
+    const [a] = await startGame('ROOM14')
+    a.rematch()
+    expect(await a.next('error')).toMatchObject({ message: 'game not finished' })
+  })
+
+  it('recycles a finished room after the last player leaves', async () => {
+    const [a, b] = await startGame('ROOM15')
+    for (let i = 0; i < 4; i++) {
+      a.submit(i + 1, { x: i, y: 0 })
+      b.submit(i + 1, { x: i, y: 7 + (i % 2) })
+      await settledOnBoth(a, b)
+    }
+    a.submit(5, { x: 4, y: 0 })
+    b.submit(5, { x: 4, y: 7 })
+    const settled = await settledOnBoth(a, b)
+    expect(settled.state.phase).toBe('p1_won')
+
+    a.ws.close()
+    b.ws.close()
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM15'))
+    await vi.waitFor(async () => {
+      const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
+      expect(entries.size).toBe(0)
     })
-    expect(rejoin.status).toBe(101)
+
+    const c = await connect('ROOM15', 'token-c')
+    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
   })
 
   it('lets a player reconnect mid-game and restores the frame snapshot', async () => {

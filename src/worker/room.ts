@@ -64,7 +64,7 @@ export class Room extends DurableObject<Env> {
       this.send(pair[1], {
         type: 'start',
         state: game,
-        deadline,
+        deadline: game.phase === 'playing' ? deadline : null,
         submitted: { p1: !!choices.p1?.final, p2: !!choices.p2?.final },
         yourChoice: choices[seat]?.point ?? null,
       })
@@ -72,20 +72,25 @@ export class Room extends DurableObject<Env> {
         if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
       }
     } else if (this.ctx.getWebSockets().length === 2) {
-      const fresh = createGame()
-      const deadline = Date.now() + FRAME_MS
-      await this.ctx.storage.put({ game: fresh, deadline })
-      await this.ctx.storage.setAlarm(deadline)
-      this.broadcast({
-        type: 'start',
-        state: fresh,
-        deadline,
-        submitted: { p1: false, p2: false },
-        yourChoice: null,
-      })
+      await this.startGame()
     }
 
     return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  private async startGame(): Promise<void> {
+    const game = createGame()
+    const deadline = Date.now() + FRAME_MS
+    await this.ctx.storage.delete(['choices', 'rematch'])
+    await this.ctx.storage.put({ game, deadline })
+    await this.ctx.storage.setAlarm(deadline)
+    this.broadcast({
+      type: 'start',
+      state: game,
+      deadline,
+      submitted: { p1: false, p2: false },
+      yourChoice: null,
+    })
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -94,14 +99,17 @@ export class Room extends DurableObject<Env> {
     if (!msg) {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
+    const { seat } = ws.deserializeAttachment() as Attachment
     const game = await this.ctx.storage.get<GameState>('game')
+    if (msg.type === 'rematch') {
+      return this.handleRematch(ws, seat, game)
+    }
     if (!game || game.phase !== 'playing') {
       return this.send(ws, { type: 'error', message: 'game not in progress' })
     }
     if (msg.frame !== game.frame) {
       return this.send(ws, { type: 'error', message: 'stale frame' })
     }
-    const { seat } = ws.deserializeAttachment() as Attachment
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
     if (choices[seat]?.final) {
       return this.send(ws, { type: 'error', message: 'already submitted' })
@@ -122,6 +130,23 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  private async handleRematch(ws: WebSocket, seat: Seat, game: GameState | undefined): Promise<void> {
+    if (!game || game.phase === 'playing') {
+      return this.send(ws, { type: 'error', message: 'game not finished' })
+    }
+    const rematch = (await this.ctx.storage.get<Partial<Record<Seat, boolean>>>('rematch')) ?? {}
+    if (!rematch[seat]) {
+      rematch[seat] = true
+      await this.ctx.storage.put('rematch', rematch)
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws) this.send(other, { type: 'rematch_requested' })
+      }
+    }
+    if (rematch.p1 && rematch.p2) {
+      await this.startGame()
+    }
+  }
+
   async alarm(): Promise<void> {
     if (this.ctx.getWebSockets().length === 0) {
       return this.close()
@@ -139,8 +164,9 @@ export class Room extends DurableObject<Env> {
     for (const other of remaining) {
       this.send(other, { type: 'opponent_left' })
     }
-    if (remaining.length === 0 && !(await this.ctx.storage.get('game'))) {
-      await this.close()
+    if (remaining.length === 0) {
+      const game = await this.ctx.storage.get<GameState>('game')
+      if (!game || game.phase !== 'playing') await this.close()
     }
   }
 
@@ -156,11 +182,10 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.setAlarm(deadline)
       this.broadcast({ type: 'frame_settled', state: next, deadline })
     } else {
+      await this.ctx.storage.delete('choices')
+      await this.ctx.storage.deleteAlarm()
+      await this.ctx.storage.put('game', next)
       this.broadcast({ type: 'frame_settled', state: next, deadline: null })
-      for (const ws of this.ctx.getWebSockets()) {
-        ws.close(1000, 'game over')
-      }
-      await this.close()
     }
   }
 

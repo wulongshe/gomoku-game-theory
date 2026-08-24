@@ -21,6 +21,7 @@ const deadline = ref<number | null>(null)
 const selected = ref<Point | null>(null)
 const submitted = ref(false)
 const oppSubmitted = ref(false)
+const rematchAsked = ref(false)
 const notice = ref('')
 
 const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
@@ -30,7 +31,7 @@ const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true
 let replaced = false
 const { send } = useWebSocket(roomWsUrl(props.code, token.value), {
     autoReconnect: {
-      retries: (retried) => retried < 5 && !replaced && stage.value !== 'over',
+      retries: (retried) => retried < 5 && !replaced,
       delay: 1000,
       onFailed() {
         stage.value = 'error'
@@ -58,6 +59,8 @@ function handleMessage(msg: ServerMessage) {
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
       selected.value = msg.yourChoice
+      rematchAsked.value = false
+      notice.value = ''
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
     case 'frame_settled':
@@ -77,6 +80,9 @@ function handleMessage(msg: ServerMessage) {
       break
     case 'opponent_returned':
       notice.value = ''
+      break
+    case 'rematch_requested':
+      notice.value = '对方想再来一局'
       break
     case 'error':
       notice.value = msg.message
@@ -118,6 +124,12 @@ function submitChoice() {
   if (!game.value || !selected.value || submitted.value) return
   sendChoice(selected.value, true)
   submitted.value = true
+}
+
+function requestRematch() {
+  if (rematchAsked.value) return
+  send(JSON.stringify({ type: 'rematch' } satisfies ClientMessage))
+  rematchAsked.value = true
 }
 </script>
 
@@ -176,7 +188,10 @@ function submitChoice() {
 
       <template v-else>
         <p class="text-xl font-bold text-stone-800">{{ resultText }}</p>
-        <AppButton class="w-full max-w-md" @click="reload">再来一局</AppButton>
+        <AppButton class="w-full max-w-md" :disabled="rematchAsked" @click="requestRematch">
+          {{ rematchAsked ? '等待对方…' : '再来一局' }}
+        </AppButton>
+        <p class="min-h-5 text-sm text-stone-500">{{ notice }}</p>
         <a class="text-stone-800 underline" href="/">返回首页</a>
       </template>
     </template>

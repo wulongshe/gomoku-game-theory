@@ -4,14 +4,16 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 
-export type ClientMessage = { type: 'submit'; frame: number; point: Point | null; final: boolean }
+export type ClientMessage =
+  | { type: 'submit'; frame: number; point: Point | null; final: boolean }
+  | { type: 'rematch' }
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
   | {
       type: 'start'
       state: GameState
-      deadline: number
+      deadline: number | null
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
     }
@@ -19,6 +21,7 @@ export type ServerMessage =
   | { type: 'frame_settled'; state: GameState; deadline: number | null }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
+  | { type: 'rematch_requested' }
   | { type: 'error'; message: string }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
@@ -30,6 +33,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (typeof data !== 'object' || data === null) return null
   const msg = data as Record<string, unknown>
+  if (msg.type === 'rematch') return { type: 'rematch' }
   if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
     return null
   }
