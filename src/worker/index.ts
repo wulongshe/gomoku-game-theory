@@ -1,3 +1,5 @@
+import { FRAME_SECONDS } from '@/engine/game'
+import { FRAME_OPTIONS } from '@/shared/protocol'
 import { newRoomCode } from './roomCode'
 
 export { Room } from './room'
@@ -7,12 +9,21 @@ const CANONICAL_HOST = 'gomoku.recode.top'
 
 async function handle(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
+    const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
+      if (!FRAME_OPTIONS.includes(frame)) {
+        return new Response('Invalid frame', { status: 400 })
+      }
       const code = newRoomCode()
-      await env.ROOM.get(env.ROOM.idFromName(code)).fetch('https://room/create', { method: 'POST' })
+      await env.ROOM.get(env.ROOM.idFromName(code)).fetch(`https://room/create?frame=${frame}`, {
+        method: 'POST',
+      })
       return Response.json({ code })
     }
     if (url.pathname === '/api/match/ws') {
+      if (!FRAME_OPTIONS.includes(frame)) {
+        return new Response('Invalid frame', { status: 400 })
+      }
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
     }
     const roomMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})(\/ws)?$/)

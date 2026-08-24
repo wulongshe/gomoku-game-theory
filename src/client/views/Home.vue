@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useTimestamp, useWebSocket } from '@vueuse/core'
+import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
-import type { LobbyServerMessage } from '@/shared/protocol'
+import { FRAME_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 
 const creating = ref(false)
 const matching = ref(false)
 let matched = false
+
+const frameSeconds = useStorage('frame-seconds', FRAME_OPTIONS[0])
 
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
@@ -19,25 +21,28 @@ const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchSta
 async function create() {
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom()}`)
+    location.assign(`/room/${await createRoom(frameSeconds.value)}`)
   } catch {
     creating.value = false
   }
 }
 
-const { open: openMatch, close: closeMatch } = useWebSocket(matchWsUrl(), {
-  immediate: false,
-  onMessage(_, event) {
-    const msg = JSON.parse(event.data) as LobbyServerMessage
-    if (msg.type === 'matched') {
-      matched = true
-      location.assign(`/room/${msg.code}`)
-    }
+const { open: openMatch, close: closeMatch } = useWebSocket(
+  computed(() => matchWsUrl(frameSeconds.value)),
+  {
+    immediate: false,
+    onMessage(_, event) {
+      const msg = JSON.parse(event.data) as LobbyServerMessage
+      if (msg.type === 'matched') {
+        matched = true
+        location.assign(`/room/${msg.code}`)
+      }
+    },
+    onDisconnected() {
+      if (!matched) matching.value = false
+    },
   },
-  onDisconnected() {
-    if (!matched) matching.value = false
-  },
-})
+)
 
 function toggleMatch() {
   if (matching.value) {
@@ -80,6 +85,21 @@ function toggleMatch() {
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
+      <div class="flex items-center gap-3 pb-1 text-sm">
+        <span class="text-stone-500">每回合</span>
+        <div class="flex rounded-lg bg-stone-300/60 p-0.5">
+          <button
+            v-for="option in FRAME_OPTIONS"
+            :key="option"
+            class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
+            :class="frameSeconds === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+            :disabled="matching"
+            @click="frameSeconds = option"
+          >
+            {{ option }}s
+          </button>
+        </div>
+      </div>
       <AppButton secondary class="w-full" :disabled="creating" @click="toggleMatch">
         <span class="flex items-center justify-center gap-2">
           <IconSpinner v-if="matching" class="size-5" />

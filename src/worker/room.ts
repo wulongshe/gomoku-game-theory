@@ -10,7 +10,6 @@ import {
 } from '@/engine/game'
 import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
 
-const FRAME_MS = FRAME_SECONDS * 1000
 const IDLE_TTL_MS = 10 * 60 * 1000
 
 interface Attachment {
@@ -26,12 +25,13 @@ type SeatFlags = Partial<Record<Seat, boolean>>
 
 export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
     if (request.method === 'POST') {
-      await this.ctx.storage.put('created', true)
+      const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
+      await this.ctx.storage.put({ created: true, frameSeconds })
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       return new Response(null, { status: 204 })
     }
-    const url = new URL(request.url)
     const created = (await this.ctx.storage.get<boolean>('created')) ?? false
     if (!url.pathname.endsWith('/ws')) {
       return Response.json({ exists: created })
@@ -81,6 +81,7 @@ export class Room extends DurableObject<Env> {
         type: 'start',
         state: game,
         deadline: game.phase === 'playing' ? deadline : null,
+        frameSeconds: await this.frameSeconds(),
         submitted: { p1: !!choices.p1?.final, p2: !!choices.p2?.final },
         yourChoice: choices[seat]?.point ?? null,
       })
@@ -117,9 +118,14 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  private async frameSeconds(): Promise<number> {
+    return (await this.ctx.storage.get<number>('frameSeconds')) ?? FRAME_SECONDS
+  }
+
   private async startGame(): Promise<void> {
     const game = createGame()
-    const deadline = Date.now() + FRAME_MS
+    const frameSeconds = await this.frameSeconds()
+    const deadline = Date.now() + frameSeconds * 1000
     await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
     await this.ctx.storage.put({ game, deadline })
     await this.ctx.storage.setAlarm(deadline)
@@ -127,6 +133,7 @@ export class Room extends DurableObject<Env> {
       type: 'start',
       state: game,
       deadline,
+      frameSeconds,
       submitted: { p1: false, p2: false },
       yourChoice: null,
     })
@@ -255,7 +262,7 @@ export class Room extends DurableObject<Env> {
       p2: choices.p2?.point ?? null,
     })
     if (next.phase === 'playing') {
-      const deadline = Date.now() + FRAME_MS
+      const deadline = Date.now() + (await this.frameSeconds()) * 1000
       await this.ctx.storage.delete('choices')
       await this.ctx.storage.put({ game: next, deadline })
       await this.ctx.storage.setAlarm(deadline)

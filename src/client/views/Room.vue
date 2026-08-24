@@ -44,6 +44,8 @@ const roomClosed = ref(false)
 const notFound = ref(false)
 const myReady = ref(false)
 const oppReady = ref(false)
+const frameSeconds = ref(FRAME_SECONDS)
+const autoSubmit = useStorage('auto-submit', false)
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
 const token = useStorage(`room-token:${props.code}`, nanoid(), sessionStorage)
@@ -111,6 +113,7 @@ function handleMessage(msg: ServerMessage) {
     case 'start':
       game.value = msg.state
       deadline.value = msg.deadline
+      frameSeconds.value = msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
       selected.value = msg.yourChoice
@@ -160,7 +163,7 @@ function handleMessage(msg: ServerMessage) {
 
 const remainingRatio = computed(() => {
   if (deadline.value === null) return 0
-  return Math.min(1, Math.max(0, (deadline.value - now.value) / (FRAME_SECONDS * 1000)))
+  return Math.min(1, Math.max(0, (deadline.value - now.value) / (frameSeconds.value * 1000)))
 })
 
 const secondsLeft = computed(() =>
@@ -215,7 +218,12 @@ function select(point: Point) {
   if (stage.value !== 'playing' || submitted.value || !game.value) return
   if (!isLegalChoice(game.value, point)) return
   selected.value = point
-  sendChoice(point, false)
+  if (autoSubmit.value) {
+    sendChoice(point, true)
+    submitted.value = true
+  } else {
+    sendChoice(point, false)
+  }
 }
 
 function submitChoice() {
@@ -447,13 +455,34 @@ function exitRoom() {
         </div>
 
         <template v-if="stage === 'playing'">
-          <AppButton class="w-full" :disabled="!selected || submitted" @click="submitChoice">
-            {{ submitted ? '已提交，等待对方' : selected ? '确认提交' : '点击棋盘选择落点' }}
+          <AppButton
+            class="w-full"
+            :disabled="!selected || submitted || autoSubmit"
+            @click="submitChoice"
+          >
+            {{
+              submitted
+                ? '已提交，等待对方'
+                : autoSubmit
+                  ? '点击棋盘落子即提交'
+                  : selected
+                    ? '确认提交'
+                    : '点击棋盘选择落点'
+            }}
           </AppButton>
-          <p class="min-h-4 text-center text-xs text-stone-400">
-            <template v-if="errorNotice">{{ errorNotice }}</template>
-            <template v-else-if="selected && !submitted">倒计时结束将自动提交已选落点</template>
-          </p>
+          <div class="flex min-h-4 items-center justify-between text-xs text-stone-400">
+            <label class="flex cursor-pointer items-center gap-2 select-none">
+              <input v-model="autoSubmit" type="checkbox" class="peer sr-only" />
+              <span
+                class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5"
+              />
+              落子自动提交
+            </label>
+            <span>
+              <template v-if="errorNotice">{{ errorNotice }}</template>
+              <template v-else-if="selected && !submitted">倒计时结束将自动提交已选落点</template>
+            </span>
+          </div>
         </template>
 
         <template v-else>

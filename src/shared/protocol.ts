@@ -1,5 +1,7 @@
 import type { GameState, Point, Seat } from '@/engine/game'
 
+export const FRAME_OPTIONS = [30, 60]
+
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
@@ -20,6 +22,7 @@ export type ServerMessage =
       type: 'start'
       state: GameState
       deadline: number | null
+      frameSeconds: number
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
     }

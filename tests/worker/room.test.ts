@@ -11,8 +11,9 @@ interface Client {
   rematch(): void
 }
 
-async function createRoom(code: string): Promise<void> {
-  await env.ROOM.get(env.ROOM.idFromName(code)).fetch('https://room/create', { method: 'POST' })
+async function createRoom(code: string, frame?: number): Promise<void> {
+  const url = frame ? `https://room/create?frame=${frame}` : 'https://room/create'
+  await env.ROOM.get(env.ROOM.idFromName(code)).fetch(url, { method: 'POST' })
 }
 
 async function connect(code: string, token: string): Promise<Client> {
@@ -110,6 +111,19 @@ describe('Room', () => {
       yourChoice: null,
     })
     expect(await b.next('start')).toEqual(start)
+  })
+
+  it('runs frames at the configured duration', async () => {
+    await createRoom('ROOM20', 60)
+    const a = await connect('ROOM20', 'token-a')
+    const b = await connect('ROOM20', 'token-b')
+    a.ready()
+    b.ready()
+    const start = await a.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    expect(start.frameSeconds).toBe(60)
+    expect(start.deadline).toBeGreaterThan(Date.now() + 55_000)
+    await b.next('start')
   })
 
   it('keeps a ready flag across a pre-game reconnect', async () => {

@@ -29,6 +29,11 @@ describe('POST /api/rooms', () => {
     const check = await SELF.fetch(`https://example.com/api/rooms/${code}`)
     expect(await check.json()).toEqual({ exists: true })
   })
+
+  it('rejects an unsupported frame duration', async () => {
+    const res = await SELF.fetch('https://example.com/api/rooms?frame=45', { method: 'POST' })
+    expect(res.status).toBe(400)
+  })
 })
 
 describe('GET /api/rooms/:code', () => {

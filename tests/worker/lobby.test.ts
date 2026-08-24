@@ -7,8 +7,11 @@ interface Client {
   matched(): Promise<LobbyServerMessage>
 }
 
-async function joinLobby(): Promise<Client> {
-  const res = await SELF.fetch('https://example.com/api/match/ws', {
+async function joinLobby(frame?: number): Promise<Client> {
+  const url = frame
+    ? `https://example.com/api/match/ws?frame=${frame}`
+    : 'https://example.com/api/match/ws'
+  const res = await SELF.fetch(url, {
     headers: { Upgrade: 'websocket' },
   })
   expect(res.status).toBe(101)
@@ -53,6 +56,18 @@ describe('Lobby', () => {
     expect(second.code).not.toBe(first.code)
     expect((await a.matched()).code).toBe(first.code)
     expect((await c.matched()).code).toBe(second.code)
+  })
+
+  it('matches only players who picked the same frame duration', async () => {
+    const a = await joinLobby(30)
+    const b = await joinLobby(60)
+    const c = await joinLobby(60)
+    const [msgB, msgC] = await Promise.all([b.matched(), c.matched()])
+    expect(msgB).toEqual(msgC)
+    const d = await joinLobby(30)
+    const [msgA, msgD] = await Promise.all([a.matched(), d.matched()])
+    expect(msgA).toEqual(msgD)
+    expect(msgA.code).not.toBe(msgB.code)
   })
 
   it('does not match a player who cancelled before an opponent arrives', async () => {
