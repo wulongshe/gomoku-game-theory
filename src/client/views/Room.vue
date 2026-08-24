@@ -90,6 +90,7 @@ onMounted(async () => {
     notFound.value = true
     stage.value = 'error'
     forgetToken()
+    homeDeadline.value = Date.now() + 5000
   } else if (status.full) {
     roomFull.value = true
     stage.value = 'error'
@@ -282,6 +283,16 @@ function declineRematch() {
   inviteDeadline.value = null
   send(JSON.stringify({ type: 'rematch_decline' } satisfies ClientMessage))
 }
+
+const homeDeadline = ref<number | null>(null)
+
+const homeSecondsLeft = computed(() =>
+  homeDeadline.value === null ? null : Math.max(0, Math.ceil((homeDeadline.value - now.value) / 1000)),
+)
+
+watch(homeSecondsLeft, (s) => {
+  if (s === 0) location.assign('/')
+})
 
 const errorInfo = computed(() => {
   if (notFound.value)
@@ -547,7 +558,9 @@ function exitRoom() {
               {{ props.code }}
             </p>
             <a class="w-full" href="/">
-              <AppButton class="w-full">返回首页</AppButton>
+              <AppButton class="w-full">
+                返回首页<template v-if="homeSecondsLeft !== null">（{{ homeSecondsLeft }}s）</template>
+              </AppButton>
             </a>
           </div>
         </template>
