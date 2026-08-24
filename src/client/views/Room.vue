@@ -24,10 +24,23 @@ const now = ref(Date.now())
 let ws: WebSocket | undefined
 let ticker: ReturnType<typeof setInterval> | undefined
 
+function roomToken(): string {
+  const key = `room-token:${props.code}`
+  let token = sessionStorage.getItem(key)
+  if (!token) {
+    token =
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+    sessionStorage.setItem(key, token)
+  }
+  return token
+}
+
 onMounted(() => {
   ticker = setInterval(() => (now.value = Date.now()), 250)
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  ws = new WebSocket(`${proto}://${location.host}/api/rooms/${props.code}/ws`)
+  ws = new WebSocket(`${proto}://${location.host}/api/rooms/${props.code}/ws?token=${roomToken()}`)
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data as string) as ServerMessage
     switch (msg.type) {
@@ -38,7 +51,10 @@ onMounted(() => {
       case 'start':
         game.value = msg.state
         deadline.value = msg.deadline
-        stage.value = 'playing'
+        submitted.value = msg.submitted[seat.value]
+        oppSubmitted.value = msg.submitted[seat.value === 'p1' ? 'p2' : 'p1']
+        selected.value = msg.yourChoice
+        stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
         break
       case 'frame_settled':
         game.value = msg.state
@@ -54,6 +70,9 @@ onMounted(() => {
         break
       case 'opponent_left':
         notice.value = '对方已离开'
+        break
+      case 'opponent_returned':
+        notice.value = ''
         break
       case 'error':
         notice.value = msg.message
@@ -87,6 +106,10 @@ function select(point: Point) {
   if (stage.value !== 'playing' || submitted.value || !game.value) return
   if (!isLegalChoice(game.value, point)) return
   selected.value = point
+}
+
+function reload() {
+  location.reload()
 }
 
 function submitChoice() {
@@ -193,8 +216,19 @@ async function copyLink() {
     </template>
 
     <template v-else>
-      <p class="text-stone-600">无法加入房间 {{ props.code }}</p>
-      <a class="text-stone-800 underline" href="/">返回首页</a>
+      <template v-if="game">
+        <p class="text-stone-600">连接已断开</p>
+        <button
+          class="rounded-lg bg-stone-800 px-6 py-3 text-lg text-white active:bg-stone-600"
+          @click="reload"
+        >
+          重新连接
+        </button>
+      </template>
+      <template v-else>
+        <p class="text-stone-600">无法加入房间 {{ props.code }}</p>
+        <a class="text-stone-800 underline" href="/">返回首页</a>
+      </template>
     </template>
   </main>
 </template>

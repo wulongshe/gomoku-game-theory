@@ -9,8 +9,8 @@ interface Client {
   submit(frame: number, point: Point | null): void
 }
 
-async function connect(code: string): Promise<Client> {
-  const res = await SELF.fetch(`https://example.com/api/rooms/${code}/ws`, {
+async function connect(code: string, token: string): Promise<Client> {
+  const res = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?token=${token}`, {
     headers: { Upgrade: 'websocket' },
   })
   expect(res.status).toBe(101)
@@ -41,8 +41,8 @@ async function connect(code: string): Promise<Client> {
 }
 
 async function startGame(code: string): Promise<[Client, Client]> {
-  const a = await connect(code)
-  const b = await connect(code)
+  const a = await connect(code, 'token-a')
+  const b = await connect(code, 'token-b')
   expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
   expect(await b.next('joined')).toMatchObject({ seat: 'p2' })
   await a.next('start')
@@ -59,17 +59,21 @@ async function settledOnBoth(a: Client, b: Client) {
 
 describe('Room', () => {
   it('seats two players and starts the game', async () => {
-    const a = await connect('ROOM01')
+    const a = await connect('ROOM01', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'p1' })
-    const b = await connect('ROOM01')
+    const b = await connect('ROOM01', 'token-b')
     const start = await a.next('start')
-    expect(start).toMatchObject({ state: { frame: 1, phase: 'playing' } })
+    expect(start).toMatchObject({
+      state: { frame: 1, phase: 'playing' },
+      submitted: { p1: false, p2: false },
+      yourChoice: null,
+    })
     expect(await b.next('start')).toEqual(start)
   })
 
   it('rejects a third player', async () => {
     await startGame('ROOM02')
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM02/ws', {
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM02/ws?token=token-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(409)
@@ -134,9 +138,56 @@ describe('Room', () => {
     expect(settled.state.phase).toBe('p1_won')
     expect(settled.deadline).toBeNull()
 
-    const rejoin = await SELF.fetch('https://example.com/api/rooms/ROOM08/ws', {
+    const rejoin = await SELF.fetch('https://example.com/api/rooms/ROOM08/ws?token=token-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(rejoin.status).toBe(101)
+  })
+
+  it('lets a player reconnect mid-game and restores the frame snapshot', async () => {
+    const [a, b] = await startGame('ROOM09')
+    a.submit(1, { x: 3, y: 4 })
+    await b.next('opponent_submitted')
+    a.ws.close()
+    await b.next('opponent_left')
+
+    const a2 = await connect('ROOM09', 'token-a')
+    expect(await a2.next('joined')).toMatchObject({ seat: 'p1' })
+    const start = await a2.next('start')
+    expect(start).toMatchObject({
+      state: { frame: 1 },
+      submitted: { p1: true, p2: false },
+      yourChoice: { x: 3, y: 4 },
+    })
+    await b.next('opponent_returned')
+
+    b.submit(1, { x: 8, y: 8 })
+    const settled = await settledOnBoth(a2, b)
+    expect(cellAt(settled.state, { x: 3, y: 4 })).toBe('p1')
+    expect(settled.state.frame).toBe(2)
+  })
+
+  it('replaces the old socket on reconnect without notifying the opponent', async () => {
+    const [a, b] = await startGame('ROOM10')
+    const closed = new Promise<void>((resolve) => a.ws.addEventListener('close', () => resolve()))
+    const a2 = await connect('ROOM10', 'token-a')
+    expect(await a2.next('joined')).toMatchObject({ seat: 'p1' })
+    await a2.next('start')
+    await closed
+
+    a2.submit(1, { x: 0, y: 0 })
+    await b.next('opponent_submitted')
+    b.submit(1, { x: 1, y: 1 })
+    await settledOnBoth(a2, b)
+  })
+
+  it('cleans up an abandoned game at the next alarm', async () => {
+    const [a, b] = await startGame('ROOM11')
+    a.ws.close()
+    b.ws.close()
+    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM11')))).toBe(true)
+
+    const c = await connect('ROOM11', 'token-c')
+    expect(await c.next('joined')).toMatchObject({ seat: 'p1' })
   })
 })

@@ -8,10 +8,17 @@ export type ClientMessage = { type: 'submit'; frame: number; point: Point | null
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat }
-  | { type: 'start'; state: GameState; deadline: number }
+  | {
+      type: 'start'
+      state: GameState
+      deadline: number
+      submitted: Record<Seat, boolean>
+      yourChoice: Point | null
+    }
   | { type: 'opponent_submitted' }
   | { type: 'frame_settled'; state: GameState; deadline: number | null }
   | { type: 'opponent_left' }
+  | { type: 'opponent_returned' }
   | { type: 'error'; message: string }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
