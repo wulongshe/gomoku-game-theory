@@ -131,7 +131,7 @@ function handleMessage(msg: ServerMessage) {
     }
     case 'start':
       game.value = msg.state
-      deadline.value = msg.deadline
+      deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameSeconds.value = msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
@@ -150,7 +150,7 @@ function handleMessage(msg: ServerMessage) {
       lastMoves.value = diffNewStones(msg.state)
       vanishing.value = msg.state.cleared
       game.value = msg.state
-      deadline.value = msg.deadline
+      deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       selected.value = null
       submitted.value = false
       oppSubmitted.value = false
@@ -187,9 +187,13 @@ const remainingRatio = computed(() => {
   return Math.min(1, Math.max(0, (deadline.value - now.value) / (frameSeconds.value * 1000)))
 })
 
-const secondsLeft = computed(() =>
-  deadline.value === null ? null : Math.max(1, Math.ceil((deadline.value - now.value) / 1000)),
-)
+const secondsLeft = computed(() => {
+  if (deadline.value === null) return null
+  const left = Math.max(0, Math.ceil((deadline.value - now.value) / 1000))
+  return Math.min(frameSeconds.value, left)
+})
+
+const overdue = computed(() => deadline.value !== null && now.value >= deadline.value)
 
 const urgency = computed(() => {
   if (secondsLeft.value === null) return 'calm'
@@ -202,6 +206,8 @@ const oppStatus = computed(() => {
   if (oppLeft.value) return { text: '对方已离开', dot: 'bg-red-500', cls: 'text-red-600' }
   if (stage.value === 'over')
     return { text: `对局结束 · ${winnerLabel.value}`, dot: 'bg-stone-400', cls: 'text-stone-500' }
+  if (overdue.value)
+    return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500' }
   if (oppSubmitted.value) return { text: '对方已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700' }
   return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500' }
 })

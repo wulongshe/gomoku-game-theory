@@ -87,6 +87,7 @@ export class Room extends DurableObject<Env> {
         type: 'start',
         state: game,
         deadline: game.phase === 'playing' ? deadline : null,
+        now: Date.now(),
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
@@ -143,6 +144,7 @@ export class Room extends DurableObject<Env> {
       type: 'start',
       state: game,
       deadline,
+      now: Date.now(),
       frameSeconds,
       submitted: { black: false, white: false },
       yourChoice: null,
@@ -215,7 +217,7 @@ export class Room extends DurableObject<Env> {
         phase: seat === 'black' ? 'white_won' : 'black_won',
         cleared: [],
       }
-      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null })
+      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now() })
     }
     for (const socket of this.ctx.getWebSockets()) {
       socket.close(1000, 'room closed')
@@ -278,12 +280,12 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.delete('choices')
       await this.ctx.storage.put({ game: next, deadline })
       await this.ctx.storage.setAlarm(deadline)
-      this.broadcast({ type: 'frame_settled', state: next, deadline })
+      this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now() })
     } else {
       await this.ctx.storage.delete('choices')
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       await this.ctx.storage.put('game', next)
-      this.broadcast({ type: 'frame_settled', state: next, deadline: null })
+      this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now() })
     }
   }
 

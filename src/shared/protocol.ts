@@ -23,12 +23,13 @@ export type ServerMessage =
       type: 'start'
       state: GameState
       deadline: number | null
+      now: number
       frameSeconds: number
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
     }
   | { type: 'opponent_submitted'; submitted: boolean }
-  | { type: 'frame_settled'; state: GameState; deadline: number | null }
+  | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
   | { type: 'rematch_requested' }
