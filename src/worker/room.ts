@@ -210,7 +210,11 @@ export class Room extends DurableObject<Env> {
 
   private async handleLeave(seat: Seat, game: GameState | undefined): Promise<void> {
     if (game && game.phase === 'playing') {
-      const resigned: GameState = { ...game, phase: seat === 'black' ? 'white_won' : 'black_won' }
+      const resigned: GameState = {
+        ...game,
+        phase: seat === 'black' ? 'white_won' : 'black_won',
+        cleared: [],
+      }
       this.broadcast({ type: 'frame_settled', state: resigned, deadline: null })
     }
     for (const socket of this.ctx.getWebSockets()) {

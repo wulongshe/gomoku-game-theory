@@ -133,6 +133,18 @@ describe('settleFrame', () => {
       expect(cellAt(next, { x, y: 0 })).toBe('empty')
       expect(cellAt(next, { x, y: 14 })).toBe('empty')
     }
+    expect(next.cleared).toEqual([
+      {
+        origin: { x: 4, y: 0 },
+        cells: expect.arrayContaining([{ x: 0, y: 0, cell: 'black' }]),
+      },
+      {
+        origin: { x: 4, y: 14 },
+        cells: expect.arrayContaining([{ x: 0, y: 14, cell: 'white' }]),
+      },
+    ])
+    expect(next.cleared[0].cells).toHaveLength(5)
+    expect(next.cleared[1].cells).toHaveLength(5)
   })
 
   it('annihilates every direction that reaches five, not just the first', () => {
@@ -161,6 +173,22 @@ describe('settleFrame', () => {
     const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 0 } })
     expect(next.phase).toBe('playing')
     for (let x = 0; x <= 4; x++) expect(cellAt(next, { x, y: 0 })).toBe('empty')
+  })
+
+  it('clears each forbidden line as its own group when a collision completes several', () => {
+    const game = createGame()
+    game.frame = 2
+    for (let x = 0; x < 4; x++) game.board[x] = 'forbidden'
+    for (let y = 1; y <= 4; y++) game.board[y * BOARD_SIZE + 4] = 'forbidden'
+    const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 0 } })
+    expect(next.phase).toBe('playing')
+    for (let x = 0; x <= 4; x++) expect(cellAt(next, { x, y: 0 })).toBe('empty')
+    for (let y = 1; y <= 4; y++) expect(cellAt(next, { x: 4, y })).toBe('empty')
+    expect(next.cleared).toHaveLength(2)
+    for (const group of next.cleared) {
+      expect(group.origin).toMatchObject({ x: 4, y: 0 })
+      expect(group.cells).toHaveLength(5)
+    }
   })
 
   it('awards no win when the winning point collides', () => {

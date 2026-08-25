@@ -15,7 +15,7 @@ import {
   BOARD_SIZE,
   FRAME_SECONDS,
   isLegalChoice,
-  type CellState,
+  type ClearedGroup,
   type GameState,
   type Point,
   type Seat,
@@ -43,7 +43,7 @@ const overNotice = ref('')
 const overlayDismissed = ref(false)
 const errorNotice = ref('')
 const lastMoves = ref<Point[]>([])
-const vanishing = ref<{ x: number; y: number; cell: CellState }[]>([])
+const vanishing = ref<ClearedGroup[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
 const notFound = ref(false)
@@ -115,16 +115,6 @@ function diffNewStones(next: GameState): Point[] {
   )
 }
 
-function diffVanished(next: GameState): { x: number; y: number; cell: CellState }[] {
-  const prev = game.value?.board
-  if (!prev) return []
-  return next.board.flatMap((cell, i) =>
-    cell === 'empty' && prev[i] !== 'empty'
-      ? [{ x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE), cell: prev[i] }]
-      : [],
-  )
-}
-
 function handleMessage(msg: ServerMessage) {
   switch (msg.type) {
     case 'joined':
@@ -158,7 +148,7 @@ function handleMessage(msg: ServerMessage) {
       break
     case 'frame_settled':
       lastMoves.value = diffNewStones(msg.state)
-      vanishing.value = diffVanished(msg.state)
+      vanishing.value = msg.state.cleared
       game.value = msg.state
       deadline.value = msg.deadline
       selected.value = null

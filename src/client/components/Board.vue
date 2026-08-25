@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZE, cellAt, type CellState, type GameState, type Point, type Seat } from '@/engine/game'
+import {
+  BOARD_SIZE,
+  cellAt,
+  type CellState,
+  type ClearedGroup,
+  type GameState,
+  type Point,
+  type Seat,
+} from '@/engine/game'
 
 const props = defineProps<{
   state: GameState
   seat: Seat
   selected: Point | null
   lastMoves: Point[]
-  vanishing: { x: number; y: number; cell: CellState }[]
+  vanishing: ClearedGroup[]
   interactive: boolean
 }>()
 
@@ -54,6 +62,44 @@ const stones = computed(() =>
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
 
 const halves = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'half'))
+
+const VANISH_BASE_MS = 280
+const VANISH_STEP_MS = 90
+
+const vanishStones = computed(() => {
+  const map = new Map<string, { x: number; y: number; cell: CellState; delay: number }>()
+  for (const group of props.vanishing) {
+    for (const { x, y, cell } of group.cells) {
+      const delay =
+        VANISH_BASE_MS +
+        Math.max(Math.abs(x - group.origin.x), Math.abs(y - group.origin.y)) * VANISH_STEP_MS
+      const key = `${x},${y}`
+      const seen = map.get(key)
+      if (!seen || delay < seen.delay) map.set(key, { x, y, cell, delay })
+    }
+  }
+  return [...map.values()]
+})
+
+const rays = computed(() => {
+  const out: { key: string; from: Point; to: Point }[] = []
+  for (const group of props.vanishing) {
+    const farthest = new Map<string, { point: Point; dist: number }>()
+    for (const { x, y } of group.cells) {
+      const dx = Math.sign(x - group.origin.x)
+      const dy = Math.sign(y - group.origin.y)
+      if (!dx && !dy) continue
+      const dist = Math.max(Math.abs(x - group.origin.x), Math.abs(y - group.origin.y))
+      const key = `${dx},${dy}`
+      const seen = farthest.get(key)
+      if (!seen || dist > seen.dist) farthest.set(key, { point: { x, y }, dist })
+    }
+    for (const [key, { point }] of farthest) {
+      out.push({ key: `${group.origin.x},${group.origin.y}>${key}`, from: group.origin, to: point })
+    }
+  }
+  return out
+})
 
 function isLastMove(p: Point): boolean {
   return props.lastMoves.some((m) => m.x === p.x && m.y === p.y)
@@ -177,59 +223,70 @@ function isLastMove(p: Point): boolean {
       />
     </g>
 
-    <g
-      v-for="p in halves"
-      :key="`half${p.x},${p.y}`"
-      :transform="`translate(${pos(p.x)}, ${pos(p.y)})`"
-      class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]"
-    >
-      <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
-      <path :d="TAIJI_PATH" fill="url(#stone-black)" />
-      <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
-      <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
-    </g>
-
-    <g
-      v-for="p in forbidden"
-      :key="`f${p.x},${p.y}`"
-      :transform="`translate(${pos(p.x)}, ${pos(p.y)})`"
-      stroke="#ef4444"
-      stroke-linecap="round"
-      class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
-    >
-      <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
-      <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
-      <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
-    </g>
-
-    <g
-      v-for="v in vanishing"
-      :key="`v${v.x},${v.y}`"
-      :transform="`translate(${pos(v.x)}, ${pos(v.y)})`"
-      class="origin-center animate-[vanish_0.5s_ease-out_forwards] [transform-box:fill-box]"
-    >
-      <template v-if="v.cell === 'black' || v.cell === 'white'">
-        <circle
-          :r="STONE_R"
-          :fill="`url(#stone-${v.cell})`"
-          :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
-          stroke-width="1"
-        />
-      </template>
-      <template v-else-if="v.cell === 'half'">
+    <g v-for="p in halves" :key="`half${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
+      <g class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]">
         <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
         <path :d="TAIJI_PATH" fill="url(#stone-black)" />
         <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
         <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
-      </template>
-      <template v-else-if="v.cell === 'forbidden'">
-        <g stroke="#ef4444" stroke-linecap="round">
-          <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
-          <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
-          <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
-        </g>
-      </template>
+      </g>
     </g>
+
+    <g v-for="p in forbidden" :key="`f${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
+      <g
+        stroke="#ef4444"
+        stroke-linecap="round"
+        class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
+      >
+        <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+        <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
+        <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
+      </g>
+    </g>
+
+    <g v-for="v in vanishStones" :key="`v${v.x},${v.y}`" :transform="`translate(${pos(v.x)}, ${pos(v.y)})`">
+      <g
+        :style="{ animationDelay: `${v.delay}ms` }"
+        class="origin-center animate-[vanish_0.3s_ease-in_both] [transform-box:fill-box]"
+      >
+        <template v-if="v.cell === 'black' || v.cell === 'white'">
+          <circle
+            :r="STONE_R"
+            :fill="`url(#stone-${v.cell})`"
+            :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
+            stroke-width="1"
+          />
+        </template>
+        <template v-else-if="v.cell === 'half'">
+          <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
+          <path :d="TAIJI_PATH" fill="url(#stone-black)" />
+          <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
+          <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
+        </template>
+        <template v-else-if="v.cell === 'forbidden'">
+          <g stroke="#ef4444" stroke-linecap="round">
+            <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+            <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
+            <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
+          </g>
+        </template>
+      </g>
+    </g>
+
+    <line
+      v-for="ray in rays"
+      :key="`ray${ray.key}`"
+      :x1="pos(ray.from.x)"
+      :y1="pos(ray.from.y)"
+      :x2="pos(ray.to.x)"
+      :y2="pos(ray.to.y)"
+      pathLength="1"
+      stroke="#fbbf24"
+      stroke-width="7"
+      stroke-linecap="round"
+      stroke-dasharray="1"
+      class="animate-[ray_0.5s_ease-out_forwards]"
+    />
 
     <g v-if="selected">
       <circle

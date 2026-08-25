@@ -11,11 +11,21 @@ export interface Point {
   y: number
 }
 
+export interface ClearedCell extends Point {
+  cell: CellState
+}
+
+export interface ClearedGroup {
+  origin: Point
+  cells: ClearedCell[]
+}
+
 export interface GameState {
   board: CellState[]
   phase: Phase
   frame: number
   mode: GameMode
+  cleared: ClearedGroup[]
 }
 
 export interface FrameChoices {
@@ -29,6 +39,7 @@ export function createGame(mode: GameMode = 'forbidden'): GameState {
     phase: 'playing',
     frame: 1,
     mode,
+    cleared: [],
   }
 }
 
@@ -95,8 +106,8 @@ function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
   return [...cells]
 }
 
-function forbiddenRuns(board: CellState[]): number[] {
-  const clear: number[] = []
+function forbiddenRuns(board: CellState[]): number[][] {
+  const runs: number[][] = []
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       if (board[y * BOARD_SIZE + x] !== 'forbidden') continue
@@ -118,11 +129,11 @@ function forbiddenRuns(board: CellState[]): number[] {
           cx += dx
           cy += dy
         }
-        if (line.length >= WIN_SCORE) clear.push(...line)
+        if (line.length >= WIN_SCORE) runs.push(line)
       }
     }
   }
-  return clear
+  return runs
 }
 
 export function settleFrame(state: GameState, choices: FrameChoices): GameState {
@@ -145,16 +156,34 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
   const blackRun = black ? winningRun(board, 'black', black) : []
   const whiteRun = white ? winningRun(board, 'white', white) : []
 
+  const toCell = (i: number): ClearedCell => ({
+    x: i % BOARD_SIZE,
+    y: Math.floor(i / BOARD_SIZE),
+    cell: board[i],
+  })
+
+  const cleared: ClearedGroup[] = []
   let phase: Phase = 'playing'
   if (blackRun.length && whiteRun.length) {
+    cleared.push({ origin: black!, cells: blackRun.map(toCell) })
+    cleared.push({ origin: white!, cells: whiteRun.map(toCell) })
     for (const i of [...blackRun, ...whiteRun]) board[i] = 'empty'
   } else if (blackRun.length) phase = 'black_won'
   else if (whiteRun.length) phase = 'white_won'
 
   if (phase === 'playing') {
-    for (const i of forbiddenRuns(board)) board[i] = 'empty'
+    const runs = forbiddenRuns(board)
+    const collision =
+      black && white && black.x === white.x && black.y === white.y
+        ? black.y * BOARD_SIZE + black.x
+        : null
+    for (const run of runs) {
+      const origin = collision !== null && run.includes(collision) ? collision : run[0]
+      cleared.push({ origin: toCell(origin), cells: run.map(toCell) })
+    }
+    for (const i of runs.flat()) board[i] = 'empty'
     if (!board.includes('empty')) phase = 'draw'
   }
 
-  return { board, phase, frame: state.frame + 1, mode: state.mode }
+  return { board, phase, frame: state.frame + 1, mode: state.mode, cleared }
 }
