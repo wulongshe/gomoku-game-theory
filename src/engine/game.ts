@@ -72,6 +72,7 @@ function cellValue(cell: CellState, seat: Seat): number {
 function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
   const start = point.y * BOARD_SIZE + point.x
   if (cellValue(board[start], seat) === 0) return []
+  const cells = new Set<number>()
   for (const [dx, dy] of DIRECTIONS) {
     const line = [start]
     let score = cellValue(board[start], seat)
@@ -87,9 +88,9 @@ function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
         y += dy * sign
       }
     }
-    if (score >= WIN_SCORE) return line
+    if (score >= WIN_SCORE) for (const i of line) cells.add(i)
   }
-  return []
+  return [...cells]
 }
 
 function forbiddenRuns(board: CellState[]): number[] {

@@ -133,6 +133,25 @@ describe('settleFrame', () => {
     }
   })
 
+  it('annihilates every direction that reaches five, not just the first', () => {
+    const game = withStones({
+      black: [
+        ...[3, 4, 5, 6].map((x) => ({ x, y: 7 })),
+        ...[3, 4, 5, 6].map((y) => ({ x: 7, y })),
+        ...[3, 4, 5, 6].map((i) => ({ x: i, y: i })),
+      ],
+      white: [0, 1, 2, 3].map((x) => ({ x, y: 14 })),
+    })
+    const next = settleFrame(game, { black: { x: 7, y: 7 }, white: { x: 4, y: 14 } })
+    expect(next.phase).toBe('playing')
+    for (let i = 3; i <= 7; i++) {
+      expect(cellAt(next, { x: i, y: 7 })).toBe('empty')
+      expect(cellAt(next, { x: 7, y: i })).toBe('empty')
+      expect(cellAt(next, { x: i, y: i })).toBe('empty')
+    }
+    for (let x = 0; x <= 4; x++) expect(cellAt(next, { x, y: 14 })).toBe('empty')
+  })
+
   it('clears a line of five forbidden points', () => {
     const game = createGame()
     game.frame = 2
