@@ -17,6 +17,10 @@ const PAD = 34
 const SIZE = (BOARD_SIZE - 1) * U + PAD * 2
 const STONE_R = U * 0.46
 
+const R = STONE_R
+const TAIJI_PATH = `M0,${-R} A${R},${R} 0 0 1 0,${R} A${R / 2},${R / 2} 0 0 1 0,0 A${R / 2},${R / 2} 0 0 0 0,${-R} Z`
+const TAIJI_EYE = R / 5
+
 const STARS: Point[] = [
   { x: 3, y: 3 },
   { x: 11, y: 3 },
@@ -42,6 +46,8 @@ const stones = computed(() =>
 )
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
+
+const halves = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'half'))
 
 function isLastMove(p: Point): boolean {
   return props.lastMoves.some((m) => m.x === p.x && m.y === p.y)
@@ -121,6 +127,18 @@ function isLastMove(p: Point): boolean {
         :fill="stone.cell === 'black' ? '#ffffff' : '#1c1917'"
         opacity="0.85"
       />
+    </g>
+
+    <g
+      v-for="p in halves"
+      :key="`half${p.x},${p.y}`"
+      :transform="`translate(${pos(p.x)}, ${pos(p.y)})`"
+      class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]"
+    >
+      <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
+      <path :d="TAIJI_PATH" fill="url(#stone-black)" />
+      <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
+      <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
     </g>
 
     <g

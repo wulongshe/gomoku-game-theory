@@ -5,13 +5,14 @@ import {
   createGame,
   isLegalChoice,
   settleFrame,
+  type GameMode,
   type GameState,
   type Point,
   type Seat,
 } from '@/engine/game'
 
-function withStones(stones: Partial<Record<Seat, Point[]>>): GameState {
-  const game = createGame()
+function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
+  const game = createGame(mode)
   for (const seat of ['black', 'white'] as const) {
     for (const { x, y } of stones[seat] ?? []) {
       game.board[y * BOARD_SIZE + x] = seat
@@ -67,6 +68,20 @@ describe('settleFrame', () => {
     expect(cellAt(next, { x: 7, y: 7 })).toBe('forbidden')
     expect(next.phase).toBe('playing')
     expect(isLegalChoice(next, { x: 7, y: 7 })).toBe(false)
+  })
+
+  it('shares a collision point as a half cell in half mode', () => {
+    const next = settleFrame(createGame('half'), { black: { x: 7, y: 7 }, white: { x: 7, y: 7 } })
+    expect(cellAt(next, { x: 7, y: 7 })).toBe('half')
+    expect(next.phase).toBe('playing')
+    expect(isLegalChoice(next, { x: 7, y: 7 })).toBe(false)
+  })
+
+  it('counts a shared half cell toward a five-in-a-row', () => {
+    const game = withStones({ black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
+    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 4, y: 5 } })
+    expect(cellAt(next, { x: 4, y: 5 })).toBe('half')
+    expect(next.phase).toBe('black_won')
   })
 
   it('treats null as a pass, placing only the other stone', () => {

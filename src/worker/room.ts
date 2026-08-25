@@ -4,6 +4,7 @@ import {
   FRAME_SECONDS,
   isLegalChoice,
   settleFrame,
+  type GameMode,
   type GameState,
   type Point,
   type Seat,
@@ -35,7 +36,8 @@ export class Room extends DurableObject<Env> {
     const url = new URL(request.url)
     if (request.method === 'POST') {
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
-      await this.ctx.storage.put({ created: true, frameSeconds })
+      const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
+      await this.ctx.storage.put({ created: true, frameSeconds, mode })
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       return new Response(null, { status: 204 })
     }
@@ -133,8 +135,12 @@ export class Room extends DurableObject<Env> {
     return (await this.ctx.storage.get<number>('frameSeconds')) ?? FRAME_SECONDS
   }
 
+  private async mode(): Promise<GameMode> {
+    return (await this.ctx.storage.get<GameMode>('mode')) ?? 'forbidden'
+  }
+
   private async startGame(): Promise<void> {
-    const game = createGame()
+    const game = createGame(await this.mode())
     const frameSeconds = await this.frameSeconds()
     const deadline = Date.now() + frameSeconds * 1000
     await this.ctx.storage.delete(['choices', 'rematch', 'ready'])

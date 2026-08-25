@@ -6,13 +6,17 @@ import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
-import { FRAME_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
+import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
+import type { GameMode } from '@/engine/game'
+
+const MODE_LABELS: Record<GameMode, string> = { forbidden: '禁点', half: '半子' }
 
 const creating = ref(false)
 const matching = ref(false)
 let matched = false
 
 const frameSeconds = useStorage('frame-seconds', FRAME_OPTIONS[0])
+const gameMode = useStorage<GameMode>('game-mode', MODE_OPTIONS[0])
 
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
@@ -21,14 +25,14 @@ const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchSta
 async function create() {
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom(frameSeconds.value)}`)
+    location.assign(`/room/${await createRoom(frameSeconds.value, gameMode.value)}`)
   } catch {
     creating.value = false
   }
 }
 
 const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameSeconds.value)),
+  computed(() => matchWsUrl(frameSeconds.value, gameMode.value)),
   {
     immediate: false,
     onMessage(_, event) {
@@ -85,19 +89,36 @@ function toggleMatch() {
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <div class="flex items-center gap-3 pb-1 text-sm">
-        <span class="text-stone-500">每回合</span>
-        <div class="flex rounded-lg bg-stone-300/60 p-0.5">
-          <button
-            v-for="option in FRAME_OPTIONS"
-            :key="option"
-            class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
-            :class="frameSeconds === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
-            :disabled="matching"
-            @click="frameSeconds = option"
-          >
-            {{ option }}s
-          </button>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-1 text-sm">
+        <div class="flex items-center gap-3">
+          <span class="text-stone-500">每回合</span>
+          <div class="flex rounded-lg bg-stone-300/60 p-0.5">
+            <button
+              v-for="option in FRAME_OPTIONS"
+              :key="option"
+              class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
+              :class="frameSeconds === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+              :disabled="matching"
+              @click="frameSeconds = option"
+            >
+              {{ option }}s
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-stone-500">撞点成</span>
+          <div class="flex rounded-lg bg-stone-300/60 p-0.5">
+            <button
+              v-for="option in MODE_OPTIONS"
+              :key="option"
+              class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
+              :class="gameMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+              :disabled="matching"
+              @click="gameMode = option"
+            >
+              {{ MODE_LABELS[option] }}
+            </button>
+          </div>
         </div>
       </div>
       <AppButton secondary class="w-full" :disabled="creating" @click="toggleMatch">

@@ -1,5 +1,5 @@
-import { FRAME_SECONDS } from '@/engine/game'
-import { FRAME_OPTIONS } from '@/shared/protocol'
+import { FRAME_SECONDS, type GameMode } from '@/engine/game'
+import { FRAME_OPTIONS, MODE_OPTIONS } from '@/shared/protocol'
 import { newRoomCode } from './roomCode'
 
 export { Room } from './room'
@@ -10,19 +10,22 @@ const CANONICAL_HOST = 'gomoku.recode.top'
 async function handle(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
     const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
+    const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
+    const invalidOptions = !FRAME_OPTIONS.includes(frame) || !MODE_OPTIONS.includes(mode)
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
-      if (!FRAME_OPTIONS.includes(frame)) {
-        return new Response('Invalid frame', { status: 400 })
+      if (invalidOptions) {
+        return new Response('Invalid options', { status: 400 })
       }
       const code = newRoomCode()
-      await env.ROOM.get(env.ROOM.idFromName(code)).fetch(`https://room/create?frame=${frame}`, {
-        method: 'POST',
-      })
+      await env.ROOM.get(env.ROOM.idFromName(code)).fetch(
+        `https://room/create?frame=${frame}&mode=${mode}`,
+        { method: 'POST' },
+      )
       return Response.json({ code })
     }
     if (url.pathname === '/api/match/ws') {
-      if (!FRAME_OPTIONS.includes(frame)) {
-        return new Response('Invalid frame', { status: 400 })
+      if (invalidOptions) {
+        return new Response('Invalid options', { status: 400 })
       }
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
     }
