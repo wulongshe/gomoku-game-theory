@@ -12,7 +12,6 @@ import IconLogout from '~/components/icons/IconLogout.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
 import { MODE_LABELS } from '~/constants/branding'
 import {
-  BOARD_SIZE,
   FRAME_SECONDS,
   isLegalChoice,
   type ClearedGroup,
@@ -105,16 +104,6 @@ onMounted(async () => {
   }
 })
 
-function diffNewStones(next: GameState): Point[] {
-  const prev = game.value?.board
-  if (!prev) return []
-  return next.board.flatMap((cell, i) =>
-    (cell === 'black' || cell === 'white') && prev[i] === 'empty'
-      ? [{ x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) }]
-      : [],
-  )
-}
-
 function handleMessage(msg: ServerMessage) {
   switch (msg.type) {
     case 'joined':
@@ -136,7 +125,7 @@ function handleMessage(msg: ServerMessage) {
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
-      lastMoves.value = []
+      lastMoves.value = msg.state.lastMoves
       vanishing.value = []
       rematchAsked.value = false
       rematchInvite.value = false
@@ -147,7 +136,7 @@ function handleMessage(msg: ServerMessage) {
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
     case 'frame_settled':
-      lastMoves.value = diffNewStones(msg.state)
+      lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)

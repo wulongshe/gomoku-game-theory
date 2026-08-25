@@ -26,6 +26,7 @@ export interface GameState {
   frame: number
   mode: GameMode
   cleared: ClearedGroup[]
+  lastMoves: Point[]
 }
 
 export interface FrameChoices {
@@ -40,6 +41,7 @@ export function createGame(mode: GameMode = 'forbidden'): GameState {
     frame: 1,
     mode,
     cleared: [],
+    lastMoves: [],
   }
 }
 
@@ -185,5 +187,11 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
     if (!board.includes('empty')) phase = 'draw'
   }
 
-  return { board, phase, frame: state.frame + 1, mode: state.mode, cleared }
+  const collided = black && white && black.x === white.x && black.y === white.y
+  const lastMoves = (collided ? [black] : [black, white]).filter(
+    (p): p is Point =>
+      p !== null && ['black', 'white', 'half'].includes(board[p.y * BOARD_SIZE + p.x]),
+  )
+
+  return { board, phase, frame: state.frame + 1, mode: state.mode, cleared, lastMoves }
 }
