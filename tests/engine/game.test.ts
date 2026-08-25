@@ -86,13 +86,23 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('black_won')
   })
 
-  it('declares a draw when both complete five in the same frame', () => {
+  it('declares a draw when both complete five in the same frame without a first mover', () => {
     const game = withStones({
       black: [0, 1, 2, 3].map((i) => ({ x: i, y: 0 })),
       white: [0, 1, 2, 3].map((i) => ({ x: i, y: 14 })),
     })
     const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 14 } })
     expect(next.phase).toBe('draw')
+  })
+
+  it('awards the frame to whoever submitted first when both complete five', () => {
+    const game = withStones({
+      black: [0, 1, 2, 3].map((i) => ({ x: i, y: 0 })),
+      white: [0, 1, 2, 3].map((i) => ({ x: i, y: 14 })),
+    })
+    const choices = { black: { x: 4, y: 0 }, white: { x: 4, y: 14 } }
+    expect(settleFrame(game, choices, 'white').phase).toBe('white_won')
+    expect(settleFrame(game, choices, 'black').phase).toBe('black_won')
   })
 
   it('awards no win when the winning point collides', () => {

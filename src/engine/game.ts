@@ -74,7 +74,11 @@ function hasFiveThrough(board: CellState[], seat: Seat, point: Point): boolean {
   return false
 }
 
-export function settleFrame(state: GameState, choices: FrameChoices): GameState {
+export function settleFrame(
+  state: GameState,
+  choices: FrameChoices,
+  firstMover?: Seat,
+): GameState {
   if (state.phase !== 'playing') throw new Error('game is over')
   for (const seat of ['black', 'white'] as const) {
     const point = choices[seat]
@@ -95,8 +99,9 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
   const whiteWon = white !== null && board[white.y * BOARD_SIZE + white.x] === 'white' && hasFiveThrough(board, 'white', white)
 
   let phase: Phase = 'playing'
-  if (blackWon && whiteWon) phase = 'draw'
-  else if (blackWon) phase = 'black_won'
+  if (blackWon && whiteWon) {
+    phase = firstMover === 'white' ? 'white_won' : firstMover === 'black' ? 'black_won' : 'draw'
+  } else if (blackWon) phase = 'black_won'
   else if (whiteWon) phase = 'white_won'
   else if (!board.includes('empty')) phase = 'draw'
 

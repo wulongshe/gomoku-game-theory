@@ -12,6 +12,13 @@ import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
+function firstMover(choices: Choices): Seat | undefined {
+  const black = choices.black?.at
+  const white = choices.white?.at
+  if (black === undefined || white === undefined) return undefined
+  return black <= white ? 'black' : 'white'
+}
+
 interface Attachment {
   seat: Seat
   replaced?: boolean
@@ -19,7 +26,7 @@ interface Attachment {
 
 type Players = Partial<Record<Seat, string>>
 
-type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
+type Choices = Partial<Record<Seat, { point: Point | null; final: boolean; at: number }>>
 
 type SeatFlags = Partial<Record<Seat, boolean>>
 
@@ -192,7 +199,7 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'illegal point' })
     }
 
-    choices[seat] = { point: msg.point, final: msg.final }
+    choices[seat] = { point: msg.point, final: msg.final, at: Date.now() }
     await this.ctx.storage.put('choices', choices)
     if (msg.final) {
       for (const other of this.ctx.getWebSockets()) {
@@ -261,10 +268,14 @@ export class Room extends DurableObject<Env> {
   }
 
   private async settle(game: GameState, choices: Choices): Promise<void> {
-    const next = settleFrame(game, {
-      black: choices.black?.point ?? null,
-      white: choices.white?.point ?? null,
-    })
+    const next = settleFrame(
+      game,
+      {
+        black: choices.black?.point ?? null,
+        white: choices.white?.point ?? null,
+      },
+      firstMover(choices),
+    )
     if (next.phase === 'playing') {
       const deadline = Date.now() + (await this.frameSeconds()) * 1000
       await this.ctx.storage.delete('choices')
