@@ -105,7 +105,7 @@ function toggleMatch() {
             <button
               v-for="option in FRAME_OPTIONS"
               :key="option"
-              class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
+              class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
               :class="frameSeconds === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
               :disabled="matching"
               @click="frameSeconds = option"
@@ -120,7 +120,7 @@ function toggleMatch() {
             <button
               v-for="option in MODE_OPTIONS"
               :key="option"
-              class="cursor-pointer rounded-md px-4 py-1 font-medium transition-colors"
+              class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
               :class="gameMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
               :disabled="matching"
               @click="gameMode = option"
