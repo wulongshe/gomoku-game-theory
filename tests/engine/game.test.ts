@@ -13,6 +13,7 @@ import {
 
 function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
   const game = createGame(mode)
+  game.frame = 2
   for (const seat of ['black', 'white'] as const) {
     for (const { x, y } of stones[seat] ?? []) {
       game.board[y * BOARD_SIZE + x] = seat
@@ -44,6 +45,16 @@ describe('isLegalChoice', () => {
     game.board[0] = 'forbidden'
     expect(isLegalChoice(game, { x: 3, y: 3 })).toBe(false)
     expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(false)
+  })
+
+  it('restricts the first frame to the central 3x3 area', () => {
+    const game = createGame()
+    expect(isLegalChoice(game, { x: 6, y: 6 })).toBe(true)
+    expect(isLegalChoice(game, { x: 8, y: 8 })).toBe(true)
+    expect(isLegalChoice(game, { x: 5, y: 7 })).toBe(false)
+    expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(false)
+    game.frame = 2
+    expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(true)
   })
 })
 
@@ -93,8 +104,8 @@ describe('settleFrame', () => {
   })
 
   it('treats null as a pass, placing only the other stone', () => {
-    const next = settleFrame(createGame(), { black: null, white: { x: 0, y: 0 } })
-    expect(cellAt(next, { x: 0, y: 0 })).toBe('white')
+    const next = settleFrame(createGame(), { black: null, white: { x: 6, y: 6 } })
+    expect(cellAt(next, { x: 6, y: 6 })).toBe('white')
     expect(next.board.filter((cell) => cell !== 'empty')).toHaveLength(1)
   })
 
@@ -124,6 +135,7 @@ describe('settleFrame', () => {
 
   it('clears a line of five forbidden points', () => {
     const game = createGame()
+    game.frame = 2
     for (let x = 0; x < 4; x++) game.board[x] = 'forbidden'
     const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 0 } })
     expect(next.phase).toBe('playing')
@@ -146,6 +158,7 @@ describe('settleFrame', () => {
 
   it('declares a draw when the board fills up without a winning line', () => {
     const game = createGame()
+    game.frame = 2
     const color = (x: number, y: number): Seat => ((2 * x + y) % 5 < 3 ? 'black' : 'white')
     for (let y = 0; y < BOARD_SIZE; y++) {
       for (let x = 0; x < BOARD_SIZE; x++) game.board[y * BOARD_SIZE + x] = color(x, y)

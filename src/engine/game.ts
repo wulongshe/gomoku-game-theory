@@ -36,6 +36,12 @@ export function cellAt(state: GameState, point: Point): CellState {
   return state.board[point.y * BOARD_SIZE + point.x]
 }
 
+const CENTER = (BOARD_SIZE - 1) / 2
+
+export function inOpeningArea(point: Point): boolean {
+  return Math.abs(point.x - CENTER) <= 1 && Math.abs(point.y - CENTER) <= 1
+}
+
 export function isLegalChoice(state: GameState, point: Point): boolean {
   return (
     state.phase === 'playing' &&
@@ -43,7 +49,8 @@ export function isLegalChoice(state: GameState, point: Point): boolean {
     point.x < BOARD_SIZE &&
     point.y >= 0 &&
     point.y < BOARD_SIZE &&
-    cellAt(state, point) === 'empty'
+    cellAt(state, point) === 'empty' &&
+    (state.frame > 1 || inOpeningArea(point))
   )
 }
 

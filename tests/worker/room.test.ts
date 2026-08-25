@@ -73,6 +73,23 @@ async function settledOnBoth(a: Client, b: Client) {
   return settled
 }
 
+const BLACK_WIN_LINE: Point[] = [5, 6, 8, 9].map((x) => ({ x, y: 7 }))
+const WHITE_SIDE_MOVES: Point[] = [0, 1, 2, 3].map((x) => ({ x, y: 0 }))
+
+async function playToBlackWin(a: Client, b: Client) {
+  a.submit(1, { x: 7, y: 7 })
+  b.submit(1, { x: 7, y: 8 })
+  await settledOnBoth(a, b)
+  for (let i = 0; i < 3; i++) {
+    a.submit(i + 2, BLACK_WIN_LINE[i])
+    b.submit(i + 2, WHITE_SIDE_MOVES[i])
+    await settledOnBoth(a, b)
+  }
+  a.submit(5, BLACK_WIN_LINE[3])
+  b.submit(5, WHITE_SIDE_MOVES[3])
+  return settledOnBoth(a, b)
+}
+
 describe('Room', () => {
   it('rejects joining a room that was never created', async () => {
     const res = await SELF.fetch('https://example.com/api/rooms/NOROOM/ws?token=token-a', {
@@ -189,38 +206,40 @@ describe('Room', () => {
 
   it('auto-submits an unconfirmed draft at the frame deadline', async () => {
     const [a, b] = await startGame('ROOM12')
-    a.submit(1, { x: 2, y: 2 }, false)
-    a.submit(1, { x: 5, y: 5 }, false)
+    a.submit(1, { x: 6, y: 6 }, false)
+    a.submit(1, { x: 7, y: 7 }, false)
     a.submit(99, { x: 0, y: 0 }, false)
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
-    b.submit(1, { x: 9, y: 9 })
+    b.submit(1, { x: 8, y: 8 })
     await a.next('opponent_submitted')
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM12')))).toBe(true)
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 5, y: 5 })).toBe('black')
-    expect(cellAt(settled.state, { x: 2, y: 2 })).toBe('empty')
-    expect(cellAt(settled.state, { x: 9, y: 9 })).toBe('white')
+    expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('empty')
+    expect(cellAt(settled.state, { x: 8, y: 8 })).toBe('white')
   })
 
   it('keeps drafts private and does not settle early on drafts', async () => {
     const [a, b] = await startGame('ROOM13')
-    a.submit(1, { x: 2, y: 2 }, false)
-    b.submit(1, { x: 9, y: 9 })
+    a.submit(1, { x: 6, y: 6 }, false)
+    b.submit(1, { x: 8, y: 8 })
     await a.next('opponent_submitted')
-    a.submit(1, { x: 3, y: 3 }, false)
-    a.submit(1, { x: 3, y: 3 })
+    a.submit(1, { x: 7, y: 6 }, false)
+    a.submit(1, { x: 7, y: 6 })
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 3, y: 3 })).toBe('black')
+    expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
   })
 
   it('rejects stale frames, double submits, and illegal points', async () => {
     const [a, b] = await startGame('ROOM06')
     a.submit(2, { x: 0, y: 0 })
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
-    a.submit(1, { x: 0, y: 0 })
-    a.submit(1, { x: 1, y: 0 })
+    a.submit(1, { x: 7, y: 7 })
+    a.submit(1, { x: 6, y: 7 })
     expect(await a.next('error')).toMatchObject({ message: 'already submitted' })
     b.submit(1, { x: 15, y: 0 })
+    expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
+    b.submit(1, { x: 0, y: 0 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
   })
 
@@ -232,14 +251,7 @@ describe('Room', () => {
 
   it('plays to a win, then rematches in the same room', async () => {
     const [a, b] = await startGame('ROOM08')
-    for (let i = 0; i < 4; i++) {
-      a.submit(i + 1, { x: i, y: 0 })
-      b.submit(i + 1, { x: i, y: 7 + (i % 2) })
-      await settledOnBoth(a, b)
-    }
-    a.submit(5, { x: 4, y: 0 })
-    b.submit(5, { x: 4, y: 7 })
-    const settled = await settledOnBoth(a, b)
+    const settled = await playToBlackWin(a, b)
     expect(settled.state.phase).toBe('black_won')
     expect(settled.deadline).toBeNull()
 
@@ -255,14 +267,7 @@ describe('Room', () => {
 
   it('relays a rematch decline and allows re-inviting', async () => {
     const [a, b] = await startGame('ROOM17')
-    for (let i = 0; i < 4; i++) {
-      a.submit(i + 1, { x: i, y: 0 })
-      b.submit(i + 1, { x: i, y: 7 + (i % 2) })
-      await settledOnBoth(a, b)
-    }
-    a.submit(5, { x: 4, y: 0 })
-    b.submit(5, { x: 4, y: 7 })
-    await settledOnBoth(a, b)
+    await playToBlackWin(a, b)
 
     a.rematch()
     await b.next('rematch_requested')
@@ -304,14 +309,7 @@ describe('Room', () => {
 
   it('recycles a finished room after the last player leaves', async () => {
     const [a, b] = await startGame('ROOM15')
-    for (let i = 0; i < 4; i++) {
-      a.submit(i + 1, { x: i, y: 0 })
-      b.submit(i + 1, { x: i, y: 7 + (i % 2) })
-      await settledOnBoth(a, b)
-    }
-    a.submit(5, { x: 4, y: 0 })
-    b.submit(5, { x: 4, y: 7 })
-    const settled = await settledOnBoth(a, b)
+    const settled = await playToBlackWin(a, b)
     expect(settled.state.phase).toBe('black_won')
 
     a.ws.close()
@@ -328,7 +326,7 @@ describe('Room', () => {
 
   it('lets a player reconnect mid-game and restores the frame snapshot', async () => {
     const [a, b] = await startGame('ROOM09')
-    a.submit(1, { x: 3, y: 4 })
+    a.submit(1, { x: 6, y: 7 })
     await b.next('opponent_submitted')
     a.ws.close()
     await b.next('opponent_left')
@@ -339,13 +337,13 @@ describe('Room', () => {
     expect(start).toMatchObject({
       state: { frame: 1 },
       submitted: { black: true, white: false },
-      yourChoice: { x: 3, y: 4 },
+      yourChoice: { x: 6, y: 7 },
     })
     await b.next('opponent_returned')
 
     b.submit(1, { x: 8, y: 8 })
     const settled = await settledOnBoth(a2, b)
-    expect(cellAt(settled.state, { x: 3, y: 4 })).toBe('black')
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(settled.state.frame).toBe(2)
   })
 
@@ -357,9 +355,9 @@ describe('Room', () => {
     await a2.next('start')
     await closed
 
-    a2.submit(1, { x: 0, y: 0 })
+    a2.submit(1, { x: 6, y: 6 })
     await b.next('opponent_submitted')
-    b.submit(1, { x: 1, y: 1 })
+    b.submit(1, { x: 8, y: 8 })
     await settledOnBoth(a2, b)
   })
 

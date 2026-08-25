@@ -39,6 +39,9 @@ function pos(i: number): number {
   return PAD + i * U
 }
 
+const CENTER = (BOARD_SIZE - 1) / 2
+const openingZone = computed(() => props.state.frame === 1 && props.state.phase === 'playing')
+
 const stones = computed(() =>
   ALL_POINTS.filter((p) => {
     const cell = cellAt(props.state, p)
@@ -105,6 +108,21 @@ function isLastMove(p: Point): boolean {
       :cy="pos(star.y)"
       r="4.5"
       fill="var(--color-line)"
+    />
+
+    <rect
+      v-if="openingZone"
+      :x="pos(CENTER - 1) - U / 2"
+      :y="pos(CENTER - 1) - U / 2"
+      :width="U * 3"
+      :height="U * 3"
+      rx="12"
+      fill="#ffffff"
+      fill-opacity="0.22"
+      stroke="var(--color-line)"
+      stroke-width="2"
+      stroke-dasharray="6 6"
+      class="animate-[breathe_1.6s_ease-in-out_infinite]"
     />
 
     <g
