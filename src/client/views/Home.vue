@@ -89,7 +89,7 @@ function toggleMatch() {
       >
         <span
           class="flex size-9 shrink-0 items-center justify-center rounded-full bg-wood/30 text-base leading-none"
-        ><span class="block">{{ rule.icon }}</span></span>
+        ><span class="block -translate-y-px">{{ rule.icon }}</span></span>
         <div>
           <p class="text-sm font-semibold text-stone-800">{{ rule.title }}</p>
           <p class="text-xs text-stone-500">{{ rule.text }}</p>
