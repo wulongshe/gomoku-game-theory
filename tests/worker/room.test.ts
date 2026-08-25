@@ -73,11 +73,11 @@ async function settledOnBoth(a: Client, b: Client) {
   return settled
 }
 
-const BLACK_WIN_LINE: Point[] = [5, 6, 8, 9].map((x) => ({ x, y: 7 }))
+const BLACK_WIN_LINE: Point[] = [4, 5, 7, 8].map((x) => ({ x, y: 7 }))
 const WHITE_SIDE_MOVES: Point[] = [0, 1, 2, 3].map((x) => ({ x, y: 0 }))
 
 async function playToBlackWin(a: Client, b: Client) {
-  a.submit(1, { x: 7, y: 7 })
+  a.submit(1, { x: 6, y: 7 })
   b.submit(1, { x: 7, y: 8 })
   await settledOnBoth(a, b)
   for (let i = 0; i < 3; i++) {
@@ -177,11 +177,11 @@ describe('Room', () => {
 
   it('settles as soon as both submit, hiding the opponent choice until then', async () => {
     const [a, b] = await startGame('ROOM03')
-    a.submit(1, { x: 7, y: 7 })
+    a.submit(1, { x: 6, y: 7 })
     await b.next('opponent_submitted')
     b.submit(1, { x: 8, y: 8 })
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(cellAt(settled.state, { x: 8, y: 8 })).toBe('white')
     expect(settled.state.frame).toBe(2)
     expect(settled.deadline).toBeGreaterThan(Date.now())
@@ -189,32 +189,32 @@ describe('Room', () => {
 
   it('turns a collision into a forbidden point', async () => {
     const [a, b] = await startGame('ROOM04')
-    a.submit(1, { x: 7, y: 7 })
-    b.submit(1, { x: 7, y: 7 })
+    a.submit(1, { x: 6, y: 6 })
+    b.submit(1, { x: 6, y: 6 })
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('forbidden')
+    expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('forbidden')
   })
 
   it('treats a frame timeout without any choice as a pass', async () => {
     const [a, b] = await startGame('ROOM05')
-    a.submit(1, { x: 7, y: 7 })
+    a.submit(1, { x: 6, y: 7 })
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM05')))).toBe(true)
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(settled.state.board.filter((cell) => cell !== 'empty')).toHaveLength(1)
   })
 
   it('auto-submits an unconfirmed draft at the frame deadline', async () => {
     const [a, b] = await startGame('ROOM12')
     a.submit(1, { x: 6, y: 6 }, false)
-    a.submit(1, { x: 7, y: 7 }, false)
+    a.submit(1, { x: 7, y: 6 }, false)
     a.submit(99, { x: 0, y: 0 }, false)
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
     b.submit(1, { x: 8, y: 8 })
     await a.next('opponent_submitted')
     expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM12')))).toBe(true)
     const settled = await settledOnBoth(a, b)
-    expect(cellAt(settled.state, { x: 7, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
     expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('empty')
     expect(cellAt(settled.state, { x: 8, y: 8 })).toBe('white')
   })
@@ -234,12 +234,14 @@ describe('Room', () => {
     const [a, b] = await startGame('ROOM06')
     a.submit(2, { x: 0, y: 0 })
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
-    a.submit(1, { x: 7, y: 7 })
     a.submit(1, { x: 6, y: 7 })
+    a.submit(1, { x: 7, y: 6 })
     expect(await a.next('error')).toMatchObject({ message: 'already submitted' })
     b.submit(1, { x: 15, y: 0 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
     b.submit(1, { x: 0, y: 0 })
+    expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
+    b.submit(1, { x: 7, y: 7 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
   })
 

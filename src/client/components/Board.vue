@@ -40,6 +40,7 @@ function pos(i: number): number {
 }
 
 const CENTER = (BOARD_SIZE - 1) / 2
+const ZONE_PAD = U * 0.7
 const openingZone = computed(() => props.state.frame === 1 && props.state.phase === 'playing')
 
 const stones = computed(() =>
@@ -78,6 +79,25 @@ function isLastMove(p: Point): boolean {
         <stop offset="0%" stop-color="var(--color-wood)" />
         <stop offset="100%" stop-color="var(--color-wood-deep)" />
       </linearGradient>
+      <mask id="opening-mask">
+        <rect :width="SIZE" :height="SIZE" fill="#ffffff" />
+        <rect
+          :x="pos(CENTER - 1) - ZONE_PAD"
+          :y="pos(CENTER - 1) - ZONE_PAD"
+          :width="U * 2 + ZONE_PAD * 2"
+          :height="U * 2 + ZONE_PAD * 2"
+          rx="12"
+          fill="#000000"
+        />
+        <rect
+          :x="pos(CENTER) - U * 0.4"
+          :y="pos(CENTER) - U * 0.4"
+          :width="U * 0.8"
+          :height="U * 0.8"
+          rx="7"
+          fill="#ffffff"
+        />
+      </mask>
     </defs>
 
     <rect :width="SIZE" :height="SIZE" rx="14" fill="url(#wood)" />
@@ -110,20 +130,28 @@ function isLastMove(p: Point): boolean {
       fill="var(--color-line)"
     />
 
-    <rect
-      v-if="openingZone"
-      :x="pos(CENTER - 1) - U / 2"
-      :y="pos(CENTER - 1) - U / 2"
-      :width="U * 3"
-      :height="U * 3"
-      rx="12"
-      fill="#ffffff"
-      fill-opacity="0.22"
-      stroke="var(--color-line)"
-      stroke-width="2"
-      stroke-dasharray="6 6"
-      class="animate-[breathe_1.6s_ease-in-out_infinite]"
-    />
+    <g v-if="openingZone">
+      <rect
+        :width="SIZE"
+        :height="SIZE"
+        rx="14"
+        fill="#1c1917"
+        opacity="0.35"
+        mask="url(#opening-mask)"
+      />
+      <rect
+        :x="pos(CENTER - 1) - ZONE_PAD"
+        :y="pos(CENTER - 1) - ZONE_PAD"
+        :width="U * 2 + ZONE_PAD * 2"
+        :height="U * 2 + ZONE_PAD * 2"
+        rx="12"
+        fill="none"
+        stroke="var(--color-line)"
+        stroke-width="2"
+        stroke-dasharray="6 6"
+        class="animate-[breathe_1.6s_ease-in-out_infinite]"
+      />
+    </g>
 
     <g
       v-for="stone in stones"

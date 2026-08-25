@@ -35,7 +35,7 @@ describe('createGame', () => {
 describe('isLegalChoice', () => {
   it('accepts empty in-bounds points and rejects out-of-bounds ones', () => {
     const game = createGame()
-    expect(isLegalChoice(game, { x: 7, y: 7 })).toBe(true)
+    expect(isLegalChoice(game, { x: 7, y: 6 })).toBe(true)
     expect(isLegalChoice(game, { x: -1, y: 0 })).toBe(false)
     expect(isLegalChoice(game, { x: 0, y: BOARD_SIZE })).toBe(false)
   })
@@ -47,21 +47,23 @@ describe('isLegalChoice', () => {
     expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(false)
   })
 
-  it('restricts the first frame to the central 3x3 area', () => {
+  it('restricts the first frame to the central 3x3 area minus the center', () => {
     const game = createGame()
     expect(isLegalChoice(game, { x: 6, y: 6 })).toBe(true)
     expect(isLegalChoice(game, { x: 8, y: 8 })).toBe(true)
+    expect(isLegalChoice(game, { x: 7, y: 7 })).toBe(false)
     expect(isLegalChoice(game, { x: 5, y: 7 })).toBe(false)
     expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(false)
     game.frame = 2
+    expect(isLegalChoice(game, { x: 7, y: 7 })).toBe(true)
     expect(isLegalChoice(game, { x: 0, y: 0 })).toBe(true)
   })
 })
 
 describe('settleFrame', () => {
   it('places both stones and advances the frame', () => {
-    const next = settleFrame(createGame(), { black: { x: 7, y: 7 }, white: { x: 8, y: 8 } })
-    expect(cellAt(next, { x: 7, y: 7 })).toBe('black')
+    const next = settleFrame(createGame(), { black: { x: 6, y: 7 }, white: { x: 8, y: 8 } })
+    expect(cellAt(next, { x: 6, y: 7 })).toBe('black')
     expect(cellAt(next, { x: 8, y: 8 })).toBe('white')
     expect(next.phase).toBe('playing')
     expect(next.frame).toBe(2)
@@ -69,23 +71,23 @@ describe('settleFrame', () => {
 
   it('does not mutate the input state', () => {
     const game = createGame()
-    settleFrame(game, { black: { x: 7, y: 7 }, white: { x: 8, y: 8 } })
-    expect(cellAt(game, { x: 7, y: 7 })).toBe('empty')
+    settleFrame(game, { black: { x: 6, y: 7 }, white: { x: 8, y: 8 } })
+    expect(cellAt(game, { x: 6, y: 7 })).toBe('empty')
     expect(game.frame).toBe(1)
   })
 
   it('turns a collision point into a forbidden cell with no stones', () => {
-    const next = settleFrame(createGame(), { black: { x: 7, y: 7 }, white: { x: 7, y: 7 } })
-    expect(cellAt(next, { x: 7, y: 7 })).toBe('forbidden')
+    const next = settleFrame(createGame(), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
+    expect(cellAt(next, { x: 6, y: 6 })).toBe('forbidden')
     expect(next.phase).toBe('playing')
-    expect(isLegalChoice(next, { x: 7, y: 7 })).toBe(false)
+    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
   })
 
   it('shares a collision point as a half cell in half mode', () => {
-    const next = settleFrame(createGame('half'), { black: { x: 7, y: 7 }, white: { x: 7, y: 7 } })
-    expect(cellAt(next, { x: 7, y: 7 })).toBe('half')
+    const next = settleFrame(createGame('half'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
+    expect(cellAt(next, { x: 6, y: 6 })).toBe('half')
     expect(next.phase).toBe('playing')
-    expect(isLegalChoice(next, { x: 7, y: 7 })).toBe(false)
+    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
   })
 
   it('counts a half cell as only half a stone', () => {
