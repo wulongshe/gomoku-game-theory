@@ -2,10 +2,12 @@
 import { computed, ref } from 'vue'
 import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import IconCross from '~/components/icons/IconCross.vue'
+import IconHelp from '~/components/icons/IconHelp.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
-import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { FULL_RULES, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
 
@@ -13,6 +15,7 @@ const MODE_LABELS: Record<GameMode, string> = { forbidden: '禁点', half: '半�
 
 const creating = ref(false)
 const matching = ref(false)
+const showRules = ref(false)
 let matched = false
 
 const frameSeconds = useStorage('frame-seconds', FRAME_OPTIONS[0])
@@ -63,8 +66,16 @@ function toggleMatch() {
 
 <template>
   <main
-    class="flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6"
+    class="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6"
   >
+    <button
+      class="absolute right-5 top-5 cursor-pointer rounded-full p-2 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600"
+      aria-label="游戏规则"
+      @click="showRules = true"
+    >
+      <IconHelp class="size-6" />
+    </button>
+
     <div class="flex flex-col items-center gap-3">
       <IconStones class="h-8 drop-shadow" />
       <h1 class="text-3xl font-bold tracking-wide text-stone-800">{{ TITLE }}</h1>
@@ -134,6 +145,36 @@ function toggleMatch() {
         </span>
       </AppButton>
       <p class="text-xs text-stone-400">免下载 · 免注册，10 秒开局</p>
+    </div>
+
+    <div
+      v-if="showRules"
+      class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
+      @click.self="showRules = false"
+    >
+      <div
+        class="flex max-h-[85dvh] w-full max-w-md flex-col gap-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-lg font-semibold text-stone-800">游戏规则</p>
+          <button
+            class="cursor-pointer p-1 text-stone-400 hover:text-stone-600 active:text-stone-600"
+            aria-label="关闭"
+            @click="showRules = false"
+          >
+            <IconCross class="size-4" />
+          </button>
+        </div>
+        <div v-for="section in FULL_RULES" :key="section.title" class="flex flex-col gap-2">
+          <p class="text-sm font-semibold text-stone-800">{{ section.title }}</p>
+          <ul class="flex flex-col gap-1.5 text-sm text-stone-500">
+            <li v-for="item in section.items" :key="item" class="flex gap-2">
+              <span class="text-stone-300">•</span>
+              <span>{{ item }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   </main>
 </template>
