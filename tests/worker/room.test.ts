@@ -230,19 +230,30 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
   })
 
-  it('rejects stale frames, double submits, and illegal points', async () => {
+  it('rejects stale frames and illegal points', async () => {
     const [a, b] = await startGame('ROOM06')
     a.submit(2, { x: 0, y: 0 })
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
-    a.submit(1, { x: 6, y: 7 })
-    a.submit(1, { x: 7, y: 6 })
-    expect(await a.next('error')).toMatchObject({ message: 'already submitted' })
     b.submit(1, { x: 15, y: 0 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
     b.submit(1, { x: 0, y: 0 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
     b.submit(1, { x: 7, y: 7 })
     expect(await b.next('error')).toMatchObject({ message: 'illegal point' })
+  })
+
+  it('lets a player revise a submission until the opponent locks in', async () => {
+    const [a, b] = await startGame('ROOM22')
+    a.submit(1, { x: 6, y: 7 })
+    expect(await b.next('opponent_submitted')).toMatchObject({ submitted: true })
+    a.submit(1, { x: 7, y: 6 }, false)
+    expect(await b.next('opponent_submitted')).toMatchObject({ submitted: false })
+    a.submit(1, { x: 7, y: 6 })
+    expect(await b.next('opponent_submitted')).toMatchObject({ submitted: true })
+    b.submit(1, { x: 8, y: 8 })
+    const settled = await settledOnBoth(a, b)
+    expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('empty')
   })
 
   it('notifies the opponent when a player leaves', async () => {

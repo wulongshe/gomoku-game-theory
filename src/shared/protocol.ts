@@ -27,7 +27,7 @@ export type ServerMessage =
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
     }
-  | { type: 'opponent_submitted' }
+  | { type: 'opponent_submitted'; submitted: boolean }
   | { type: 'frame_settled'; state: GameState; deadline: number | null }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }

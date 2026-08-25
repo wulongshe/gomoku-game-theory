@@ -168,7 +168,7 @@ function handleMessage(msg: ServerMessage) {
       if (msg.state.phase !== 'playing') stage.value = 'over'
       break
     case 'opponent_submitted':
-      oppSubmitted.value = true
+      oppSubmitted.value = msg.submitted
       break
     case 'opponent_left':
       oppLeft.value = true
@@ -248,7 +248,8 @@ function sendChoice(point: Point, final: boolean) {
 }
 
 function select(point: Point) {
-  if (stage.value !== 'playing' || submitted.value || !game.value) return
+  if (stage.value !== 'playing' || !game.value) return
+  if (submitted.value && oppSubmitted.value) return
   if (!isLegalChoice(game.value, point)) return
   selected.value = point
   if (autoSubmit.value) {
@@ -256,6 +257,7 @@ function select(point: Point) {
     submitted.value = true
   } else {
     sendChoice(point, false)
+    submitted.value = false
   }
 }
 
@@ -496,7 +498,7 @@ function exitRoom() {
             :selected="selected"
             :last-moves="lastMoves"
             :vanishing="vanishing"
-            :interactive="stage === 'playing' && !submitted"
+            :interactive="stage === 'playing' && (!submitted || !oppSubmitted)"
             @select="select"
           />
           <div
@@ -546,6 +548,7 @@ function exitRoom() {
             <span>
               <template v-if="errorNotice">{{ errorNotice }}</template>
               <template v-else-if="selected && !submitted">倒计时结束将自动提交已选落点</template>
+              <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
             </span>
           </div>
         </template>

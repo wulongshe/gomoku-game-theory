@@ -191,22 +191,20 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'stale frame' })
     }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
-    if (choices[seat]?.final) {
-      return this.send(ws, { type: 'error', message: 'already submitted' })
-    }
     if (msg.point && !isLegalChoice(game, msg.point)) {
       return this.send(ws, { type: 'error', message: 'illegal point' })
     }
 
+    const wasFinal = !!choices[seat]?.final
     choices[seat] = { point: msg.point, final: msg.final }
     await this.ctx.storage.put('choices', choices)
-    if (msg.final) {
+    if (msg.final !== wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) this.send(other, { type: 'opponent_submitted' })
+        if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: msg.final })
       }
-      if (choices.black?.final && choices.white?.final) {
-        await this.settle(game, choices)
-      }
+    }
+    if (msg.final && choices.black?.final && choices.white?.final) {
+      await this.settle(game, choices)
     }
   }
 
