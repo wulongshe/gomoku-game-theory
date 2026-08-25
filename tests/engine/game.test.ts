@@ -109,23 +109,25 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('black_won')
   })
 
-  it('declares a draw when both complete five in the same frame without a first mover', () => {
+  it('annihilates both lines when the two players complete five in the same frame', () => {
     const game = withStones({
       black: [0, 1, 2, 3].map((i) => ({ x: i, y: 0 })),
       white: [0, 1, 2, 3].map((i) => ({ x: i, y: 14 })),
     })
     const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 14 } })
-    expect(next.phase).toBe('draw')
+    expect(next.phase).toBe('playing')
+    for (let x = 0; x <= 4; x++) {
+      expect(cellAt(next, { x, y: 0 })).toBe('empty')
+      expect(cellAt(next, { x, y: 14 })).toBe('empty')
+    }
   })
 
-  it('awards the frame to whoever submitted first when both complete five', () => {
-    const game = withStones({
-      black: [0, 1, 2, 3].map((i) => ({ x: i, y: 0 })),
-      white: [0, 1, 2, 3].map((i) => ({ x: i, y: 14 })),
-    })
-    const choices = { black: { x: 4, y: 0 }, white: { x: 4, y: 14 } }
-    expect(settleFrame(game, choices, 'white').phase).toBe('white_won')
-    expect(settleFrame(game, choices, 'black').phase).toBe('black_won')
+  it('clears a line of five forbidden points', () => {
+    const game = createGame()
+    for (let x = 0; x < 4; x++) game.board[x] = 'forbidden'
+    const next = settleFrame(game, { black: { x: 4, y: 0 }, white: { x: 4, y: 0 } })
+    expect(next.phase).toBe('playing')
+    for (let x = 0; x <= 4; x++) expect(cellAt(next, { x, y: 0 })).toBe('empty')
   })
 
   it('awards no win when the winning point collides', () => {
@@ -142,12 +144,15 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('playing')
   })
 
-  it('declares a draw when the board is exhausted without a winner', () => {
+  it('declares a draw when the board fills up without a winning line', () => {
     const game = createGame()
-    game.board.fill('forbidden')
-    game.board[0] = 'empty'
-    game.board[1] = 'empty'
-    const next = settleFrame(game, { black: { x: 0, y: 0 }, white: { x: 1, y: 0 } })
+    const color = (x: number, y: number): Seat => ((2 * x + y) % 5 < 3 ? 'black' : 'white')
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      for (let x = 0; x < BOARD_SIZE; x++) game.board[y * BOARD_SIZE + x] = color(x, y)
+    }
+    game.board[0 * BOARD_SIZE + 0] = 'empty'
+    game.board[0 * BOARD_SIZE + 2] = 'empty'
+    const next = settleFrame(game, { black: { x: 0, y: 0 }, white: { x: 2, y: 0 } })
     expect(next.phase).toBe('draw')
   })
 

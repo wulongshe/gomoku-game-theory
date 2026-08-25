@@ -12,6 +12,7 @@ import {
   BOARD_SIZE,
   FRAME_SECONDS,
   isLegalChoice,
+  type CellState,
   type GameState,
   type Point,
   type Seat,
@@ -39,6 +40,7 @@ const overNotice = ref('')
 const overlayDismissed = ref(false)
 const errorNotice = ref('')
 const lastMoves = ref<Point[]>([])
+const vanishing = ref<{ x: number; y: number; cell: CellState }[]>([])
 const confirmingExit = ref(false)
 const roomClosed = ref(false)
 const notFound = ref(false)
@@ -109,6 +111,16 @@ function diffNewStones(next: GameState): Point[] {
   )
 }
 
+function diffVanished(next: GameState): { x: number; y: number; cell: CellState }[] {
+  const prev = game.value?.board
+  if (!prev) return []
+  return next.board.flatMap((cell, i) =>
+    cell === 'empty' && prev[i] !== 'empty'
+      ? [{ x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE), cell: prev[i] }]
+      : [],
+  )
+}
+
 function handleMessage(msg: ServerMessage) {
   switch (msg.type) {
     case 'joined':
@@ -131,6 +143,7 @@ function handleMessage(msg: ServerMessage) {
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
       lastMoves.value = []
+      vanishing.value = []
       rematchAsked.value = false
       rematchInvite.value = false
       inviteDeadline.value = null
@@ -141,6 +154,7 @@ function handleMessage(msg: ServerMessage) {
       break
     case 'frame_settled':
       lastMoves.value = diffNewStones(msg.state)
+      vanishing.value = diffVanished(msg.state)
       game.value = msg.state
       deadline.value = msg.deadline
       selected.value = null
@@ -468,6 +482,7 @@ function exitRoom() {
             :seat="seat"
             :selected="selected"
             :last-moves="lastMoves"
+            :vanishing="vanishing"
             :interactive="stage === 'playing' && !submitted"
             @select="select"
           />

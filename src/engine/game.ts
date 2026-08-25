@@ -62,11 +62,12 @@ function cellValue(cell: CellState, seat: Seat): number {
   return 0
 }
 
-function hasWinningRun(board: CellState[], seat: Seat, point: Point): boolean {
-  const own = cellValue(board[point.y * BOARD_SIZE + point.x], seat)
-  if (own === 0) return false
+function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
+  const start = point.y * BOARD_SIZE + point.x
+  if (cellValue(board[start], seat) === 0) return []
   for (const [dx, dy] of DIRECTIONS) {
-    let score = own
+    const line = [start]
+    let score = cellValue(board[start], seat)
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
       let y = point.y + dy * sign
@@ -74,20 +75,47 @@ function hasWinningRun(board: CellState[], seat: Seat, point: Point): boolean {
         const value = cellValue(board[y * BOARD_SIZE + x], seat)
         if (value === 0) break
         score += value
+        line.push(y * BOARD_SIZE + x)
         x += dx * sign
         y += dy * sign
       }
     }
-    if (score >= WIN_SCORE) return true
+    if (score >= WIN_SCORE) return line
   }
-  return false
+  return []
 }
 
-export function settleFrame(
-  state: GameState,
-  choices: FrameChoices,
-  firstMover?: Seat,
-): GameState {
+function forbiddenRuns(board: CellState[]): number[] {
+  const clear: number[] = []
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y * BOARD_SIZE + x] !== 'forbidden') continue
+      for (const [dx, dy] of DIRECTIONS) {
+        const px = x - dx
+        const py = y - dy
+        const startsHere =
+          px < 0 ||
+          px >= BOARD_SIZE ||
+          py < 0 ||
+          py >= BOARD_SIZE ||
+          board[py * BOARD_SIZE + px] !== 'forbidden'
+        if (!startsHere) continue
+        const line: number[] = []
+        let cx = x
+        let cy = y
+        while (cx >= 0 && cx < BOARD_SIZE && cy >= 0 && cy < BOARD_SIZE && board[cy * BOARD_SIZE + cx] === 'forbidden') {
+          line.push(cy * BOARD_SIZE + cx)
+          cx += dx
+          cy += dy
+        }
+        if (line.length >= WIN_SCORE) clear.push(...line)
+      }
+    }
+  }
+  return clear
+}
+
+export function settleFrame(state: GameState, choices: FrameChoices): GameState {
   if (state.phase !== 'playing') throw new Error('game is over')
   for (const seat of ['black', 'white'] as const) {
     const point = choices[seat]
@@ -104,15 +132,19 @@ export function settleFrame(
     if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
   }
 
-  const blackWon = black !== null && hasWinningRun(board, 'black', black)
-  const whiteWon = white !== null && hasWinningRun(board, 'white', white)
+  const blackRun = black ? winningRun(board, 'black', black) : []
+  const whiteRun = white ? winningRun(board, 'white', white) : []
 
   let phase: Phase = 'playing'
-  if (blackWon && whiteWon) {
-    phase = firstMover === 'white' ? 'white_won' : firstMover === 'black' ? 'black_won' : 'draw'
-  } else if (blackWon) phase = 'black_won'
-  else if (whiteWon) phase = 'white_won'
-  else if (!board.includes('empty')) phase = 'draw'
+  if (blackRun.length && whiteRun.length) {
+    for (const i of [...blackRun, ...whiteRun]) board[i] = 'empty'
+  } else if (blackRun.length) phase = 'black_won'
+  else if (whiteRun.length) phase = 'white_won'
+
+  if (phase === 'playing') {
+    for (const i of forbiddenRuns(board)) board[i] = 'empty'
+    if (!board.includes('empty')) phase = 'draw'
+  }
 
   return { board, phase, frame: state.frame + 1, mode: state.mode }
 }

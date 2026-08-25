@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZE, cellAt, type GameState, type Point, type Seat } from '@/engine/game'
+import { BOARD_SIZE, cellAt, type CellState, type GameState, type Point, type Seat } from '@/engine/game'
 
 const props = defineProps<{
   state: GameState
   seat: Seat
   selected: Point | null
   lastMoves: Point[]
+  vanishing: { x: number; y: number; cell: CellState }[]
   interactive: boolean
 }>()
 
@@ -151,6 +152,34 @@ function isLastMove(p: Point): boolean {
     >
       <line :x1="pos(p.x) - 9" :y1="pos(p.y) - 9" :x2="pos(p.x) + 9" :y2="pos(p.y) + 9" />
       <line :x1="pos(p.x) - 9" :y1="pos(p.y) + 9" :x2="pos(p.x) + 9" :y2="pos(p.y) - 9" />
+    </g>
+
+    <g
+      v-for="v in vanishing"
+      :key="`v${v.x},${v.y}`"
+      :transform="`translate(${pos(v.x)}, ${pos(v.y)})`"
+      class="origin-center animate-[vanish_0.5s_ease-out_forwards] [transform-box:fill-box]"
+    >
+      <template v-if="v.cell === 'black' || v.cell === 'white'">
+        <circle
+          :r="STONE_R"
+          :fill="`url(#stone-${v.cell})`"
+          :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
+          stroke-width="1"
+        />
+      </template>
+      <template v-else-if="v.cell === 'half'">
+        <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
+        <path :d="TAIJI_PATH" fill="url(#stone-black)" />
+        <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
+        <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
+      </template>
+      <template v-else-if="v.cell === 'forbidden'">
+        <g stroke="#ef4444" stroke-width="4" stroke-linecap="round">
+          <line x1="-9" y1="-9" x2="9" y2="9" />
+          <line x1="-9" y1="9" x2="9" y2="-9" />
+        </g>
+      </template>
     </g>
 
     <g v-if="selected">
