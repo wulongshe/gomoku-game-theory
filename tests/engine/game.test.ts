@@ -77,10 +77,18 @@ describe('settleFrame', () => {
     expect(isLegalChoice(next, { x: 7, y: 7 })).toBe(false)
   })
 
-  it('counts a shared half cell toward a five-in-a-row', () => {
-    const game = withStones({ black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 4, y: 5 } })
-    expect(cellAt(next, { x: 4, y: 5 })).toBe('half')
+  it('counts a half cell as only half a stone', () => {
+    const game = withStones({ black: [1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
+    game.board[5 * BOARD_SIZE + 0] = 'half'
+    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 6, y: 5 } })
+    expect(next.phase).toBe('playing')
+  })
+
+  it('wins once a run reaches five including half cells', () => {
+    const game = withStones({ black: [1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
+    game.board[5 * BOARD_SIZE + 0] = 'half'
+    game.board[5 * BOARD_SIZE + 5] = 'half'
+    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 8, y: 8 } })
     expect(next.phase).toBe('black_won')
   })
 

@@ -54,29 +54,31 @@ const DIRECTIONS = [
   [1, -1],
 ] as const
 
-function countsFor(cell: CellState, seat: Seat): boolean {
-  return cell === seat || cell === 'half'
+const WIN_SCORE = 5
+
+function cellValue(cell: CellState, seat: Seat): number {
+  if (cell === seat) return 1
+  if (cell === 'half') return 0.5
+  return 0
 }
 
-function hasFiveThrough(board: CellState[], seat: Seat, point: Point): boolean {
+function hasWinningRun(board: CellState[], seat: Seat, point: Point): boolean {
+  const own = cellValue(board[point.y * BOARD_SIZE + point.x], seat)
+  if (own === 0) return false
   for (const [dx, dy] of DIRECTIONS) {
-    let count = 1
+    let score = own
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
       let y = point.y + dy * sign
-      while (
-        x >= 0 &&
-        x < BOARD_SIZE &&
-        y >= 0 &&
-        y < BOARD_SIZE &&
-        countsFor(board[y * BOARD_SIZE + x], seat)
-      ) {
-        count++
+      while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+        const value = cellValue(board[y * BOARD_SIZE + x], seat)
+        if (value === 0) break
+        score += value
         x += dx * sign
         y += dy * sign
       }
     }
-    if (count >= 5) return true
+    if (score >= WIN_SCORE) return true
   }
   return false
 }
@@ -102,10 +104,8 @@ export function settleFrame(
     if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
   }
 
-  const blackWon =
-    black !== null && countsFor(board[black.y * BOARD_SIZE + black.x], 'black') && hasFiveThrough(board, 'black', black)
-  const whiteWon =
-    white !== null && countsFor(board[white.y * BOARD_SIZE + white.x], 'white') && hasFiveThrough(board, 'white', white)
+  const blackWon = black !== null && hasWinningRun(board, 'black', black)
+  const whiteWon = white !== null && hasWinningRun(board, 'white', white)
 
   let phase: Phase = 'playing'
   if (blackWon && whiteWon) {
