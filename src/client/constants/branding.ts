@@ -1,6 +1,10 @@
+import type { GameMode } from '@/engine/game'
+
 export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
+
+export const MODE_LABELS: Record<GameMode, string> = { forbidden: '禁点', half: '半子' }
 
 export const RULES = [
   {

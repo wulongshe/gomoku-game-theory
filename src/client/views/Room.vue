@@ -4,10 +4,13 @@ import { useClipboard, useStorage, useTimestamp, useWebSocket } from '@vueuse/co
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import Board from '~/components/Board.vue'
+import RulesDialog from '~/components/RulesDialog.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import IconCross from '~/components/icons/IconCross.vue'
+import IconHelp from '~/components/icons/IconHelp.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
+import { MODE_LABELS } from '~/constants/branding'
 import {
   BOARD_SIZE,
   FRAME_SECONDS,
@@ -47,6 +50,7 @@ const notFound = ref(false)
 const roomFull = ref(false)
 const myReady = ref(false)
 const oppReady = ref(false)
+const showRules = ref(false)
 const frameSeconds = ref(FRAME_SECONDS)
 const autoSubmit = useStorage('auto-submit', false)
 
@@ -211,6 +215,8 @@ const oppStatus = computed(() => {
   if (oppSubmitted.value) return { text: '对方已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700' }
   return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500' }
 })
+
+const modeLabel = computed(() => (game.value ? MODE_LABELS[game.value.mode] : null))
 
 const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执白'))
 const oppSeatLabel = computed(() => (seat.value === 'black' ? '对方执白' : '对方执黑'))
@@ -425,8 +431,8 @@ function exitRoom() {
 
     <template v-else-if="stage === 'playing' || stage === 'over'">
       <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
-        <div class="flex items-center justify-between text-sm">
-          <span class="flex items-center gap-1.5 font-medium text-stone-700">
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
+          <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700">
             <span
               class="inline-block size-3.5 rounded-full"
               :class="seat === 'black' ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
@@ -443,16 +449,23 @@ function exitRoom() {
               <IconLogout class="size-3.5" />
             </button>
           </span>
-          <span class="font-medium text-stone-700">第 {{ game?.frame }} 回合</span>
+          <button
+            class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700"
+            @click="showRules = true"
+          >
+            <template v-if="modeLabel">{{ modeLabel }}模式</template>
+            <IconHelp class="size-4 translate-y-px" />
+          </button>
         </div>
 
-        <div class="flex items-center justify-between text-sm">
-          <span class="flex items-center gap-1.5" :class="oppStatus.cls">
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
+          <span class="flex items-center gap-1.5 justify-self-start" :class="oppStatus.cls">
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
+          <span class="font-medium text-stone-700">第 {{ game?.frame }} 回合</span>
           <span
-            class="text-base font-semibold tabular-nums"
+            class="justify-self-end text-base font-semibold tabular-nums"
             :class="{
               'text-stone-600': urgency === 'calm',
               'text-amber-600': urgency === 'warning',
@@ -637,5 +650,7 @@ function exitRoom() {
         </div>
       </div>
     </div>
+
+    <RulesDialog v-if="showRules" @close="showRules = false" />
   </main>
 </template>
