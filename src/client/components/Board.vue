@@ -21,6 +21,7 @@ const STONE_R = U * 0.46
 const R = STONE_R
 const TAIJI_PATH = `M0,${-R} A${R},${R} 0 0 1 0,${R} A${R / 2},${R / 2} 0 0 1 0,0 A${R / 2},${R / 2} 0 0 0 0,${-R} Z`
 const TAIJI_EYE = R / 5
+const FORBID_R = STONE_R
 
 const STARS: Point[] = [
   { x: 3, y: 3 },
@@ -191,13 +192,14 @@ function isLastMove(p: Point): boolean {
     <g
       v-for="p in forbidden"
       :key="`f${p.x},${p.y}`"
+      :transform="`translate(${pos(p.x)}, ${pos(p.y)})`"
       stroke="#ef4444"
-      stroke-width="4"
       stroke-linecap="round"
       class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
     >
-      <line :x1="pos(p.x) - 9" :y1="pos(p.y) - 9" :x2="pos(p.x) + 9" :y2="pos(p.y) + 9" />
-      <line :x1="pos(p.x) - 9" :y1="pos(p.y) + 9" :x2="pos(p.x) + 9" :y2="pos(p.y) - 9" />
+      <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+      <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
+      <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
     </g>
 
     <g
@@ -221,9 +223,10 @@ function isLastMove(p: Point): boolean {
         <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
       </template>
       <template v-else-if="v.cell === 'forbidden'">
-        <g stroke="#ef4444" stroke-width="4" stroke-linecap="round">
-          <line x1="-9" y1="-9" x2="9" y2="9" />
-          <line x1="-9" y1="9" x2="9" y2="-9" />
+        <g stroke="#ef4444" stroke-linecap="round">
+          <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+          <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
+          <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
         </g>
       </template>
     </g>
