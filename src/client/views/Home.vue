@@ -4,7 +4,9 @@ import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
 import IconCheck from '~/components/icons/IconCheck.vue'
+import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
+import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
@@ -81,6 +83,27 @@ function toggleMatch() {
   <main
     class="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6"
   >
+    <div class="absolute left-5 top-5 flex items-center gap-1">
+      <a
+        href="https://www.xiaohongshu.com/user/profile/610795550000000001005301"
+        target="_blank"
+        rel="noopener"
+        aria-label="小红书"
+        class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
+      >
+        <IconXiaohongshu class="h-5 w-auto" />
+      </a>
+      <a
+        href="https://github.com/wulongshe/gomoku-game-theory"
+        target="_blank"
+        rel="noopener"
+        aria-label="GitHub"
+        class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
+      >
+        <IconGithub class="size-5" />
+      </a>
+    </div>
+
     <button
       class="absolute right-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600"
       @click="showRules = true"
