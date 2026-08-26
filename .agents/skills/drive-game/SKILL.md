@@ -44,15 +44,21 @@ Emoji do not render (boxes) unless a color-emoji font is installed:
 
 ## Dev server
 
+The user often runs their own dev server on the default port (5173) — never
+kill or reuse it. Start a dedicated instance on its own port and only ever
+kill that port:
+
 ```bash
-(pnpm dev > <scratchpad>/dev.log 2>&1 & echo $! > <scratchpad>/dev.pid)
-timeout 30 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
-# ... drive ...
-kill $(cat <scratchpad>/dev.pid)
+(pnpm dev --port 5199 --strictPort > <scratchpad>/dev.log 2>&1 &)
+timeout 30 bash -c 'until curl -sf http://localhost:5199 >/dev/null; do sleep 1; done'
+# ... drive against http://localhost:5199 ...
+fuser -k 5199/tcp
 ```
 
-Always kill the server when done; a leftover instance makes the next launch
-silently reuse stale code.
+`--strictPort` fails loudly instead of drifting to another port (which would
+leave the browser silently hitting a different, possibly stale instance).
+Kill by port, not by a saved pid — the pnpm wrapper pid leaves the vite
+child alive. Always kill your own instance when done.
 
 ## Two players in one browser
 

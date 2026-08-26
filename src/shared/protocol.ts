@@ -17,7 +17,7 @@ export type ClientMessage =
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
-  | { type: 'joined'; seat: Seat }
+  | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | {
       type: 'start'

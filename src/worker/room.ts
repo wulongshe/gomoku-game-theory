@@ -77,7 +77,12 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
     pair[1].serializeAttachment({ seat } satisfies Attachment)
-    this.send(pair[1], { type: 'joined', seat })
+    this.send(pair[1], {
+      type: 'joined',
+      seat,
+      frameSeconds: await this.frameSeconds(),
+      mode: await this.mode(),
+    })
 
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {

@@ -2,15 +2,16 @@
 import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
-import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import type { GameMode } from '@/engine/game'
 
-const props = defineProps<{ url: string; code: string }>()
+const props = defineProps<{ url: string; code: string; frameSeconds: number; mode: GameMode }>()
 
 const W = 640
-const H = 920
+const H = 950
 const QR_SIZE = 210
 const QR_X = (W - QR_SIZE) / 2
-const QR_Y = 580
+const QR_Y = 610
 
 const qr = computed(() => encode(props.url, { border: 0 }))
 const qrScale = computed(() => QR_SIZE / qr.value.size)
@@ -116,18 +117,21 @@ defineExpose({ share })
       <text x="150" :y="341 + i * 88" font-size="16" fill="#78716c">{{ rule.text }}</text>
     </g>
 
-    <rect x="170" y="556" width="300" height="316" rx="24" fill="#ffffff" fill-opacity="0.8" />
+    <rect x="170" y="556" width="300" height="344" rx="24" fill="#ffffff" fill-opacity="0.8" />
+    <text x="320" y="592" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
+      房间 {{ code }}
+    </text>
     <g :transform="`translate(${QR_X} ${QR_Y}) scale(${qrScale})`">
       <path :d="qrPath" fill="#292524" />
     </g>
-    <text x="320" y="822" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
+    <text x="320" y="848" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
       扫码进房，来一局
     </text>
-    <text x="320" y="852" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
-      房间 {{ code }}
+    <text x="320" y="876" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
+      {{ frameSeconds }}s · {{ MODE_LABELS[mode] }}模式
     </text>
 
-    <text x="320" y="902" text-anchor="middle" font-size="16" fill="#a8a29e">
+    <text x="320" y="932" text-anchor="middle" font-size="16" fill="#a8a29e">
       免下载 · 免注册，10 秒开局
     </text>
   </svg>

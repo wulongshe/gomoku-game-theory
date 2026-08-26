@@ -15,6 +15,7 @@ import {
   FRAME_SECONDS,
   isLegalChoice,
   type ClearedGroup,
+  type GameMode,
   type GameState,
   type Point,
   type Seat,
@@ -51,6 +52,7 @@ const myReady = ref(false)
 const oppReady = ref(false)
 const showRules = ref(false)
 const frameSeconds = ref(FRAME_SECONDS)
+const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
@@ -108,6 +110,8 @@ function handleMessage(msg: ServerMessage) {
   switch (msg.type) {
     case 'joined':
       seat.value = msg.seat
+      frameSeconds.value = msg.frameSeconds
+      mode.value = msg.mode
       stage.value = 'waiting'
       break
     case 'lobby': {
@@ -201,7 +205,7 @@ const oppStatus = computed(() => {
   return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500' }
 })
 
-const modeLabel = computed(() => (game.value ? MODE_LABELS[game.value.mode] : null))
+const modeLabel = computed(() => MODE_LABELS[mode.value])
 
 const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执白'))
 const oppSeatLabel = computed(() => (seat.value === 'black' ? '对方执白' : '对方执黑'))
@@ -355,6 +359,8 @@ function exitRoom() {
             ref="posterEl"
             :url="roomUrl"
             :code="props.code"
+            :frame-seconds="frameSeconds"
+            :mode="mode"
             class="h-auto w-64 rounded-xl shadow-md"
           />
           <p class="text-sm text-stone-500">对方扫码或打开链接即可开始</p>
