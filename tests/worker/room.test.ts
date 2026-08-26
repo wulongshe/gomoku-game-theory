@@ -12,7 +12,7 @@ interface Client {
 }
 
 async function createRoom(code: string, frame?: number): Promise<void> {
-  const url = frame ? `https://room/create?frame=${frame}` : 'https://room/create'
+  const url = frame === undefined ? 'https://room/create' : `https://room/create?frame=${frame}`
   await env.ROOM.get(env.ROOM.idFromName(code)).fetch(url, { method: 'POST' })
 }
 
@@ -254,6 +254,31 @@ describe('Room', () => {
     const settled = await settledOnBoth(a, b)
     expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
     expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('empty')
+  })
+
+  it('starts an untimed game with no deadline and never auto-settles', async () => {
+    await createRoom('ROOM25', 0)
+    const a = await connect('ROOM25', 'token-a')
+    const b = await connect('ROOM25', 'token-b')
+    await a.next('joined')
+    expect(await b.next('joined')).toMatchObject({ frameSeconds: 0 })
+    a.ready()
+    b.ready()
+    const start = await a.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    expect(start.frameSeconds).toBe(0)
+    expect(start.deadline).toBeNull()
+    await b.next('start')
+
+    a.submit(1, { x: 6, y: 7 })
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM25'))
+    await runDurableObjectAlarm(stub)
+    b.submit(1, { x: 7, y: 8 })
+    const settled = await a.next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(settled.deadline).toBeNull()
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 7, y: 8 })).toBe('white')
   })
 
   it('notifies the opponent when a player leaves', async () => {

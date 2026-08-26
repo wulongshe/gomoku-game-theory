@@ -10,7 +10,7 @@ import IconCross from '~/components/icons/IconCross.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
-import { MODE_LABELS } from '~/constants/branding'
+import { frameLabel, MODE_LABELS } from '~/constants/branding'
 import {
   FRAME_SECONDS,
   isLegalChoice,
@@ -37,6 +37,7 @@ const stage = ref<Stage>('connecting')
 const seat = ref<Seat>('black')
 const game = ref<GameState | null>(null)
 const deadline = ref<number | null>(null)
+const frameStart = ref<number | null>(null)
 const selected = ref<Point | null>(null)
 const submitted = ref(false)
 const oppSubmitted = ref(false)
@@ -139,6 +140,7 @@ function handleMessage(msg: ServerMessage) {
     case 'start':
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
+      frameStart.value = Date.now() - msg.elapsed
       frameSeconds.value = msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
@@ -158,6 +160,7 @@ function handleMessage(msg: ServerMessage) {
       vanishing.value = msg.state.cleared
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
+      frameStart.value = Date.now()
       selected.value = null
       submitted.value = false
       oppSubmitted.value = false
@@ -201,6 +204,11 @@ const secondsLeft = computed(() => {
 })
 
 const overdue = computed(() => deadline.value !== null && now.value >= deadline.value)
+
+const elapsedSeconds = computed(() => {
+  if (frameStart.value === null || stage.value !== 'playing') return 0
+  return Math.max(0, Math.floor((now.value - frameStart.value) / 1000))
+})
 
 const urgency = computed(() => {
   if (secondsLeft.value === null) return 'calm'
@@ -415,7 +423,7 @@ function exitRoom() {
           <p class="text-sm text-stone-500">房间号</p>
           <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
           <div class="flex items-center gap-2 text-xs text-stone-500">
-            <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameSeconds }}s</span>
+            <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameLabel(frameSeconds) }}</span>
             <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ modeLabel }}模式</span>
           </div>
           <div class="flex w-full flex-col gap-2">
@@ -496,11 +504,11 @@ function exitRoom() {
               'animate-pulse text-red-600': urgency === 'critical',
             }"
           >
-            {{ secondsLeft ?? 0 }}s
+            {{ frameSeconds === 0 ? `${elapsedSeconds}s/∞` : `${secondsLeft ?? 0}s/${frameSeconds}s` }}
           </span>
         </div>
 
-        <div class="h-1.5 overflow-hidden rounded-full bg-stone-300/70">
+        <div v-if="frameSeconds > 0" class="h-1.5 overflow-hidden rounded-full bg-stone-300/70">
           <div
             class="h-full rounded-full transition-[width] duration-200 ease-linear"
             :class="{
@@ -569,7 +577,9 @@ function exitRoom() {
             </label>
             <span>
               <template v-if="errorNotice">{{ errorNotice }}</template>
-              <template v-else-if="selected && !submitted">倒计时结束将自动提交已选落点</template>
+              <template v-else-if="frameSeconds > 0 && selected && !submitted">
+                倒计时结束将自动提交已选落点
+              </template>
               <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
             </span>
           </div>
@@ -628,7 +638,7 @@ function exitRoom() {
       <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
         <p class="text-base font-semibold text-stone-800">对方想再来一局</p>
         <p v-if="rematchProposal" class="flex items-center gap-2 text-sm text-stone-600">
-          <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ rematchProposal.frameSeconds }}s</span>
+          <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameLabel(rematchProposal.frameSeconds) }}</span>
           <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ MODE_LABELS[rematchProposal.mode] }}模式</span>
         </p>
         <p class="text-sm text-stone-500">{{ inviteSecondsLeft }} 秒后自动关闭</p>
@@ -657,27 +667,27 @@ function exitRoom() {
       <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
         <p class="text-base font-semibold text-stone-800">再来一局</p>
         <div class="flex flex-col gap-3 text-sm">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-2">
             <span class="text-stone-500">每回合</span>
             <div class="flex rounded-lg bg-stone-200 p-0.5">
               <button
                 v-for="option in FRAME_OPTIONS"
                 :key="option"
-                class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
+                class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
                 :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
                 @click="rematchFrame = option"
               >
-                {{ option }}s
+                {{ frameLabel(option) }}
               </button>
             </div>
           </div>
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-2">
             <span class="text-stone-500">撞点成</span>
             <div class="flex rounded-lg bg-stone-200 p-0.5">
               <button
                 v-for="option in MODE_OPTIONS"
                 :key="option"
-                class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
+                class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
                 :class="rematchMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
                 @click="rematchMode = option"
               >

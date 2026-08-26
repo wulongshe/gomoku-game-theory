@@ -93,13 +93,15 @@ export class Room extends DurableObject<Env> {
 
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
-      const deadline = (await this.ctx.storage.get<number>('deadline'))!
+      const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
+      const frameStart = await this.ctx.storage.get<number>('frameStart')
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
       this.send(pair[1], {
         type: 'start',
         state: game,
         deadline: game.phase === 'playing' ? deadline : null,
         now: Date.now(),
+        elapsed: game.phase === 'playing' && frameStart ? Date.now() - frameStart : 0,
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
@@ -148,19 +150,32 @@ export class Room extends DurableObject<Env> {
   private async startGame(): Promise<void> {
     const game = createGame(await this.mode())
     const frameSeconds = await this.frameSeconds()
-    const deadline = Date.now() + frameSeconds * 1000
     await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
-    await this.ctx.storage.put({ game, deadline })
-    await this.ctx.storage.setAlarm(deadline)
+    const deadline = await this.scheduleFrame(game, frameSeconds)
     this.broadcast({
       type: 'start',
       state: game,
       deadline,
       now: Date.now(),
+      elapsed: 0,
       frameSeconds,
       submitted: { black: false, white: false },
       yourChoice: null,
     })
+  }
+
+  private async scheduleFrame(game: GameState, frameSeconds: number): Promise<number | null> {
+    const frameStart = Date.now()
+    if (frameSeconds === 0) {
+      await this.ctx.storage.delete('deadline')
+      await this.ctx.storage.put({ game, frameStart })
+      await this.ctx.storage.setAlarm(frameStart + IDLE_TTL_MS)
+      return null
+    }
+    const deadline = frameStart + frameSeconds * 1000
+    await this.ctx.storage.put({ game, frameStart, deadline })
+    await this.ctx.storage.setAlarm(deadline)
+    return deadline
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -260,7 +275,7 @@ export class Room extends DurableObject<Env> {
       }
       return
     }
-    await this.ctx.storage.delete(['game', 'choices', 'rematch', 'ready', 'deadline'])
+    await this.ctx.storage.delete(['game', 'choices', 'rematch', 'ready', 'deadline', 'frameStart'])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     for (const socket of this.ctx.getWebSockets()) {
@@ -275,7 +290,7 @@ export class Room extends DurableObject<Env> {
       return this.close()
     }
     const game = await this.ctx.storage.get<GameState>('game')
-    if (!game || game.phase !== 'playing') {
+    if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
       return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
@@ -304,10 +319,8 @@ export class Room extends DurableObject<Env> {
       white: choices.white?.point ?? null,
     })
     if (next.phase === 'playing') {
-      const deadline = Date.now() + (await this.frameSeconds()) * 1000
       await this.ctx.storage.delete('choices')
-      await this.ctx.storage.put({ game: next, deadline })
-      await this.ctx.storage.setAlarm(deadline)
+      const deadline = await this.scheduleFrame(next, await this.frameSeconds())
       this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now() })
     } else {
       await this.ctx.storage.delete('choices')

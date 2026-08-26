@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
-import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import type { GameMode } from '@/engine/game'
 
 const props = defineProps<{ url: string; code: string; frameSeconds: number; mode: GameMode }>()
@@ -128,7 +128,7 @@ defineExpose({ share })
       扫码进房，来一局
     </text>
     <text x="320" y="876" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
-      {{ frameSeconds }}s · {{ MODE_LABELS[mode] }}模式
+      {{ frameLabel(frameSeconds) }} · {{ MODE_LABELS[mode] }}模式
     </text>
 
     <text x="320" y="932" text-anchor="middle" font-size="16" fill="#a8a29e">

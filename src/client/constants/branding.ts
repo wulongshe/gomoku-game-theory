@@ -6,11 +6,15 @@ export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理
 
 export const MODE_LABELS: Record<GameMode, string> = { forbidden: '禁点', half: '半子' }
 
+export function frameLabel(seconds: number): string {
+  return seconds ? `${seconds}s` : '不限时'
+}
+
 export const RULES = [
   {
     icon: '⚡',
     title: '同时落子，没有先手',
-    text: '每回合 30/60 秒，双方同时出手',
+    text: '每回合限时可选，双方同时出手',
   },
   {
     icon: '🧠',
@@ -28,7 +32,7 @@ export const FULL_RULES = [
   {
     title: '⚡ 同时落子',
     items: [
-      '每回合限时 30/60 秒，双方各自秘密选点，双方都提交或时间到后同时落子',
+      '每回合限时 30/60/120 秒或不限时，双方各自秘密选点，双方都提交或时间到后同时落子',
       '时间到时未提交：有草稿则自动提交草稿，没有则本回合弃着',
       '对方提交前，已提交的一方仍可变更落点',
       '首回合双方只能落在中央 3×3 区域，且不能落天元（正中心）',

@@ -8,7 +8,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
-import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
 
@@ -120,7 +120,7 @@ function toggleMatch() {
             <button
               v-for="option in FRAME_OPTIONS"
               :key="option"
-              class="inline-flex h-7 w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md pb-px font-medium leading-none transition-colors"
+              class="inline-flex h-7 min-w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 pb-px font-medium leading-none transition-colors"
               :class="frameChoices.includes(option) ? 'bg-white text-stone-800 shadow-sm' : 'bg-stone-300/60 text-stone-500'"
               :disabled="matching"
               @click="frameChoices = toggled(frameChoices, FRAME_OPTIONS, option)"
@@ -131,7 +131,7 @@ function toggleMatch() {
               >
                 <IconCheck v-if="frameChoices.includes(option)" class="size-2.5 text-white" />
               </span>
-              {{ option }}s
+              {{ frameLabel(option) }}
             </button>
           </div>
         </div>
