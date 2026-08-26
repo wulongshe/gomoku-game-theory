@@ -135,6 +135,27 @@ describe('settleFrame', () => {
     expect(cellAt(next, { x: 4, y: 1 })).toBe('empty')
   })
 
+  it('turns a collision point into a minus cell in minus mode', () => {
+    const next = settleFrame(createGame('minus'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
+    expect(cellAt(next, { x: 6, y: 6 })).toBe('minus')
+    expect(next.phase).toBe('playing')
+    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
+  })
+
+  it('counts a minus cell as -1 for both sides', () => {
+    const game = withStones({ black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'minus')
+    game.board[5 * BOARD_SIZE + 4] = 'minus'
+    const next = settleFrame(game, { black: { x: 5, y: 5 }, white: { x: 8, y: 8 } })
+    expect(next.phase).toBe('playing')
+  })
+
+  it('wins through a minus cell once the net count reaches five', () => {
+    const game = withStones({ black: [1, 2, 3, 5, 6].map((i) => ({ x: i, y: 5 })) }, 'minus')
+    game.board[5 * BOARD_SIZE + 4] = 'minus'
+    const next = settleFrame(game, { black: { x: 7, y: 5 }, white: { x: 8, y: 8 } })
+    expect(next.phase).toBe('black_won')
+  })
+
   it('awards a race-mode collision to the first submitter', () => {
     const black = settleFrame(createGame('race'), {
       black: { x: 6, y: 6 },

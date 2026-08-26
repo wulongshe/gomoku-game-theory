@@ -28,6 +28,8 @@ let matched = false
 
 const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
 const modeChoices = useStorage<GameMode[]>('mode-choices', [...MODE_OPTIONS])
+modeChoices.value = modeChoices.value.filter((m) => MODE_OPTIONS.includes(m))
+if (!modeChoices.value.length) modeChoices.value = [...MODE_OPTIONS]
 
 function toggled<T>(current: T[], options: T[], option: T): T[] {
   const next = current.includes(option)

@@ -1,7 +1,8 @@
 import type { GameMode, GameState, Point, Seat } from '@/engine/game'
 
 export const FRAME_OPTIONS = [30, 60, 120, 0]
-export const MODE_OPTIONS: GameMode[] = ['race', 'forbidden', 'half', 'shared']
+// 共子（shared）入口暂时下线
+export const MODE_OPTIONS: GameMode[] = ['race', 'forbidden', 'half', 'minus']
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
