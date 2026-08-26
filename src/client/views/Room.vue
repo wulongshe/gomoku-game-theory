@@ -592,7 +592,7 @@ function exitRoom() {
             :disabled="rematchAsked"
             @click="openRematchConfig"
           >
-            {{ rematchAsked ? '等待对方…' : '再来一局' }}
+            {{ rematchAsked ? '等待对方…' : '邀请对方再来一局' }}
           </AppButton>
           <p v-else class="text-center text-sm text-stone-500">对方已退出，房间已关闭</p>
           <p class="min-h-4 text-center text-xs text-stone-400">{{ overNotice }}</p>
