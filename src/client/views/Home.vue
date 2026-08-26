@@ -11,7 +11,13 @@ import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
-import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
+import {
+  FRAME_OPTIONS,
+  MODE_OPTIONS,
+  ROOM_CODE_LENGTH,
+  ROOM_CODE_PATTERN,
+  type LobbyServerMessage,
+} from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
 
 const creating = ref(false)
@@ -30,6 +36,13 @@ function toggled<T>(current: T[], options: T[], option: T): T[] {
   return next.length ? next : current
 }
 
+
+const joinCode = ref('')
+const joinCodeValid = computed(() => ROOM_CODE_PATTERN.test(joinCode.value))
+
+function join() {
+  if (joinCodeValid.value) location.assign(`/room/${joinCode.value}`)
+}
 
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
@@ -192,6 +205,17 @@ function toggleMatch() {
           <span>{{ creating ? '创建中…' : '创建房间' }}</span>
         </span>
       </AppButton>
+      <div class="flex w-full gap-2">
+        <input
+          v-model="joinCode"
+          :maxlength="ROOM_CODE_LENGTH"
+          placeholder="输入房间号"
+          class="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white/80 px-4 py-3 text-lg text-stone-800 shadow-sm placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+          @input="joinCode = joinCode.toUpperCase()"
+          @keyup.enter="join"
+        />
+        <AppButton :disabled="!joinCodeValid || creating || matching" @click="join">进入</AppButton>
+      </div>
       <p class="text-xs text-stone-400">免下载 · 免注册，10 秒开局</p>
     </div>
 
