@@ -8,7 +8,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
-import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
 
@@ -131,7 +131,7 @@ function toggleMatch() {
               >
                 <IconCheck v-if="frameChoices.includes(option)" class="size-2.5 text-white" />
               </span>
-              {{ frameLabel(option) }}
+              {{ option ? `${option}s` : '不限' }}
             </button>
           </div>
         </div>

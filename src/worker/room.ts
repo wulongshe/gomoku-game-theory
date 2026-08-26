@@ -20,7 +20,7 @@ interface Attachment {
 
 type Players = Partial<Record<Seat, string>>
 
-type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
+type Choices = Partial<Record<Seat, { point: Point | null; final: boolean; finalAt?: number }>>
 
 type SeatFlags = Partial<Record<Seat, boolean>>
 
@@ -228,7 +228,11 @@ export class Room extends DurableObject<Env> {
     }
 
     const wasFinal = !!choices[seat]?.final
-    choices[seat] = { point: msg.point, final: msg.final }
+    choices[seat] = {
+      point: msg.point,
+      final: msg.final,
+      ...(msg.final && { finalAt: Date.now() }),
+    }
     await this.ctx.storage.put('choices', choices)
     if (msg.final !== wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
@@ -313,10 +317,19 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  private firstSubmitter(choices: Choices): Seat {
+    const black = choices.black?.finalAt
+    const white = choices.white?.finalAt
+    if (black !== undefined && (white === undefined || black < white)) return 'black'
+    if (white !== undefined && (black === undefined || white < black)) return 'white'
+    return Math.random() < 0.5 ? 'black' : 'white'
+  }
+
   private async settle(game: GameState, choices: Choices): Promise<void> {
     const next = settleFrame(game, {
       black: choices.black?.point ?? null,
       white: choices.white?.point ?? null,
+      first: this.firstSubmitter(choices),
     })
     if (next.phase === 'playing') {
       await this.ctx.storage.delete('choices')

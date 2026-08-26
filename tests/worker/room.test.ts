@@ -11,9 +11,13 @@ interface Client {
   rematch(frameSeconds?: number, mode?: string): void
 }
 
-async function createRoom(code: string, frame?: number): Promise<void> {
-  const url = frame === undefined ? 'https://room/create' : `https://room/create?frame=${frame}`
-  await env.ROOM.get(env.ROOM.idFromName(code)).fetch(url, { method: 'POST' })
+async function createRoom(code: string, frame?: number, mode?: string): Promise<void> {
+  const params = new URLSearchParams()
+  if (frame !== undefined) params.set('frame', String(frame))
+  if (mode) params.set('mode', mode)
+  await env.ROOM.get(env.ROOM.idFromName(code)).fetch(`https://room/create?${params}`, {
+    method: 'POST',
+  })
 }
 
 async function connect(code: string, token: string): Promise<Client> {
@@ -279,6 +283,26 @@ describe('Room', () => {
     expect(settled.deadline).toBeNull()
     expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(cellAt(settled.state, { x: 7, y: 8 })).toBe('white')
+  })
+
+  it('awards a race-mode collision to the earlier final submission', async () => {
+    await createRoom('ROOM26', 30, 'race')
+    const a = await connect('ROOM26', 'token-a')
+    const b = await connect('ROOM26', 'token-b')
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+
+    b.submit(1, { x: 6, y: 6 })
+    await a.next('opponent_submitted')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    a.submit(1, { x: 6, y: 6 })
+    const settled = await a.next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('white')
   })
 
   it('notifies the opponent when a player leaves', async () => {

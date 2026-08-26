@@ -5,6 +5,7 @@ export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
 
 export const MODE_LABELS: Record<GameMode, string> = {
+  race: '抢点',
   forbidden: '禁点',
   half: '半子',
   shared: '共子',
@@ -23,7 +24,7 @@ export const RULES = [
   {
     icon: '🧠',
     title: '撞点博弈，读心制胜',
-    text: '双方落同一点，按模式化为禁点、半子或共子',
+    text: '双方落同一点，该点变为禁点、半子、共子或归先下者',
   },
   {
     icon: '⭐',
@@ -47,6 +48,7 @@ export const FULL_RULES = [
     title: '🧠 撞点',
     items: [
       '双方落在同一点即为撞点，按开局时选择的模式处理',
+      '抢点模式：先提交的一方得到该点，成为其棋子',
       '禁点模式：该点变为禁点，双方都无法再落子',
       '半子模式：化作太极半子，双方各占一半',
       '共子模式：化作太极共子，双方各算一子',
