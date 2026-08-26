@@ -69,6 +69,15 @@
   }
 }
 
+@keyframes win-line {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes breathe {
   0%,
   100% {

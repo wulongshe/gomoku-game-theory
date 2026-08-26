@@ -309,6 +309,22 @@ function isLastMove(p: Point): boolean {
       class="animate-[ray_0.5s_ease-out_forwards]"
     />
 
+    <line
+      v-for="(line, i) in state.winningLines"
+      :key="`win${i}`"
+      :x1="pos(line[0].x)"
+      :y1="pos(line[0].y)"
+      :x2="pos(line[line.length - 1].x)"
+      :y2="pos(line[line.length - 1].y)"
+      pathLength="1"
+      stroke="#fbbf24"
+      stroke-width="7"
+      stroke-linecap="round"
+      stroke-dasharray="1"
+      opacity="0.9"
+      class="animate-[win-line_0.5s_ease-out_forwards]"
+    />
+
     <g v-if="selected">
       <circle
         :cx="pos(selected.x)"

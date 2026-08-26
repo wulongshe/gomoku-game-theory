@@ -27,6 +27,7 @@ export interface GameState {
   mode: GameMode
   cleared: ClearedGroup[]
   lastMoves: Point[]
+  winningLines: Point[][]
 }
 
 export interface FrameChoices {
@@ -43,6 +44,7 @@ export function createGame(mode: GameMode = 'forbidden'): GameState {
     mode,
     cleared: [],
     lastMoves: [],
+    winningLines: [],
   }
 }
 
@@ -86,12 +88,12 @@ function cellValue(cell: CellState, seat: Seat): number {
   return 0
 }
 
-function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
+function winningLines(board: CellState[], seat: Seat, point: Point): number[][] {
   const start = point.y * BOARD_SIZE + point.x
   if (cellValue(board[start], seat) === 0) return []
-  const cells = new Set<number>()
+  const lines: number[][] = []
   for (const [dx, dy] of DIRECTIONS) {
-    const line = [start]
+    const halves: Record<1 | -1, number[]> = { 1: [], [-1]: [] }
     let score = cellValue(board[start], seat)
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
@@ -100,14 +102,14 @@ function winningRun(board: CellState[], seat: Seat, point: Point): number[] {
         const value = cellValue(board[y * BOARD_SIZE + x], seat)
         if (value === 0) break
         score += value
-        line.push(y * BOARD_SIZE + x)
+        halves[sign].push(y * BOARD_SIZE + x)
         x += dx * sign
         y += dy * sign
       }
     }
-    if (score >= WIN_SCORE) for (const i of line) cells.add(i)
+    if (score >= WIN_SCORE) lines.push([...halves[-1].reverse(), start, ...halves[1]])
   }
-  return [...cells]
+  return lines
 }
 
 function forbiddenRuns(board: CellState[]): number[][] {
@@ -166,23 +168,32 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
     if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
   }
 
-  const blackRun = black ? winningRun(board, 'black', black) : []
-  const whiteRun = white ? winningRun(board, 'white', white) : []
+  const blackLines = black ? winningLines(board, 'black', black) : []
+  const whiteLines = white ? winningLines(board, 'white', white) : []
+  const blackRun = [...new Set(blackLines.flat())]
+  const whiteRun = [...new Set(whiteLines.flat())]
 
   const toCell = (i: number): ClearedCell => ({
     x: i % BOARD_SIZE,
     y: Math.floor(i / BOARD_SIZE),
     cell: board[i],
   })
+  const toPoint = (i: number): Point => ({ x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) })
 
   const cleared: ClearedGroup[] = []
   let phase: Phase = 'playing'
+  let winning: number[][] = []
   if (blackRun.length && whiteRun.length) {
     cleared.push({ origin: black!, cells: blackRun.map(toCell) })
     cleared.push({ origin: white!, cells: whiteRun.map(toCell) })
     for (const i of [...blackRun, ...whiteRun]) board[i] = 'empty'
-  } else if (blackRun.length) phase = 'black_won'
-  else if (whiteRun.length) phase = 'white_won'
+  } else if (blackRun.length) {
+    phase = 'black_won'
+    winning = blackLines
+  } else if (whiteRun.length) {
+    phase = 'white_won'
+    winning = whiteLines
+  }
 
   if (phase === 'playing') {
     const runs = forbiddenRuns(board)
@@ -205,5 +216,13 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       ['black', 'white', 'half', 'shared', 'minus'].includes(board[p.y * BOARD_SIZE + p.x]),
   )
 
-  return { board, phase, frame: state.frame + 1, mode: state.mode, cleared, lastMoves }
+  return {
+    board,
+    phase,
+    frame: state.frame + 1,
+    mode: state.mode,
+    cleared,
+    lastMoves,
+    winningLines: winning.map((line) => line.map(toPoint)),
+  }
 }

@@ -135,6 +135,21 @@ describe('settleFrame', () => {
     expect(cellAt(next, { x: 4, y: 1 })).toBe('empty')
   })
 
+  it('records every winning line through the final move', () => {
+    const game = withStones({
+      black: [
+        ...[1, 2, 3, 4].map((i) => ({ x: i, y: 5 })),
+        ...[1, 2, 3, 4].map((i) => ({ x: 5, y: i })),
+      ],
+    })
+    const next = settleFrame(game, { black: { x: 5, y: 5 }, white: { x: 8, y: 8 } })
+    expect(next.phase).toBe('black_won')
+    expect(next.winningLines).toEqual([
+      [1, 2, 3, 4, 5].map((i) => ({ x: i, y: 5 })),
+      [1, 2, 3, 4, 5].map((i) => ({ x: 5, y: i })),
+    ])
+  })
+
   it('turns a collision point into a minus cell in minus mode', () => {
     const next = settleFrame(createGame('minus'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
     expect(cellAt(next, { x: 6, y: 6 })).toBe('minus')
