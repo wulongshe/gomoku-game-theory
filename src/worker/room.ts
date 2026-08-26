@@ -24,6 +24,13 @@ type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
 type SeatFlags = Partial<Record<Seat, boolean>>
 
+interface RematchProposal {
+  frameSeconds: number
+  mode: GameMode
+}
+
+type RematchProposals = Partial<Record<Seat, RematchProposal>>
+
 export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -180,7 +187,10 @@ export class Room extends DurableObject<Env> {
       return this.broadcastLobby()
     }
     if (msg.type === 'rematch') {
-      return this.handleRematch(ws, seat, game)
+      return this.handleRematch(ws, seat, game, {
+        frameSeconds: msg.frameSeconds,
+        mode: msg.mode,
+      })
     }
     if (msg.type === 'rematch_decline') {
       if (game && game.phase !== 'playing') {
@@ -230,21 +240,34 @@ export class Room extends DurableObject<Env> {
     await this.close()
   }
 
-  private async handleRematch(ws: WebSocket, seat: Seat, game: GameState | undefined): Promise<void> {
+  private async handleRematch(
+    ws: WebSocket,
+    seat: Seat,
+    game: GameState | undefined,
+    proposal: RematchProposal,
+  ): Promise<void> {
     if (!game || game.phase === 'playing') {
       return this.send(ws, { type: 'error', message: 'game not finished' })
     }
-    const rematch = (await this.ctx.storage.get<SeatFlags>('rematch')) ?? {}
-    if (!rematch[seat]) {
-      rematch[seat] = true
+    const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
+    const other = rematch[seat === 'black' ? 'white' : 'black']
+    const accepted = other?.frameSeconds === proposal.frameSeconds && other.mode === proposal.mode
+    if (!accepted) {
+      rematch[seat] = proposal
       await this.ctx.storage.put('rematch', rematch)
-      for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) this.send(other, { type: 'rematch_requested' })
+      for (const socket of this.ctx.getWebSockets()) {
+        if (socket !== ws) this.send(socket, { type: 'rematch_requested', ...proposal })
       }
+      return
     }
-    if (rematch.black && rematch.white) {
-      await this.startGame()
+    await this.ctx.storage.delete(['game', 'choices', 'rematch', 'ready', 'deadline'])
+    await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
+    await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as Attachment
+      this.send(socket, { type: 'joined', seat: attachment.seat, ...proposal })
     }
+    await this.broadcastLobby()
   }
 
   async alarm(): Promise<void> {

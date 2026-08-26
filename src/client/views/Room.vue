@@ -20,7 +20,12 @@ import {
   type Point,
   type Seat,
 } from '@/engine/game'
-import type { ClientMessage, ServerMessage } from '@/shared/protocol'
+import {
+  FRAME_OPTIONS,
+  MODE_OPTIONS,
+  type ClientMessage,
+  type ServerMessage,
+} from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
@@ -36,6 +41,10 @@ const selected = ref<Point | null>(null)
 const submitted = ref(false)
 const oppSubmitted = ref(false)
 const rematchAsked = ref(false)
+const rematchConfig = ref(false)
+const rematchFrame = ref(FRAME_SECONDS)
+const rematchMode = ref<GameMode>('forbidden')
+const rematchProposal = ref<{ frameSeconds: number; mode: GameMode } | null>(null)
 const oppLeft = ref(false)
 const rematchInvite = ref(false)
 const inviteDeadline = ref<number | null>(null)
@@ -112,6 +121,11 @@ function handleMessage(msg: ServerMessage) {
       seat.value = msg.seat
       frameSeconds.value = msg.frameSeconds
       mode.value = msg.mode
+      rematchAsked.value = false
+      rematchConfig.value = false
+      rematchInvite.value = false
+      rematchProposal.value = null
+      inviteDeadline.value = null
       stage.value = 'waiting'
       break
     case 'lobby': {
@@ -160,10 +174,10 @@ function handleMessage(msg: ServerMessage) {
       oppLeft.value = false
       break
     case 'rematch_requested':
-      if (!rematchAsked.value) {
-        rematchInvite.value = true
-        inviteDeadline.value = Date.now() + 30_000
-      }
+      rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
+      rematchAsked.value = false
+      rematchInvite.value = true
+      inviteDeadline.value = Date.now() + 30_000
       break
     case 'rematch_declined':
       rematchAsked.value = false
@@ -266,10 +280,21 @@ function sendReady() {
   myReady.value = true
 }
 
-function requestRematch() {
+function openRematchConfig() {
   if (rematchAsked.value) return
-  send(JSON.stringify({ type: 'rematch' } satisfies ClientMessage))
+  rematchFrame.value = frameSeconds.value
+  rematchMode.value = mode.value
+  rematchConfig.value = true
+}
+
+function sendRematch(frameSeconds: number, mode: GameMode) {
+  send(JSON.stringify({ type: 'rematch', frameSeconds, mode } satisfies ClientMessage))
   rematchAsked.value = true
+}
+
+function confirmRematch() {
+  rematchConfig.value = false
+  sendRematch(rematchFrame.value, rematchMode.value)
 }
 
 const inviteSecondsLeft = computed(() =>
@@ -285,7 +310,9 @@ watch(inviteSecondsLeft, (s) => {
 function acceptRematch() {
   rematchInvite.value = false
   inviteDeadline.value = null
-  requestRematch()
+  if (rematchProposal.value) {
+    sendRematch(rematchProposal.value.frameSeconds, rematchProposal.value.mode)
+  }
 }
 
 function declineRematch() {
@@ -387,6 +414,10 @@ function exitRoom() {
         >
           <p class="text-sm text-stone-500">房间号</p>
           <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
+          <div class="flex items-center gap-2 text-xs text-stone-500">
+            <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameSeconds }}s</span>
+            <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ modeLabel }}模式</span>
+          </div>
           <div class="flex w-full flex-col gap-2">
             <div
               v-for="player in [
@@ -549,7 +580,7 @@ function exitRoom() {
             v-if="!roomClosed"
             class="w-full"
             :disabled="rematchAsked"
-            @click="requestRematch"
+            @click="openRematchConfig"
           >
             {{ rematchAsked ? '等待对方…' : '再来一局' }}
           </AppButton>
@@ -596,6 +627,10 @@ function exitRoom() {
     >
       <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
         <p class="text-base font-semibold text-stone-800">对方想再来一局</p>
+        <p v-if="rematchProposal" class="flex items-center gap-2 text-sm text-stone-600">
+          <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ rematchProposal.frameSeconds }}s</span>
+          <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ MODE_LABELS[rematchProposal.mode] }}模式</span>
+        </p>
         <p class="text-sm text-stone-500">{{ inviteSecondsLeft }} 秒后自动关闭</p>
         <div class="flex gap-2">
           <button
@@ -609,6 +644,60 @@ function exitRoom() {
             @click="acceptRematch"
           >
             接受
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="rematchConfig"
+      class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
+      @click.self="rematchConfig = false"
+    >
+      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
+        <p class="text-base font-semibold text-stone-800">再来一局</p>
+        <div class="flex flex-col gap-3 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-stone-500">每回合</span>
+            <div class="flex rounded-lg bg-stone-200 p-0.5">
+              <button
+                v-for="option in FRAME_OPTIONS"
+                :key="option"
+                class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
+                :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+                @click="rematchFrame = option"
+              >
+                {{ option }}s
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-stone-500">撞点成</span>
+            <div class="flex rounded-lg bg-stone-200 p-0.5">
+              <button
+                v-for="option in MODE_OPTIONS"
+                :key="option"
+                class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
+                :class="rematchMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+                @click="rematchMode = option"
+              >
+                {{ MODE_LABELS[option] }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300"
+            @click="rematchConfig = false"
+          >
+            取消
+          </button>
+          <button
+            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600"
+            @click="confirmRematch"
+          >
+            发起邀请
           </button>
         </div>
       </div>

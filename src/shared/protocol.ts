@@ -10,7 +10,7 @@ export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
   | { type: 'ready' }
-  | { type: 'rematch' }
+  | { type: 'rematch'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_decline' }
   | { type: 'leave' }
 
@@ -32,7 +32,7 @@ export type ServerMessage =
   | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
-  | { type: 'rematch_requested' }
+  | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
 
@@ -46,7 +46,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (typeof data !== 'object' || data === null) return null
   const msg = data as Record<string, unknown>
   if (msg.type === 'ready') return { type: 'ready' }
-  if (msg.type === 'rematch') return { type: 'rematch' }
+  if (msg.type === 'rematch') {
+    if (!FRAME_OPTIONS.includes(msg.frameSeconds as number)) return null
+    if (!MODE_OPTIONS.includes(msg.mode as GameMode)) return null
+    return { type: 'rematch', frameSeconds: msg.frameSeconds as number, mode: msg.mode as GameMode }
+  }
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }
   if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
