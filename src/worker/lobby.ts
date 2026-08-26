@@ -21,6 +21,24 @@ function sample<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]
 }
 
+const UNTIMED_RACE_WEIGHT = 2
+
+export function pickSettings(
+  frames: number[],
+  modes: GameMode[],
+  rng: () => number = Math.random,
+): { frame: number; mode: GameMode } {
+  const combos = frames.flatMap((frame) => modes.map((mode) => ({ frame, mode })))
+  const weight = (c: { frame: number; mode: GameMode }) =>
+    c.frame === 0 && c.mode === 'race' ? UNTIMED_RACE_WEIGHT : 1
+  let roll = rng() * combos.reduce((sum, c) => sum + weight(c), 0)
+  for (const combo of combos) {
+    roll -= weight(combo)
+    if (roll < 0) return combo
+  }
+  return combos[combos.length - 1]
+}
+
 export class Lobby extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -44,9 +62,10 @@ export class Lobby extends DurableObject<Env> {
     if (candidates.length) {
       const overlap = Math.min(...candidates.map((c) => c.frames.length * c.modes.length))
       const picked = sample(candidates.filter((c) => c.frames.length * c.modes.length === overlap))
+      const { frame, mode } = pickSettings(picked.frames, picked.modes)
       const code = newRoomCode()
       await this.env.ROOM.get(this.env.ROOM.idFromName(code)).fetch(
-        `https://room/create?frame=${sample(picked.frames)}&mode=${sample(picked.modes)}`,
+        `https://room/create?frame=${frame}&mode=${mode}`,
         { method: 'POST' },
       )
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)

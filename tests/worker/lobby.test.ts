@@ -1,6 +1,7 @@
 import { env, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it, vi } from 'vitest'
 import { ROOM_CODE_PATTERN, type LobbyServerMessage } from '@/shared/protocol'
+import { pickSettings } from '@/worker/lobby'
 
 interface Client {
   ws: WebSocket
@@ -33,6 +34,23 @@ async function roomSettings(code: string): Promise<Record<string, unknown>> {
   )
   return Object.fromEntries(entries)
 }
+
+describe('pickSettings', () => {
+  it('gives the untimed race combo double weight', () => {
+    // combos: (30,race)=1, (30,forbidden)=1, (0,race)=2, (0,forbidden)=1 → total 5
+    const pick = (roll: number) => pickSettings([30, 0], ['race', 'forbidden'], () => roll)
+    expect(pick(0.1)).toEqual({ frame: 30, mode: 'race' })
+    expect(pick(0.45)).toEqual({ frame: 0, mode: 'race' })
+    expect(pick(0.75)).toEqual({ frame: 0, mode: 'race' })
+    expect(pick(0.85)).toEqual({ frame: 0, mode: 'forbidden' })
+  })
+
+  it('samples uniformly when the combo is not shared', () => {
+    const pick = (roll: number) => pickSettings([30, 60], ['forbidden', 'half'], () => roll)
+    expect(pick(0)).toEqual({ frame: 30, mode: 'forbidden' })
+    expect(pick(0.99)).toEqual({ frame: 60, mode: 'half' })
+  })
+})
 
 describe('Lobby', () => {
   it('rejects non-websocket requests', async () => {
