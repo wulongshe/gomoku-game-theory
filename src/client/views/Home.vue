@@ -15,10 +15,11 @@ import type { GameMode } from '@/engine/game'
 const creating = ref(false)
 const matching = ref(false)
 const showRules = ref(false)
+const showCreateHint = ref(false)
 let matched = false
 
-const frameChoices = useStorage<number[]>('frame-choices', [FRAME_OPTIONS[0]])
-const modeChoices = useStorage<GameMode[]>('mode-choices', [MODE_OPTIONS[0]])
+const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
+const modeChoices = useStorage<GameMode[]>('mode-choices', [...MODE_OPTIONS])
 
 function toggled<T>(current: T[], options: T[], option: T): T[] {
   const next = current.includes(option)
@@ -27,18 +28,19 @@ function toggled<T>(current: T[], options: T[], option: T): T[] {
   return next.length ? next : current
 }
 
-function pick<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)]
-}
 
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
 const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchStart.value) / 1000)))
 
 async function create() {
+  if (frameChoices.value.length > 1 || modeChoices.value.length > 1) {
+    showCreateHint.value = true
+    return
+  }
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom(pick(frameChoices.value), pick(modeChoices.value))}`)
+    location.assign(`/room/${await createRoom(frameChoices.value[0], modeChoices.value[0])}`)
   } catch {
     creating.value = false
   }
@@ -171,5 +173,19 @@ function toggleMatch() {
     </div>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
+
+    <div
+      v-if="showCreateHint"
+      class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
+      @click.self="showCreateHint = false"
+    >
+      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
+        <p class="text-lg font-semibold text-stone-800">无法创建房间</p>
+        <p class="text-sm text-stone-500">
+          创建房间需要确定的设置，请在「每回合」和「撞点成」中各保留一个选项。
+        </p>
+        <AppButton class="w-full" @click="showCreateHint = false">知道了</AppButton>
+      </div>
+    </div>
   </main>
 </template>
