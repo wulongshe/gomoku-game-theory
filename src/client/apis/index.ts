@@ -22,8 +22,8 @@ export function roomWsUrl(code: string, token: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}`
 }
 
-export function matchWsUrl(frameSeconds: number, mode: GameMode): string {
-  return `${wsProto()}://${location.host}/api/match/ws?frame=${frameSeconds}&mode=${mode}`
+export function matchWsUrl(frames: number[], modes: GameMode[]): string {
+  return `${wsProto()}://${location.host}/api/match/ws?frames=${frames.join(',')}&modes=${modes.join(',')}`
 }
 
 function wsProto(): string {

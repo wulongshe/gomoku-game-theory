@@ -36,6 +36,17 @@ describe('POST /api/rooms', () => {
   })
 })
 
+describe('GET /api/match/ws', () => {
+  it('rejects missing or unsupported option lists', async () => {
+    for (const query of ['', '?frames=30', '?frames=45&modes=forbidden', '?frames=30&modes=classic']) {
+      const res = await SELF.fetch(`https://example.com/api/match/ws${query}`, {
+        headers: { Upgrade: 'websocket' },
+      })
+      expect(res.status).toBe(400)
+    }
+  })
+})
+
 describe('GET /api/rooms/:code', () => {
   it('reports a never-created room as missing', async () => {
     const res = await SELF.fetch('https://example.com/api/rooms/ZZZZZ2')

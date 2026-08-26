@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
+import IconCheck from '~/components/icons/IconCheck.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
@@ -16,8 +17,19 @@ const matching = ref(false)
 const showRules = ref(false)
 let matched = false
 
-const frameSeconds = useStorage('frame-seconds', FRAME_OPTIONS[0])
-const gameMode = useStorage<GameMode>('game-mode', MODE_OPTIONS[0])
+const frameChoices = useStorage<number[]>('frame-choices', [FRAME_OPTIONS[0]])
+const modeChoices = useStorage<GameMode[]>('mode-choices', [MODE_OPTIONS[0]])
+
+function toggled<T>(current: T[], options: T[], option: T): T[] {
+  const next = current.includes(option)
+    ? current.filter((o) => o !== option)
+    : options.filter((o) => current.includes(o) || o === option)
+  return next.length ? next : current
+}
+
+function pick<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)]
+}
 
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
@@ -26,16 +38,17 @@ const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchSta
 async function create() {
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom(frameSeconds.value, gameMode.value)}`)
+    location.assign(`/room/${await createRoom(pick(frameChoices.value), pick(modeChoices.value))}`)
   } catch {
     creating.value = false
   }
 }
 
 const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameSeconds.value, gameMode.value)),
+  computed(() => matchWsUrl(frameChoices.value, modeChoices.value)),
   {
     immediate: false,
+    autoConnect: false,
     onMessage(_, event) {
       const msg = JSON.parse(event.data) as LobbyServerMessage
       if (msg.type === 'matched') {
@@ -101,30 +114,42 @@ function toggleMatch() {
       <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-1 text-sm">
         <div class="flex items-center gap-3">
           <span class="text-stone-500">每回合</span>
-          <div class="flex rounded-lg bg-stone-300/60 p-0.5">
+          <div class="flex gap-1.5">
             <button
               v-for="option in FRAME_OPTIONS"
               :key="option"
-              class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-              :class="frameSeconds === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+              class="inline-flex h-7 w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md pb-px font-medium leading-none transition-colors"
+              :class="frameChoices.includes(option) ? 'bg-white text-stone-800 shadow-sm' : 'bg-stone-300/60 text-stone-500'"
               :disabled="matching"
-              @click="frameSeconds = option"
+              @click="frameChoices = toggled(frameChoices, FRAME_OPTIONS, option)"
             >
+              <span
+                class="flex size-3.5 items-center justify-center rounded-sm border transition-colors"
+                :class="frameChoices.includes(option) ? 'border-emerald-600 bg-emerald-600' : 'border-stone-400'"
+              >
+                <IconCheck v-if="frameChoices.includes(option)" class="size-2.5 text-white" />
+              </span>
               {{ option }}s
             </button>
           </div>
         </div>
         <div class="flex items-center gap-3">
           <span class="text-stone-500">撞点成</span>
-          <div class="flex rounded-lg bg-stone-300/60 p-0.5">
+          <div class="flex gap-1.5">
             <button
               v-for="option in MODE_OPTIONS"
               :key="option"
-              class="inline-flex h-7 w-14 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-              :class="gameMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+              class="inline-flex h-7 w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md pb-px font-medium leading-none transition-colors"
+              :class="modeChoices.includes(option) ? 'bg-white text-stone-800 shadow-sm' : 'bg-stone-300/60 text-stone-500'"
               :disabled="matching"
-              @click="gameMode = option"
+              @click="modeChoices = toggled(modeChoices, MODE_OPTIONS, option)"
             >
+              <span
+                class="flex size-3.5 items-center justify-center rounded-sm border transition-colors"
+                :class="modeChoices.includes(option) ? 'border-emerald-600 bg-emerald-600' : 'border-stone-400'"
+              >
+                <IconCheck v-if="modeChoices.includes(option)" class="size-2.5 text-white" />
+              </span>
               {{ MODE_LABELS[option] }}
             </button>
           </div>

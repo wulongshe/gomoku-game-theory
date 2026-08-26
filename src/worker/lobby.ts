@@ -1,11 +1,24 @@
 import { DurableObject } from 'cloudflare:workers'
-import { FRAME_SECONDS, type GameMode } from '@/engine/game'
-import type { LobbyServerMessage } from '@/shared/protocol'
+import type { GameMode } from '@/engine/game'
+import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import { newRoomCode } from './roomCode'
 
-interface Attachment {
-  frame: number
-  mode: GameMode
+export interface MatchOptions {
+  frames: number[]
+  modes: GameMode[]
+}
+
+export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
+  const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]
+  const frames = list('frames').map(Number)
+  const modes = list('modes') as GameMode[]
+  if (!frames.length || frames.some((f) => !FRAME_OPTIONS.includes(f))) return null
+  if (!modes.length || modes.some((m) => !MODE_OPTIONS.includes(m))) return null
+  return { frames, modes }
+}
+
+function sample<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)]
 }
 
 export class Lobby extends DurableObject<Env> {
@@ -13,26 +26,31 @@ export class Lobby extends DurableObject<Env> {
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 })
     }
-    const params = new URL(request.url).searchParams
-    const frame = Number(params.get('frame') ?? FRAME_SECONDS)
-    const mode = (params.get('mode') ?? 'forbidden') as GameMode
+    const options = parseMatchOptions(new URL(request.url).searchParams)
+    if (!options) {
+      return new Response('Invalid options', { status: 400 })
+    }
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
-    pair[1].serializeAttachment({ frame, mode } satisfies Attachment)
+    pair[1].serializeAttachment(options)
 
-    const waiting = this.ctx.getWebSockets().find((ws) => {
-      if (ws === pair[1]) return false
-      const other = ws.deserializeAttachment() as Attachment
-      return other.frame === frame && other.mode === mode
+    const candidates = this.ctx.getWebSockets().flatMap((ws) => {
+      if (ws === pair[1]) return []
+      const other = ws.deserializeAttachment() as MatchOptions
+      const frames = other.frames.filter((f) => options.frames.includes(f))
+      const modes = other.modes.filter((m) => options.modes.includes(m))
+      return frames.length && modes.length ? [{ ws, frames, modes }] : []
     })
-    if (waiting) {
+    if (candidates.length) {
+      const overlap = Math.min(...candidates.map((c) => c.frames.length * c.modes.length))
+      const picked = sample(candidates.filter((c) => c.frames.length * c.modes.length === overlap))
       const code = newRoomCode()
       await this.env.ROOM.get(this.env.ROOM.idFromName(code)).fetch(
-        `https://room/create?frame=${frame}&mode=${mode}`,
+        `https://room/create?frame=${sample(picked.frames)}&mode=${sample(picked.modes)}`,
         { method: 'POST' },
       )
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
-      for (const ws of [waiting, pair[1]]) {
+      for (const ws of [picked.ws, pair[1]]) {
         try {
           ws.send(matched)
           ws.close(1000, 'matched')
