@@ -668,7 +668,7 @@ function exitRoom() {
         <p class="text-base font-semibold text-stone-800">再来一局</p>
         <div class="flex flex-col gap-3 text-sm">
           <div class="flex flex-col gap-2">
-            <span class="text-stone-500">每回合</span>
+            <span class="text-center text-stone-500">每回合</span>
             <div class="flex rounded-lg bg-stone-200 p-0.5">
               <button
                 v-for="option in FRAME_OPTIONS"
@@ -677,12 +677,12 @@ function exitRoom() {
                 :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
                 @click="rematchFrame = option"
               >
-                {{ frameLabel(option) }}
+                {{ option ? `${option}s` : '不限' }}
               </button>
             </div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="text-stone-500">撞点成</span>
+            <span class="text-center text-stone-500">撞点后</span>
             <div class="flex rounded-lg bg-stone-200 p-0.5">
               <button
                 v-for="option in MODE_OPTIONS"

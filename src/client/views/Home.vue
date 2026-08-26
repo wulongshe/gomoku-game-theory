@@ -137,7 +137,7 @@ function toggleMatch() {
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
       <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-1 text-sm">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-col items-center gap-1.5">
           <span class="text-stone-500">每回合</span>
           <div class="flex gap-1.5">
             <button
@@ -158,8 +158,8 @@ function toggleMatch() {
             </button>
           </div>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-stone-500">撞点成</span>
+        <div class="flex flex-col items-center gap-1.5">
+          <span class="text-stone-500">撞点后</span>
           <div class="flex gap-1.5">
             <button
               v-for="option in MODE_OPTIONS"
@@ -205,7 +205,7 @@ function toggleMatch() {
       <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
         <p class="text-lg font-semibold text-stone-800">无法创建房间</p>
         <p class="text-sm text-stone-500">
-          创建房间需要确定的设置，请在「每回合」和「撞点成」中各保留一个选项。
+          创建房间需要确定的设置，请在「每回合」和「撞点后」中各保留一个选项。
         </p>
         <AppButton class="w-full" @click="showCreateHint = false">知道了</AppButton>
       </div>
