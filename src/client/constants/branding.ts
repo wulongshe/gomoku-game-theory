@@ -4,7 +4,11 @@ export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
 
-export const MODE_LABELS: Record<GameMode, string> = { forbidden: '禁点', half: '半子' }
+export const MODE_LABELS: Record<GameMode, string> = {
+  forbidden: '禁点',
+  half: '半子',
+  shared: '共子',
+}
 
 export function frameLabel(seconds: number): string {
   return seconds ? `${seconds}s` : '不限时'
@@ -19,7 +23,7 @@ export const RULES = [
   {
     icon: '🧠',
     title: '撞点博弈，读心制胜',
-    text: '双方落同一点，该点变为禁点或双方各占一半',
+    text: '双方落同一点，按模式化为禁点、半子或共子',
   },
   {
     icon: '⭐',
@@ -45,13 +49,14 @@ export const FULL_RULES = [
       '双方落在同一点即为撞点，按开局时选择的模式处理',
       '禁点模式：该点变为禁点，双方都无法再落子',
       '半子模式：化作太极半子，双方各占一半',
+      '共子模式：化作太极共子，双方各算一子',
       '禁点连成五：整条禁点线清除，位置重新可用',
     ],
   },
   {
     title: '⭐ 胜负',
     items: [
-      '任意方向连续棋子累计满 5 即胜，半子算 0.5（5 或 5.5 都算赢）',
+      '任意方向连续棋子累计满 5 即胜，半子算 0.5、共子算 1（5 或 5.5 都算赢）',
       '棋盘下满仍无人连五则为和棋',
       '双方同时连五，连线棋子一起消失，对局继续',
     ],

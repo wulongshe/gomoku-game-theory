@@ -61,7 +61,9 @@ const stones = computed(() =>
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
 
-const halves = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'half'))
+const halves = computed(() =>
+  ALL_POINTS.filter((p) => ['half', 'shared'].includes(cellAt(props.state, p))),
+)
 
 const VANISH_BASE_MS = 280
 const VANISH_STEP_MS = 90
@@ -257,7 +259,7 @@ function isLastMove(p: Point): boolean {
             stroke-width="1"
           />
         </template>
-        <template v-else-if="v.cell === 'half'">
+        <template v-else-if="v.cell === 'half' || v.cell === 'shared'">
           <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
           <path :d="TAIJI_PATH" fill="url(#stone-black)" />
           <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
