@@ -13,6 +13,7 @@ const props = defineProps<{
   seat: Seat
   myReady: boolean
   oppReady: boolean
+  oppLeft: boolean
 }>()
 const emit = defineEmits<{ ready: [] }>()
 
@@ -21,11 +22,13 @@ const players = computed(() => [
     label: props.seat === 'black' ? '你执黑' : '你执白',
     seat: props.seat,
     ready: props.myReady,
+    left: false,
   },
   {
     label: props.seat === 'black' ? '对方执白' : '对方执黑',
     seat: props.seat === 'black' ? ('white' as const) : ('black' as const),
     ready: props.oppReady,
+    left: props.oppLeft,
   },
 ])
 </script>
@@ -53,10 +56,10 @@ const players = computed(() => [
           </span>
           <span
             class="flex items-center gap-1 text-sm font-medium"
-            :class="player.ready ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 dark:text-stone-500'"
+            :class="player.left ? 'text-red-500 dark:text-red-400' : player.ready ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 dark:text-stone-500'"
           >
-            <IconCheck class="size-3.5" :class="!player.ready && 'invisible'" />
-            {{ player.ready ? '已准备' : '未准备' }}
+            <IconCheck class="size-3.5" :class="!(player.ready && !player.left) && 'invisible'" />
+            {{ player.left ? '已离开' : player.ready ? '已准备' : '未准备' }}
           </span>
         </div>
       </div>
@@ -65,8 +68,13 @@ const players = computed(() => [
       </AppButton>
     </div>
     <p class="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-      <span class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400" />
-      {{ myReady ? '等待对方准备…' : '对方已加入，双方准备后开局' }}
+      <span
+        class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full"
+        :class="oppLeft ? 'bg-red-500' : 'bg-amber-400'"
+      />
+      {{
+        oppLeft ? '对方已离开，等待对方回来…' : myReady ? '等待对方准备…' : '对方已加入，双方准备后开局'
+      }}
     </p>
   </div>
 </template>

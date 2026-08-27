@@ -137,7 +137,7 @@ function handleMessage(msg: ServerMessage) {
       myReady.value = msg.ready[seat.value]
       oppReady.value = msg.ready[opp]
       oppLeft.value = !msg.present[opp]
-      stage.value = msg.present[opp] ? 'ready' : 'waiting'
+      stage.value = msg.present[opp] || stage.value === 'ready' ? 'ready' : 'waiting'
       break
     }
     case 'start':
@@ -415,6 +415,7 @@ function exitRoom() {
       :seat="seat"
       :my-ready="myReady"
       :opp-ready="oppReady"
+      :opp-left="oppLeft"
       @ready="sendReady"
     />
 
