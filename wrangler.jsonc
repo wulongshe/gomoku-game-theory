@@ -23,6 +23,10 @@
       {
         "name": "LOBBY",
         "class_name": "Lobby"
+      },
+      {
+        "name": "ACCOUNTS",
+        "class_name": "Accounts"
       }
     ]
   },
@@ -34,6 +38,13 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["Lobby"]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["Accounts"]
     }
-  ]
+  ],
+  "vars": {
+    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>"
+  }
 }

@@ -8,6 +8,9 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+export const PASSWORD_MIN_LENGTH = 8
+
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
   | { type: 'ready' }

@@ -2,13 +2,16 @@
 import { computed, ref } from 'vue'
 import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
+import IconUser from '~/components/icons/IconUser.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
+import { useAuth } from '~/composables/useAuth'
 import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import {
   FRAME_OPTIONS,
@@ -24,6 +27,11 @@ const matching = ref(false)
 const showRules = ref(false)
 const showInvite = ref(false)
 const showMatch = ref(false)
+const showAuth = ref(false)
+
+const { email: authEmail, loggedIn, refresh } = useAuth()
+refresh()
+const authLabel = computed(() => (loggedIn.value ? authEmail.value.split('@')[0] : '登录/注册'))
 let matched = false
 
 const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
@@ -100,6 +108,14 @@ function closeMatchDialog() {
   <main
     class="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
   >
+    <button
+      class="absolute left-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+      @click="showAuth = true"
+    >
+      <IconUser class="size-5" />
+      <span>{{ authLabel }}</span>
+    </button>
+
     <button
       class="absolute right-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
       @click="showRules = true"
@@ -179,6 +195,8 @@ function closeMatchDialog() {
     </div>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
+
+    <AuthDialog v-if="showAuth" @close="showAuth = false" />
 
     <GameConfigDialog
       v-if="showInvite"

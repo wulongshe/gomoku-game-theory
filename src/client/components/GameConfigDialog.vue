@@ -117,10 +117,8 @@ function frameLabel(option: number) {
     <p v-if="hint" class="text-center text-xs text-stone-400 dark:text-stone-500">{{ hint }}</p>
     <div class="flex">
       <DialogButton @click="emit('confirm')">
-        <span class="flex items-center justify-center gap-2">
-          <IconSpinner v-if="loading" class="size-4" />
-          <span>{{ confirmText }}</span>
-        </span>
+        <IconSpinner v-if="loading" class="size-4" />
+        {{ confirmText }}
       </DialogButton>
     </div>
   </AppDialog>

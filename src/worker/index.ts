@@ -1,14 +1,73 @@
 import { FRAME_SECONDS, type GameMode } from '@/engine/game'
-import { FRAME_OPTIONS, MODE_OPTIONS } from '@/shared/protocol'
+import { EMAIL_PATTERN, FRAME_OPTIONS, MODE_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
+import { sendVerificationEmail } from './email'
 import { parseMatchOptions } from './lobby'
 import { newRoomCode } from './roomCode'
 
 export { Room } from './room'
 export { Lobby } from './lobby'
+export { Accounts } from './accounts'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
 
+function authError(error: string, status: number): Response {
+  return Response.json({ error }, { status })
+}
+
+async function handleAuth(request: Request, env: Env, url: URL): Promise<Response> {
+  const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+  const action = url.pathname.slice('/api/auth/'.length)
+
+  if (action === 'me' && request.method === 'GET') {
+    const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
+    const email = token ? await accounts.me(token) : null
+    return email ? Response.json({ email }) : authError('unauthorized', 401)
+  }
+  if (request.method !== 'POST') return authError('not_found', 404)
+
+  if (action === 'logout') {
+    const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
+    if (token) await accounts.logout(token)
+    return new Response(null, { status: 204 })
+  }
+
+  const body = (await request.json().catch(() => null)) as Record<string, string> | null
+  const email = body?.email?.trim().toLowerCase() ?? ''
+  if (!EMAIL_PATTERN.test(email)) return authError('email_invalid', 400)
+
+  if (action === 'register') {
+    const result = await accounts.register(email)
+    if (!result.ok) {
+      return authError(result.error, result.error === 'cooldown' ? 429 : 409)
+    }
+    try {
+      await sendVerificationEmail(env, email, result.code)
+    } catch (err) {
+      console.error(err)
+      return authError('email_failed', 502)
+    }
+    return Response.json({ ok: true })
+  }
+  if (action === 'verify') {
+    if ((body?.password ?? '').length < PASSWORD_MIN_LENGTH) {
+      return authError('password_short', 400)
+    }
+    const result = await accounts.verify(email, body?.code ?? '', body!.password)
+    if (!result.ok) return authError(result.error, 400)
+    return Response.json({ token: result.token, email })
+  }
+  if (action === 'login') {
+    const result = await accounts.login(email, body?.password ?? '')
+    if (!result.ok) return authError(result.error, 401)
+    return Response.json({ token: result.token, email })
+  }
+  return authError('not_found', 404)
+}
+
 async function handle(request: Request, env: Env, url: URL): Promise<Response> {
+  if (url.pathname.startsWith('/api/auth/')) {
+    return handleAuth(request, env, url)
+  }
   if (url.pathname.startsWith('/api/')) {
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
