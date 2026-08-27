@@ -71,6 +71,15 @@ async function startGame(code: string): Promise<[Client, Client]> {
   return [a, b]
 }
 
+async function waitForEmpty(stub: DurableObjectStub): Promise<void> {
+  await vi.waitFor(async () => {
+    const sockets = await runInDurableObject(stub, (instance) =>
+      (instance as unknown as { ctx: DurableObjectState }).ctx.getWebSockets().length,
+    )
+    expect(sockets).toBe(0)
+  })
+}
+
 async function settledOnBoth(a: Client, b: Client) {
   const settled = await a.next('frame_settled')
   expect(await b.next('frame_settled')).toEqual(settled)
@@ -464,14 +473,69 @@ describe('Room', () => {
     await settledOnBoth(a2, b)
   })
 
-  it('cleans up an abandoned game at the next alarm', async () => {
+  it('keeps a briefly abandoned game alive and lets a player resume it', async () => {
     const [a, b] = await startGame('ROOM11')
     a.ws.close()
     b.ws.close()
-    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM11')))).toBe(true)
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM11'))
+    await waitForEmpty(stub)
+    expect(await runDurableObjectAlarm(stub)).toBe(true)
 
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM11')
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM11?token=token-a')
+    expect(await res.json()).toEqual({ exists: true, full: false })
+
+    const a2 = await connect('ROOM11', 'token-a')
+    expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
+    expect(await a2.next('start')).toMatchObject({ state: { frame: 1, phase: 'playing' } })
+  })
+
+  it('reaps an abandoned game once it has been empty past the idle TTL', async () => {
+    const [a, b] = await startGame('ROOM28')
+    a.ws.close()
+    b.ws.close()
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM28'))
+    await waitForEmpty(stub)
+    await runInDurableObject(stub, (_instance, state) =>
+      state.storage.put('emptySince', Date.now() - 11 * 60 * 1000),
+    )
+    expect(await runDurableObjectAlarm(stub)).toBe(true)
+
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM28')
     expect(await res.json()).toEqual({ exists: false, full: false })
+  })
+
+  it('restarts the frame timer when a player returns after the deadline lapsed unattended', async () => {
+    const [a, b] = await startGame('ROOM29')
+    a.ws.close()
+    b.ws.close()
+    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM29'))
+    await waitForEmpty(stub)
+    await runInDurableObject(stub, (_instance, state) =>
+      state.storage.put('deadline', Date.now() - 5000),
+    )
+
+    const a2 = await connect('ROOM29', 'token-a')
+    await a2.next('joined')
+    const start = await a2.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    expect(start.state.frame).toBe(1)
+    expect(start.deadline).toBeGreaterThan(Date.now())
+  })
+
+  it('answers a ping frame with pong without touching the message handler', async () => {
+    await createRoom('ROOM30')
+    const res = await SELF.fetch('https://example.com/api/rooms/ROOM30/ws?token=token-a', {
+      headers: { Upgrade: 'websocket' },
+    })
+    const ws = res.webSocket!
+    ws.accept()
+    const messages: string[] = []
+    ws.addEventListener('message', (event) => messages.push(event.data as string))
+    ws.send('ping')
+    await vi.waitFor(() => {
+      expect(messages).toContain('pong')
+    })
+    expect(messages.some((raw) => raw.includes('malformed'))).toBe(false)
   })
 })
 

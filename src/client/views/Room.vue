@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
+import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import AppDialog from '~/components/AppDialog.vue'
@@ -87,8 +87,19 @@ function forgetToken() {
 const now = useTimestamp({ interval: 250 })
 
 let replaced = false
-const { send, open } = useWebSocket(roomWsUrl(props.code, token.value, authToken.value || undefined), {
+let everOpened = false
+const {
+  send,
+  open,
+  status: wsStatus,
+} = useWebSocket(roomWsUrl(props.code, token.value, authToken.value || undefined), {
   immediate: false,
+  heartbeat: {
+    message: 'ping',
+    responseMessage: 'pong',
+    interval: 20_000,
+    pongTimeout: 10_000,
+  },
   autoReconnect: {
     retries: (retried) => retried < 5 && !replaced && !roomClosed.value,
     delay: 1000,
@@ -110,6 +121,18 @@ const { send, open } = useWebSocket(roomWsUrl(props.code, token.value, authToken
   },
 })
 
+function reopenIfDead() {
+  if (!everOpened || replaced || roomClosed.value || notFound.value || roomFull.value) return
+  if (wsStatus.value !== 'CLOSED') return
+  if (stage.value === 'error') stage.value = 'connecting'
+  open()
+}
+
+useEventListener(document, 'visibilitychange', () => {
+  if (document.visibilityState === 'visible') reopenIfDead()
+})
+useEventListener(window, 'online', reopenIfDead)
+
 onMounted(async () => {
   let status = { exists: true, full: false }
   try {
@@ -124,6 +147,7 @@ onMounted(async () => {
     roomFull.value = true
     stage.value = 'error'
   } else {
+    everOpened = true
     open()
   }
 })

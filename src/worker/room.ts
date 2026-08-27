@@ -33,6 +33,11 @@ interface RematchProposal {
 type RematchProposals = Partial<Record<Seat, RematchProposal>>
 
 export class Room extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'POST') {
@@ -112,6 +117,13 @@ export class Room extends DurableObject<Env> {
 
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
+      await this.ctx.storage.delete('emptySince')
+      if (game.phase === 'playing' && this.ctx.getWebSockets().length === 1) {
+        const stale = await this.ctx.storage.get<number>('deadline')
+        if (stale !== undefined && Date.now() >= stale) {
+          await this.scheduleFrame(game, await this.frameSeconds())
+        }
+      }
       const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
       const frameStart = await this.ctx.storage.get<number>('frameStart')
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
@@ -328,10 +340,17 @@ export class Room extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const game = await this.ctx.storage.get<GameState>('game')
     if (this.ctx.getWebSockets().length === 0) {
+      if (game && game.phase === 'playing') {
+        const emptySince = (await this.ctx.storage.get<number>('emptySince')) ?? Date.now()
+        if (Date.now() - emptySince < IDLE_TTL_MS) {
+          await this.ctx.storage.put('emptySince', emptySince)
+          return this.ctx.storage.setAlarm(emptySince + IDLE_TTL_MS)
+        }
+      }
       return this.close()
     }
-    const game = await this.ctx.storage.get<GameState>('game')
     if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
       return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     }
@@ -350,7 +369,8 @@ export class Room extends DurableObject<Env> {
     const game = await this.ctx.storage.get<GameState>('game')
     if (remaining.length === 0) {
       if (game && game.phase !== 'playing') await this.close()
-      else if (!game) await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      else if (game) await this.ctx.storage.put('emptySince', Date.now())
+      else await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     } else if (!game) {
       await this.broadcastLobby(ws)
     }
