@@ -15,6 +15,7 @@ import RulesDialog from '~/components/RulesDialog.vue'
 import IconCross from '~/components/icons/IconCross.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
+import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
 import { useCountdown } from '~/composables/useCountdown'
 import { MODE_LABELS } from '~/constants/branding'
@@ -421,10 +422,7 @@ function exitRoom() {
       <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
-            <span
-              class="inline-block size-3.5 rounded-full"
-              :class="seat === 'black' ? 'bg-stone-900 dark:ring-1 dark:ring-stone-400' : 'border border-stone-400 bg-white'"
-            />
+            <IconStone :seat="seat" class="size-3.5" />
             {{ seatLabel }}
             <template v-if="stage === 'over'">
               ·
@@ -596,7 +594,7 @@ function exitRoom() {
       @confirm="confirmRematch"
     />
 
-    <AppDialog v-if="confirmingExit" title="退出房间？" @close="confirmingExit = false">
+    <AppDialog v-if="confirmingExit" title="退出房间？" :closable="false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         {{
           stage === 'playing'
@@ -604,7 +602,8 @@ function exitRoom() {
             : '退出后房间将关闭。'
         }}
       </p>
-      <div class="flex">
+      <div class="flex gap-2">
+        <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
         <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
       </div>
     </AppDialog>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppButton from '~/components/AppButton.vue'
+import IconCheck from '~/components/icons/IconCheck.vue'
+import IconStone from '~/components/icons/IconStone.vue'
 import { frameLabel, MODE_LABELS } from '~/constants/branding'
 import type { GameMode, Seat } from '@/engine/game'
 
@@ -17,12 +19,12 @@ const emit = defineEmits<{ ready: [] }>()
 const players = computed(() => [
   {
     label: props.seat === 'black' ? '你执黑' : '你执白',
-    black: props.seat === 'black',
+    seat: props.seat,
     ready: props.myReady,
   },
   {
     label: props.seat === 'black' ? '对方执白' : '对方执黑',
-    black: props.seat !== 'black',
+    seat: props.seat === 'black' ? ('white' as const) : ('black' as const),
     ready: props.oppReady,
   },
 ])
@@ -46,17 +48,15 @@ const players = computed(() => [
           class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-3 dark:bg-stone-700/50"
         >
           <span class="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-200">
-            <span
-              class="inline-block size-3.5 rounded-full"
-              :class="player.black ? 'bg-stone-900 dark:ring-1 dark:ring-stone-400' : 'border border-stone-400 bg-white'"
-            />
+            <IconStone :seat="player.seat" class="size-3.5" />
             {{ player.label }}
           </span>
           <span
-            class="text-sm font-medium"
+            class="flex items-center gap-1 text-sm font-medium"
             :class="player.ready ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 dark:text-stone-500'"
           >
-            {{ player.ready ? '已准备 ✓' : '未准备' }}
+            <IconCheck class="size-3.5" :class="!player.ready && 'invisible'" />
+            {{ player.ready ? '已准备' : '未准备' }}
           </span>
         </div>
       </div>
