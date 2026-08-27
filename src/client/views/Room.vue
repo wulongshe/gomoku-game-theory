@@ -218,13 +218,27 @@ const urgency = computed(() => {
 })
 
 const oppStatus = computed(() => {
-  if (oppLeft.value) return { text: '对方已离开', dot: 'bg-red-500', cls: 'text-red-600' }
+  if (oppLeft.value)
+    return { text: '对方已离开', dot: 'bg-red-500', cls: 'text-red-600 dark:text-red-400' }
   if (stage.value === 'over')
-    return { text: `对局结束 · ${winnerLabel.value}`, dot: 'bg-stone-400', cls: 'text-stone-500' }
+    return {
+      text: `对局结束 · ${winnerLabel.value}`,
+      dot: 'bg-stone-400',
+      cls: 'text-stone-500 dark:text-stone-400',
+    }
   if (overdue.value)
-    return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500' }
-  if (oppSubmitted.value) return { text: '对方已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700' }
-  return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500' }
+    return {
+      text: '结算中…',
+      dot: 'animate-pulse bg-stone-400',
+      cls: 'text-stone-500 dark:text-stone-400',
+    }
+  if (oppSubmitted.value)
+    return {
+      text: '对方已提交',
+      dot: 'bg-emerald-500',
+      cls: 'text-emerald-700 dark:text-emerald-400',
+    }
+  return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
 })
 
 const modeLabel = computed(() => MODE_LABELS[mode.value])
@@ -247,9 +261,9 @@ const resultChar = computed(() => {
   return winnerSeat.value === seat.value ? '赢' : '输'
 })
 
-const resultCharCls = computed(() => {
-  if (!winnerSeat.value) return 'from-emerald-500 to-emerald-700'
-  return winnerSeat.value === seat.value ? 'from-amber-400 to-amber-600' : 'from-stone-400 to-stone-600'
+const resultColors = computed(() => {
+  if (!winnerSeat.value) return ['#10b981', '#047857']
+  return winnerSeat.value === seat.value ? ['#fbbf24', '#d97706'] : ['#a8a29e', '#57534e']
 })
 
 function sendChoice(point: Point, final: boolean) {
@@ -360,31 +374,31 @@ function exitRoom() {
 
 <template>
   <main
-    class="flex min-h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-4"
+    class="flex min-h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-4 dark:from-stone-900 dark:to-stone-950"
   >
     <template v-if="stage === 'connecting'">
       <div class="flex flex-1 flex-col items-center justify-center gap-3">
         <div class="flex gap-1.5">
-          <span class="size-2.5 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-stone-500" />
+          <span class="size-2.5 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-stone-500 dark:bg-stone-400" />
           <span
-            class="size-2.5 animate-[breathe_1.2s_ease-in-out_0.2s_infinite] rounded-full bg-stone-500"
+            class="size-2.5 animate-[breathe_1.2s_ease-in-out_0.2s_infinite] rounded-full bg-stone-500 dark:bg-stone-400"
           />
           <span
-            class="size-2.5 animate-[breathe_1.2s_ease-in-out_0.4s_infinite] rounded-full bg-stone-500"
+            class="size-2.5 animate-[breathe_1.2s_ease-in-out_0.4s_infinite] rounded-full bg-stone-500 dark:bg-stone-400"
           />
         </div>
-        <p class="text-stone-600">正在连接房间 {{ props.code }}…</p>
+        <p class="text-stone-600 dark:text-stone-300">正在连接房间 {{ props.code }}…</p>
       </div>
     </template>
 
     <template v-else-if="stage === 'waiting'">
       <div class="flex flex-1 flex-col items-center justify-center gap-5">
         <div
-          class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur"
+          class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
         >
-          <p class="text-sm text-stone-500">房间号</p>
-          <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
-          <p class="flex items-center gap-2 text-sm text-stone-500">
+          <p class="text-sm text-stone-500 dark:text-stone-400">房间号</p>
+          <p class="text-4xl font-bold tracking-[0.3em] text-stone-800 dark:text-stone-100">{{ props.code }}</p>
+          <p class="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
             <span
               class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400"
             />
@@ -398,7 +412,7 @@ function exitRoom() {
             :mode="mode"
             class="h-auto w-64 rounded-xl shadow-md"
           />
-          <p class="text-sm text-stone-500">对方扫码或打开链接即可开始</p>
+          <p class="text-sm text-stone-500 dark:text-stone-400">对方扫码或打开链接即可开始</p>
           <div class="flex w-full gap-2">
             <AppButton v-if="copySupported" class="flex-1" @click="copy(roomUrl)">
               {{ copied ? '已复制 ✓' : '复制链接' }}
@@ -407,7 +421,7 @@ function exitRoom() {
           </div>
           <p
             v-if="!copySupported"
-            class="max-w-full rounded-lg bg-stone-100 px-3 py-2 text-xs break-all text-stone-500 select-all"
+            class="max-w-full rounded-lg bg-stone-100 px-3 py-2 text-xs break-all text-stone-500 select-all dark:bg-stone-700/60 dark:text-stone-400"
           >
             {{ roomUrl }}
           </p>
@@ -418,13 +432,13 @@ function exitRoom() {
     <template v-else-if="stage === 'ready'">
       <div class="flex flex-1 flex-col items-center justify-center gap-5">
         <div
-          class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur"
+          class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
         >
-          <p class="text-sm text-stone-500">房间号</p>
-          <p class="text-4xl font-bold tracking-[0.3em] text-stone-800">{{ props.code }}</p>
-          <div class="flex items-center gap-2 text-xs text-stone-500">
-            <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameLabel(frameSeconds) }}</span>
-            <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ modeLabel }}模式</span>
+          <p class="text-sm text-stone-500 dark:text-stone-400">房间号</p>
+          <p class="text-4xl font-bold tracking-[0.3em] text-stone-800 dark:text-stone-100">{{ props.code }}</p>
+          <div class="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+            <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">每回合 {{ frameLabel(frameSeconds) }}</span>
+            <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">{{ modeLabel }}模式</span>
           </div>
           <div class="flex w-full flex-col gap-2">
             <div
@@ -433,18 +447,18 @@ function exitRoom() {
                 { label: oppSeatLabel, black: seat !== 'black', ready: oppReady },
               ]"
               :key="player.label"
-              class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-3"
+              class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-3 dark:bg-stone-700/50"
             >
-              <span class="flex items-center gap-2 text-sm font-medium text-stone-700">
+              <span class="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-200">
                 <span
                   class="inline-block size-3.5 rounded-full"
-                  :class="player.black ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
+                  :class="player.black ? 'bg-stone-900 dark:ring-1 dark:ring-stone-400' : 'border border-stone-400 bg-white'"
                 />
                 {{ player.label }}
               </span>
               <span
                 class="text-sm font-medium"
-                :class="player.ready ? 'text-emerald-600' : 'text-stone-400'"
+                :class="player.ready ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 dark:text-stone-500'"
               >
                 {{ player.ready ? '已准备 ✓' : '未准备' }}
               </span>
@@ -454,7 +468,7 @@ function exitRoom() {
             {{ myReady ? '已准备，等待对方…' : '准备' }}
           </AppButton>
         </div>
-        <p class="flex items-center gap-2 text-sm text-stone-500">
+        <p class="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
           <span class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full bg-amber-400" />
           {{ myReady ? '等待对方准备…' : '对方已加入，双方准备后开局' }}
         </p>
@@ -464,14 +478,14 @@ function exitRoom() {
     <template v-else-if="stage === 'playing' || stage === 'over'">
       <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
-          <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700">
+          <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
             <span
               class="inline-block size-3.5 rounded-full"
-              :class="seat === 'black' ? 'bg-stone-900' : 'border border-stone-400 bg-white'"
+              :class="seat === 'black' ? 'bg-stone-900 dark:ring-1 dark:ring-stone-400' : 'border border-stone-400 bg-white'"
             />
             {{ seatLabel }}
           </span>
-          <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500">
+          <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
             房间 {{ props.code }}
             <button
               class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
@@ -482,7 +496,7 @@ function exitRoom() {
             </button>
           </span>
           <button
-            class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700"
+            class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-200"
             @click="showRules = true"
           >
             <template v-if="modeLabel">{{ modeLabel }}模式</template>
@@ -495,24 +509,24 @@ function exitRoom() {
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
-          <span class="font-medium text-stone-700">第 {{ game?.frame }} 回合</span>
+          <span class="font-medium text-stone-700 dark:text-stone-200">第 {{ game?.frame }} 回合</span>
           <span
             class="justify-self-end text-base font-semibold tabular-nums"
             :class="{
-              'text-stone-600': urgency === 'calm',
-              'text-amber-600': urgency === 'warning',
-              'animate-pulse text-red-600': urgency === 'critical',
+              'text-stone-600 dark:text-stone-300': urgency === 'calm',
+              'text-amber-600 dark:text-amber-400': urgency === 'warning',
+              'animate-pulse text-red-600 dark:text-red-400': urgency === 'critical',
             }"
           >
             {{ frameSeconds === 0 ? `${elapsedSeconds}s/∞` : `${secondsLeft ?? 0}s/${frameSeconds}s` }}
           </span>
         </div>
 
-        <div v-if="frameSeconds > 0" class="h-1.5 overflow-hidden rounded-full bg-stone-300/70">
+        <div v-if="frameSeconds > 0" class="h-1.5 overflow-hidden rounded-full bg-stone-300/70 dark:bg-stone-700/70">
           <div
             class="h-full rounded-full transition-[width] duration-200 ease-linear"
             :class="{
-              'bg-stone-500': urgency === 'calm',
+              'bg-stone-500 dark:bg-stone-400': urgency === 'calm',
               'bg-amber-500': urgency === 'warning',
               'bg-red-500': urgency === 'critical',
             }"
@@ -538,13 +552,31 @@ function exitRoom() {
             aria-label="关闭结果浮层"
             @click="overlayDismissed = true"
           >
-            <span
-              class="animate-[stamp_0.4s_ease-out] bg-gradient-to-b bg-clip-text text-9xl font-black text-transparent drop-shadow-[0_6px_16px_rgba(28,25,23,0.45)] [font-family:STKaiti,KaiTi,'Noto_Serif_SC',serif]"
-              :class="resultCharCls"
+            <svg
+              viewBox="0 0 144 144"
+              class="w-36 animate-[stamp_0.4s_ease-out] drop-shadow-[0_6px_16px_rgba(28,25,23,0.45)]"
               :style="{ rotate: '-8deg' }"
+              aria-hidden="true"
             >
-              {{ resultChar }}
-            </span>
+              <defs>
+                <linearGradient id="result-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" :stop-color="resultColors[0]" />
+                  <stop offset="100%" :stop-color="resultColors[1]" />
+                </linearGradient>
+              </defs>
+              <text
+                x="72"
+                y="72"
+                text-anchor="middle"
+                dominant-baseline="central"
+                font-size="128"
+                font-weight="900"
+                fill="url(#result-grad)"
+                style="font-family: STKaiti, KaiTi, 'Noto Serif SC', serif"
+              >
+                {{ resultChar }}
+              </text>
+            </svg>
             <span class="mt-2 rounded-full bg-black/30 px-3 py-1 text-xs text-white">
               点击查看棋盘
             </span>
@@ -567,11 +599,11 @@ function exitRoom() {
                     : '点击棋盘选择落点'
             }}
           </AppButton>
-          <div class="flex min-h-4 items-center justify-between text-xs text-stone-400">
+          <div class="flex min-h-4 items-center justify-between text-xs text-stone-400 dark:text-stone-500">
             <label class="flex cursor-pointer items-center gap-2 select-none">
               <input v-model="autoSubmit" type="checkbox" class="peer sr-only" />
               <span
-                class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5"
+                class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5 dark:bg-stone-600 dark:peer-checked:bg-emerald-600"
               />
               落子自动提交
             </label>
@@ -594,8 +626,8 @@ function exitRoom() {
           >
             {{ rematchAsked ? '等待对方…' : '邀请对方再来一局' }}
           </AppButton>
-          <p v-else class="text-center text-sm text-stone-500">对方已退出，房间已关闭</p>
-          <p class="min-h-4 text-center text-xs text-stone-400">{{ overNotice }}</p>
+          <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
+          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">{{ overNotice }}</p>
         </template>
       </div>
     </template>
@@ -603,21 +635,21 @@ function exitRoom() {
     <template v-else>
       <div class="flex flex-1 flex-col items-center justify-center gap-4">
         <template v-if="game">
-          <p class="text-stone-600">连接已断开</p>
+          <p class="text-stone-600 dark:text-stone-300">连接已断开</p>
           <AppButton @click="reload">重新连接</AppButton>
         </template>
         <template v-else>
           <div
-            class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 text-center shadow-sm backdrop-blur"
+            class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 text-center shadow-sm backdrop-blur dark:bg-stone-800/80"
           >
-            <span class="flex size-14 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <span class="flex size-14 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-500/15 dark:text-red-400">
               <IconCross class="size-6" />
             </span>
             <div class="flex flex-col gap-1">
-              <p class="text-lg font-semibold text-stone-800">{{ errorInfo.title }}</p>
-              <p class="text-sm text-stone-500">{{ errorInfo.desc }}</p>
+              <p class="text-lg font-semibold text-stone-800 dark:text-stone-100">{{ errorInfo.title }}</p>
+              <p class="text-sm text-stone-500 dark:text-stone-400">{{ errorInfo.desc }}</p>
             </div>
-            <p class="rounded-full bg-stone-100 px-4 py-1 text-sm tracking-[0.2em] text-stone-400">
+            <p class="rounded-full bg-stone-100 px-4 py-1 text-sm tracking-[0.2em] text-stone-400 dark:bg-stone-700/60 dark:text-stone-500">
               {{ props.code }}
             </p>
             <a class="w-full" href="/">
@@ -635,22 +667,22 @@ function exitRoom() {
       class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
       @click.self="declineRematch"
     >
-      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
-        <p class="text-base font-semibold text-stone-800">对方想再来一局</p>
-        <p v-if="rematchProposal" class="flex items-center gap-2 text-sm text-stone-600">
-          <span class="rounded-full bg-stone-100 px-2.5 py-1">每回合 {{ frameLabel(rematchProposal.frameSeconds) }}</span>
-          <span class="rounded-full bg-stone-100 px-2.5 py-1">{{ MODE_LABELS[rematchProposal.mode] }}模式</span>
+      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg dark:bg-stone-800">
+        <p class="text-base font-semibold text-stone-800 dark:text-stone-100">对方想再来一局</p>
+        <p v-if="rematchProposal" class="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
+          <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">每回合 {{ frameLabel(rematchProposal.frameSeconds) }}</span>
+          <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">{{ MODE_LABELS[rematchProposal.mode] }}模式</span>
         </p>
-        <p class="text-sm text-stone-500">{{ inviteSecondsLeft }} 秒后自动关闭</p>
+        <p class="text-sm text-stone-500 dark:text-stone-400">{{ inviteSecondsLeft }} 秒后自动关闭</p>
         <div class="flex gap-2">
           <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300"
+            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:active:bg-stone-600"
             @click="declineRematch"
           >
             拒绝
           </button>
           <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600"
+            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
             @click="acceptRematch"
           >
             接受
@@ -664,17 +696,17 @@ function exitRoom() {
       class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
       @click.self="rematchConfig = false"
     >
-      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
-        <p class="text-base font-semibold text-stone-800">再来一局</p>
+      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg dark:bg-stone-800">
+        <p class="text-base font-semibold text-stone-800 dark:text-stone-100">再来一局</p>
         <div class="flex flex-col gap-3 text-sm">
           <div class="flex flex-col gap-2">
-            <span class="text-center text-stone-500">每回合</span>
-            <div class="flex rounded-lg bg-stone-200 p-0.5">
+            <span class="text-center text-stone-500 dark:text-stone-400">每回合</span>
+            <div class="flex rounded-lg bg-stone-200 p-0.5 dark:bg-stone-700">
               <button
                 v-for="option in FRAME_OPTIONS"
                 :key="option"
                 class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-                :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+                :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
                 @click="rematchFrame = option"
               >
                 {{ option ? `${option}s` : '不限' }}
@@ -682,13 +714,13 @@ function exitRoom() {
             </div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="text-center text-stone-500">撞点后</span>
-            <div class="flex rounded-lg bg-stone-200 p-0.5">
+            <span class="text-center text-stone-500 dark:text-stone-400">撞点后</span>
+            <div class="flex rounded-lg bg-stone-200 p-0.5 dark:bg-stone-700">
               <button
                 v-for="option in MODE_OPTIONS"
                 :key="option"
                 class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-                :class="rematchMode === option ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'"
+                :class="rematchMode === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
                 @click="rematchMode = option"
               >
                 {{ MODE_LABELS[option] }}
@@ -698,13 +730,13 @@ function exitRoom() {
         </div>
         <div class="flex gap-2">
           <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300"
+            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:active:bg-stone-600"
             @click="rematchConfig = false"
           >
             取消
           </button>
           <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600"
+            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
             @click="confirmRematch"
           >
             发起邀请
@@ -718,9 +750,9 @@ function exitRoom() {
       class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
       @click.self="confirmingExit = false"
     >
-      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg">
-        <p class="text-base font-semibold text-stone-800">退出房间？</p>
-        <p class="text-sm text-stone-500">
+      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg dark:bg-stone-800">
+        <p class="text-base font-semibold text-stone-800 dark:text-stone-100">退出房间？</p>
+        <p class="text-sm text-stone-500 dark:text-stone-400">
           {{
             stage === 'playing'
               ? '退出即认输，判对方获胜，房间将关闭。'
@@ -729,7 +761,7 @@ function exitRoom() {
         </p>
         <div class="flex gap-2">
           <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300"
+            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:active:bg-stone-600"
             @click="confirmingExit = false"
           >
             取消

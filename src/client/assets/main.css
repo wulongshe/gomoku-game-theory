@@ -6,6 +6,10 @@
   --color-line: #7c5a33;
 }
 
+:root {
+  color-scheme: light dark;
+}
+
 @keyframes stone-drop {
   from {
     transform: scale(1.5);
