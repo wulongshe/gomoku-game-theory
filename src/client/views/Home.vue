@@ -123,7 +123,7 @@ function toggleMatch() {
       class="absolute right-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
       @click="showRules = true"
     >
-      <IconHelp class="size-5 translate-y-[1.5px]" />
+      <IconHelp class="size-5" />
       <span>游戏规则</span>
     </button>
 

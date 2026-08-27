@@ -503,7 +503,7 @@ function exitRoom() {
             @click="showRules = true"
           >
             <template v-if="modeLabel">{{ modeLabel }}模式</template>
-            <IconHelp class="size-4 translate-y-px" />
+            <IconHelp class="size-4" />
           </button>
         </div>
 
