@@ -48,6 +48,7 @@ const rematchConfig = ref(false)
 const rematchFrame = ref(FRAME_SECONDS)
 const rematchMode = ref<GameMode>('forbidden')
 const rematchProposal = ref<{ frameSeconds: number; mode: GameMode } | null>(null)
+const rematchDeadline = ref<number | null>(null)
 const oppLeft = ref(false)
 const rematchInvite = ref(false)
 const inviteDeadline = ref<number | null>(null)
@@ -126,6 +127,7 @@ function handleMessage(msg: ServerMessage) {
       rematchConfig.value = false
       rematchInvite.value = false
       rematchProposal.value = null
+      rematchDeadline.value = null
       inviteDeadline.value = null
       stage.value = 'waiting'
       break
@@ -149,6 +151,7 @@ function handleMessage(msg: ServerMessage) {
       vanishing.value = []
       rematchAsked.value = false
       rematchInvite.value = false
+      rematchDeadline.value = null
       inviteDeadline.value = null
       overNotice.value = ''
       overlayDismissed.value = false
@@ -179,11 +182,13 @@ function handleMessage(msg: ServerMessage) {
     case 'rematch_requested':
       rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
       rematchAsked.value = false
+      rematchDeadline.value = null
       rematchInvite.value = true
       inviteDeadline.value = Date.now() + 30_000
       break
     case 'rematch_declined':
       rematchAsked.value = false
+      rematchDeadline.value = null
       overNotice.value = '对方拒绝了再来一局'
       break
     case 'error':
@@ -306,14 +311,24 @@ function openRematchConfig() {
 function sendRematch(frameSeconds: number, mode: GameMode) {
   send(JSON.stringify({ type: 'rematch', frameSeconds, mode } satisfies ClientMessage))
   rematchAsked.value = true
+  rematchDeadline.value = Date.now() + 30_000
 }
+
+const rematchSecondsLeft = useCountdown(rematchDeadline, 30)
+
+watch(rematchSecondsLeft, (s) => {
+  if (s === 0) {
+    rematchDeadline.value = null
+    rematchAsked.value = false
+  }
+})
 
 function confirmRematch() {
   rematchConfig.value = false
   sendRematch(rematchFrame.value, rematchMode.value)
 }
 
-const inviteSecondsLeft = useCountdown(inviteDeadline)
+const inviteSecondsLeft = useCountdown(inviteDeadline, 30)
 
 watch(inviteSecondsLeft, (s) => {
   if (s === 0) declineRematch()
@@ -336,7 +351,7 @@ function declineRematch() {
 
 const homeDeadline = ref<number | null>(null)
 
-const homeSecondsLeft = useCountdown(homeDeadline)
+const homeSecondsLeft = useCountdown(homeDeadline, 5)
 
 watch(homeSecondsLeft, (s) => {
   if (s === 0) location.assign('/')
@@ -521,7 +536,7 @@ function exitRoom() {
             :disabled="rematchAsked"
             @click="openRematchConfig"
           >
-            {{ rematchAsked ? '等待对方…' : '邀请对方再来一局' }}
+            {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
           </AppButton>
           <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
           <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">{{ overNotice }}</p>
@@ -577,7 +592,7 @@ function exitRoom() {
       @confirm="confirmRematch"
     />
 
-    <AppDialog v-if="confirmingExit" title="退出房间？" @dismiss="confirmingExit = false">
+    <AppDialog v-if="confirmingExit" title="退出房间？" @close="confirmingExit = false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         {{
           stage === 'playing'
@@ -585,8 +600,7 @@ function exitRoom() {
             : '退出后房间将关闭。'
         }}
       </p>
-      <div class="flex gap-2">
-        <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
+      <div class="flex">
         <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
       </div>
     </AppDialog>

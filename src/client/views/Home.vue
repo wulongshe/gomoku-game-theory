@@ -48,6 +48,7 @@ if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTION
 if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 async function create() {
+  if (creating.value) return
   creating.value = true
   try {
     location.assign(`/room/${await createRoom(inviteFrame.value, inviteMode.value)}`)
@@ -177,6 +178,7 @@ function closeMatchDialog() {
       title="邀请好友"
       :confirm-text="creating ? '邀请中…' : '发起邀请'"
       :loading="creating"
+      :disabled="creating"
       @cancel="showInvite = false"
       @confirm="create"
     />
@@ -188,7 +190,8 @@ function closeMatchDialog() {
       multi
       title="随机匹配"
       hint="按双方选项的交集撮合"
-      :confirm-text="matching ? `匹配中…${matchSeconds}s` : '开始匹配'"
+      :confirm-text="matching ? `匹配中…${matchSeconds}s，点击取消` : '开始匹配'"
+      :loading="matching"
       :disabled="matching"
       @cancel="closeMatchDialog"
       @confirm="toggleMatch"
