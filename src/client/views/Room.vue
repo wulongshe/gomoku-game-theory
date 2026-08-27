@@ -24,6 +24,7 @@ import { roomStatus, roomWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { MODE_LABELS } from '~/constants/branding'
+import { ROOM_TOKEN_PREFIX } from '~/constants/storage'
 import {
   FRAME_SECONDS,
   isLegalChoice,
@@ -77,11 +78,11 @@ const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
 
-const token = useStorage(`room-token:${props.code}`, nanoid())
+const token = useStorage(`${ROOM_TOKEN_PREFIX}${props.code}`, nanoid())
 const { token: authToken } = useAuth()
 
 function forgetToken() {
-  localStorage.removeItem(`room-token:${props.code}`)
+  localStorage.removeItem(`${ROOM_TOKEN_PREFIX}${props.code}`)
 }
 const now = useTimestamp({ interval: 250 })
 
