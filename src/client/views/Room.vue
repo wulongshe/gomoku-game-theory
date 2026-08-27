@@ -179,6 +179,10 @@ function handleMessage(msg: ServerMessage) {
     case 'opponent_returned':
       oppLeft.value = false
       break
+    case 'room_closed':
+      roomClosed.value = true
+      forgetToken()
+      break
     case 'rematch_requested':
       rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
       rematchAsked.value = false

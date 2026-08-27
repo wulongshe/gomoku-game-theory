@@ -396,6 +396,7 @@ describe('Room', () => {
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
     expect(settled.state.phase).toBe('white_won')
     expect(settled.deadline).toBeNull()
+    expect(await b.next('room_closed')).toEqual({ type: 'room_closed' })
 
     const stub = env.ROOM.get(env.ROOM.idFromName('ROOM16'))
     await vi.waitFor(async () => {

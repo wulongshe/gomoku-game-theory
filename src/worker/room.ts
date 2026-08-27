@@ -187,7 +187,7 @@ export class Room extends DurableObject<Env> {
     const { seat } = ws.deserializeAttachment() as Attachment
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
-      return this.handleLeave(seat, game)
+      return this.handleLeave(ws, seat, game)
     }
     if (msg.type === 'ready') {
       if (game) return
@@ -244,7 +244,11 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async handleLeave(seat: Seat, game: GameState | undefined): Promise<void> {
+  private async handleLeave(
+    ws: WebSocket,
+    seat: Seat,
+    game: GameState | undefined,
+  ): Promise<void> {
     if (game && game.phase === 'playing') {
       const resigned: GameState = {
         ...game,
@@ -252,9 +256,14 @@ export class Room extends DurableObject<Env> {
         cleared: [],
       }
       this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now() })
-    }
-    for (const socket of this.ctx.getWebSockets()) {
-      socket.close(1000, 'room closed')
+      for (const socket of this.ctx.getWebSockets()) {
+        if (socket === ws) socket.close(1000, 'room closed')
+        else this.send(socket, { type: 'room_closed' })
+      }
+    } else {
+      for (const socket of this.ctx.getWebSockets()) {
+        socket.close(1000, 'room closed')
+      }
     }
     await this.close()
   }
@@ -304,6 +313,7 @@ export class Room extends DurableObject<Env> {
   async webSocketClose(ws: WebSocket): Promise<void> {
     const attachment = ws.deserializeAttachment() as Attachment
     if (attachment.replaced) return
+    if (!(await this.ctx.storage.get<boolean>('created'))) return
     const remaining = this.ctx.getWebSockets().filter((other) => other !== ws)
     for (const other of remaining) {
       this.send(other, { type: 'opponent_left' })

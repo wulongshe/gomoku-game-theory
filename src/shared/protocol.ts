@@ -34,6 +34,7 @@ export type ServerMessage =
   | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
+  | { type: 'room_closed' }
   | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
