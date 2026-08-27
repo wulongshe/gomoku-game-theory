@@ -221,11 +221,7 @@ const oppStatus = computed(() => {
   if (oppLeft.value)
     return { text: '对方已离开', dot: 'bg-red-500', cls: 'text-red-600 dark:text-red-400' }
   if (stage.value === 'over')
-    return {
-      text: `对局结束 · ${winnerLabel.value}`,
-      dot: 'bg-stone-400',
-      cls: 'text-stone-500 dark:text-stone-400',
-    }
+    return { text: '对局结束', dot: 'bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
   if (overdue.value)
     return {
       text: '结算中…',
@@ -238,7 +234,7 @@ const oppStatus = computed(() => {
       dot: 'bg-emerald-500',
       cls: 'text-emerald-700 dark:text-emerald-400',
     }
-  return { text: '对方思考中…', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
+  return { text: '对方思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
 })
 
 const modeLabel = computed(() => MODE_LABELS[mode.value])
@@ -252,10 +248,6 @@ const winnerSeat = computed<Seat | null>(() => {
   return null
 })
 
-const winnerLabel = computed(() =>
-  winnerSeat.value ? (winnerSeat.value === 'black' ? '黑方获胜' : '白方获胜') : '和棋',
-)
-
 const resultChar = computed(() => {
   if (!winnerSeat.value) return '和'
   return winnerSeat.value === seat.value ? '赢' : '输'
@@ -264,6 +256,13 @@ const resultChar = computed(() => {
 const resultColors = computed(() => {
   if (!winnerSeat.value) return ['#10b981', '#047857']
   return winnerSeat.value === seat.value ? ['#fbbf24', '#d97706'] : ['#a8a29e', '#57534e']
+})
+
+const resultTextCls = computed(() => {
+  if (!winnerSeat.value) return 'text-emerald-600 dark:text-emerald-400'
+  return winnerSeat.value === seat.value
+    ? 'text-amber-500 dark:text-amber-400'
+    : 'text-stone-400 dark:text-stone-500'
 })
 
 function sendChoice(point: Point, final: boolean) {
@@ -484,6 +483,10 @@ function exitRoom() {
               :class="seat === 'black' ? 'bg-stone-900 dark:ring-1 dark:ring-stone-400' : 'border border-stone-400 bg-white'"
             />
             {{ seatLabel }}
+            <template v-if="stage === 'over'">
+              ·
+              <span class="font-semibold" :class="resultTextCls">{{ resultChar }}</span>
+            </template>
           </span>
           <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
             房间 {{ props.code }}
@@ -505,11 +508,11 @@ function exitRoom() {
         </div>
 
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
-          <span class="flex items-center gap-1.5 justify-self-start" :class="oppStatus.cls">
+          <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game?.frame }} 回合</span>
+          <span class="flex items-center gap-1.5" :class="oppStatus.cls">
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
-          <span class="font-medium text-stone-700 dark:text-stone-200">第 {{ game?.frame }} 回合</span>
           <span
             class="justify-self-end text-base font-semibold tabular-nums"
             :class="{
