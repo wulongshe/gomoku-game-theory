@@ -2,15 +2,14 @@
 import { computed, ref } from 'vue'
 import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
-import IconCheck from '~/components/icons/IconCheck.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
-import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
-import { MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import {
   FRAME_OPTIONS,
   MODE_OPTIONS,
@@ -23,21 +22,14 @@ import type { GameMode } from '@/engine/game'
 const creating = ref(false)
 const matching = ref(false)
 const showRules = ref(false)
-const showCreateHint = ref(false)
+const showInvite = ref(false)
+const showMatch = ref(false)
 let matched = false
 
 const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
 const modeChoices = useStorage<GameMode[]>('mode-choices', [...MODE_OPTIONS])
 modeChoices.value = modeChoices.value.filter((m) => MODE_OPTIONS.includes(m))
 if (!modeChoices.value.length) modeChoices.value = [...MODE_OPTIONS]
-
-function toggled<T>(current: T[], options: T[], option: T): T[] {
-  const next = current.includes(option)
-    ? current.filter((o) => o !== option)
-    : options.filter((o) => current.includes(o) || o === option)
-  return next.length ? next : current
-}
-
 
 const joinCode = ref('')
 const joinCodeValid = computed(() => ROOM_CODE_PATTERN.test(joinCode.value))
@@ -50,14 +42,15 @@ const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
 const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchStart.value) / 1000)))
 
+const inviteFrame = useStorage('invite-frame', FRAME_OPTIONS[0])
+const inviteMode = useStorage<GameMode>('invite-mode', MODE_OPTIONS[0])
+if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
+if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
+
 async function create() {
-  if (frameChoices.value.length > 1 || modeChoices.value.length > 1) {
-    showCreateHint.value = true
-    return
-  }
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom(frameChoices.value[0], modeChoices.value[0])}`)
+    location.assign(`/room/${await createRoom(inviteFrame.value, inviteMode.value)}`)
   } catch {
     creating.value = false
   }
@@ -90,6 +83,14 @@ function toggleMatch() {
     matchStart.value = Date.now()
     openMatch()
   }
+}
+
+function closeMatchDialog() {
+  if (matching.value) {
+    closeMatch()
+    matching.value = false
+  }
+  showMatch.value = false
 }
 
 </script>
@@ -151,62 +152,8 @@ function toggleMatch() {
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-1 text-sm">
-        <div class="flex flex-col items-center gap-1.5">
-          <span class="text-stone-500 dark:text-stone-400">每回合</span>
-          <div class="flex gap-1.5">
-            <button
-              v-for="option in FRAME_OPTIONS"
-              :key="option"
-              class="inline-flex h-7 min-w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 pb-px font-medium leading-none transition-colors"
-              :class="frameChoices.includes(option) ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-700 dark:text-stone-100' : 'bg-stone-300/60 text-stone-500 dark:bg-stone-800/60 dark:text-stone-400'"
-              :disabled="matching"
-              @click="frameChoices = toggled(frameChoices, FRAME_OPTIONS, option)"
-            >
-              <span
-                class="flex size-3.5 items-center justify-center rounded-sm border transition-colors"
-                :class="frameChoices.includes(option) ? 'border-emerald-600 bg-emerald-600' : 'border-stone-400 dark:border-stone-500'"
-              >
-                <IconCheck v-if="frameChoices.includes(option)" class="size-2.5 text-white" />
-              </span>
-              {{ option ? `${option}s` : '不限' }}
-            </button>
-          </div>
-        </div>
-        <div class="flex flex-col items-center gap-1.5">
-          <span class="text-stone-500 dark:text-stone-400">撞点后</span>
-          <div class="flex gap-1.5">
-            <button
-              v-for="option in MODE_OPTIONS"
-              :key="option"
-              class="inline-flex h-7 w-16 cursor-pointer items-center justify-center gap-1.5 rounded-md pb-px font-medium leading-none transition-colors"
-              :class="modeChoices.includes(option) ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-700 dark:text-stone-100' : 'bg-stone-300/60 text-stone-500 dark:bg-stone-800/60 dark:text-stone-400'"
-              :disabled="matching"
-              @click="modeChoices = toggled(modeChoices, MODE_OPTIONS, option)"
-            >
-              <span
-                class="flex size-3.5 items-center justify-center rounded-sm border transition-colors"
-                :class="modeChoices.includes(option) ? 'border-emerald-600 bg-emerald-600' : 'border-stone-400 dark:border-stone-500'"
-              >
-                <IconCheck v-if="modeChoices.includes(option)" class="size-2.5 text-white" />
-              </span>
-              {{ MODE_LABELS[option] }}
-            </button>
-          </div>
-        </div>
-      </div>
-      <AppButton secondary class="w-full" :disabled="creating" @click="toggleMatch">
-        <span class="flex items-center justify-center gap-2">
-          <IconSpinner v-if="matching" class="size-5" />
-          <span>{{ matching ? `匹配中…${matchSeconds}s，点击取消` : '随机匹配' }}</span>
-        </span>
-      </AppButton>
-      <AppButton class="w-full" :disabled="creating || matching" @click="create">
-        <span class="flex items-center justify-center gap-2">
-          <IconSpinner v-if="creating" class="size-5" />
-          <span>{{ creating ? '创建中…' : '创建房间' }}</span>
-        </span>
-      </AppButton>
+      <AppButton secondary class="w-full" @click="showMatch = true">随机匹配</AppButton>
+      <AppButton class="w-full" @click="showInvite = true">邀请好友</AppButton>
       <div class="flex w-full gap-2">
         <input
           v-model="joinCode"
@@ -216,25 +163,35 @@ function toggleMatch() {
           @input="joinCode = joinCode.toUpperCase()"
           @keyup.enter="join"
         />
-        <AppButton :disabled="!joinCodeValid || creating || matching" @click="join">进入</AppButton>
+        <AppButton :disabled="!joinCodeValid" @click="join">进入</AppButton>
       </div>
       <p class="text-xs text-stone-400 dark:text-stone-500">免下载 · 免注册，10 秒开局</p>
     </div>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
 
-    <div
-      v-if="showCreateHint"
-      class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
-      @click.self="showCreateHint = false"
-    >
-      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg dark:bg-stone-800">
-        <p class="text-lg font-semibold text-stone-800 dark:text-stone-100">无法创建房间</p>
-        <p class="text-sm text-stone-500 dark:text-stone-400">
-          创建房间需要确定的设置，请在「每回合」和「撞点后」中各保留一个选项。
-        </p>
-        <AppButton class="w-full" @click="showCreateHint = false">知道了</AppButton>
-      </div>
-    </div>
+    <GameConfigDialog
+      v-if="showInvite"
+      v-model:frame="inviteFrame"
+      v-model:mode="inviteMode"
+      title="邀请好友"
+      :confirm-text="creating ? '邀请中…' : '发起邀请'"
+      :loading="creating"
+      @cancel="showInvite = false"
+      @confirm="create"
+    />
+
+    <GameConfigDialog
+      v-if="showMatch"
+      v-model:frames="frameChoices"
+      v-model:modes="modeChoices"
+      multi
+      title="随机匹配"
+      hint="按双方选项的交集撮合"
+      :confirm-text="matching ? `匹配中…${matchSeconds}s` : '开始匹配'"
+      :disabled="matching"
+      @cancel="closeMatchDialog"
+      @confirm="toggleMatch"
+    />
   </main>
 </template>

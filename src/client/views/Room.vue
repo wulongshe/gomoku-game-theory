@@ -4,6 +4,7 @@ import { useClipboard, useStorage, useTimestamp, useWebSocket } from '@vueuse/co
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import Board from '~/components/Board.vue'
+import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import IconCross from '~/components/icons/IconCross.vue'
@@ -20,12 +21,7 @@ import {
   type Point,
   type Seat,
 } from '@/engine/game'
-import {
-  FRAME_OPTIONS,
-  MODE_OPTIONS,
-  type ClientMessage,
-  type ServerMessage,
-} from '@/shared/protocol'
+import { type ClientMessage, type ServerMessage } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
@@ -694,59 +690,15 @@ function exitRoom() {
       </div>
     </div>
 
-    <div
+    <GameConfigDialog
       v-if="rematchConfig"
-      class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
-      @click.self="rematchConfig = false"
-    >
-      <div class="flex w-full max-w-xs flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg dark:bg-stone-800">
-        <p class="text-base font-semibold text-stone-800 dark:text-stone-100">再来一局</p>
-        <div class="flex flex-col gap-3 text-sm">
-          <div class="flex flex-col gap-2">
-            <span class="text-center text-stone-500 dark:text-stone-400">每回合</span>
-            <div class="flex rounded-lg bg-stone-200 p-0.5 dark:bg-stone-700">
-              <button
-                v-for="option in FRAME_OPTIONS"
-                :key="option"
-                class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-                :class="rematchFrame === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
-                @click="rematchFrame = option"
-              >
-                {{ option ? `${option}s` : '不限' }}
-              </button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <span class="text-center text-stone-500 dark:text-stone-400">撞点后</span>
-            <div class="flex rounded-lg bg-stone-200 p-0.5 dark:bg-stone-700">
-              <button
-                v-for="option in MODE_OPTIONS"
-                :key="option"
-                class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-                :class="rematchMode === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
-                @click="rematchMode = option"
-              >
-                {{ MODE_LABELS[option] }}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-200 px-4 py-2.5 font-medium text-stone-700 active:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:active:bg-stone-600"
-            @click="rematchConfig = false"
-          >
-            取消
-          </button>
-          <button
-            class="flex-1 cursor-pointer rounded-xl bg-stone-800 px-4 py-2.5 font-medium text-white active:bg-stone-600 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
-            @click="confirmRematch"
-          >
-            发起邀请
-          </button>
-        </div>
-      </div>
-    </div>
+      v-model:frame="rematchFrame"
+      v-model:mode="rematchMode"
+      title="再来一局"
+      confirm-text="发起邀请"
+      @cancel="rematchConfig = false"
+      @confirm="confirmRematch"
+    />
 
     <div
       v-if="confirmingExit"
