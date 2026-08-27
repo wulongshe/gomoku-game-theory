@@ -12,14 +12,14 @@ export interface RoomStatus {
   full: boolean
 }
 
-export async function roomStatus(code: string, token: string): Promise<RoomStatus> {
-  const res = await fetch(`/api/rooms/${code}?token=${token}`)
+export async function roomStatus(code: string, token: string, auth?: string): Promise<RoomStatus> {
+  const res = await fetch(`/api/rooms/${code}?token=${token}${auth ? `&auth=${auth}` : ''}`)
   if (!res.ok) throw new Error(`roomStatus failed: ${res.status}`)
   return (await res.json()) as RoomStatus
 }
 
-export function roomWsUrl(code: string, token: string): string {
-  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}`
+export function roomWsUrl(code: string, token: string, auth?: string): string {
+  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}${auth ? `&auth=${auth}` : ''}`
 }
 
 export function matchWsUrl(frames: number[], modes: GameMode[]): string {

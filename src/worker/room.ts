@@ -44,9 +44,15 @@ export class Room extends DurableObject<Env> {
     const created = (await this.ctx.storage.get<boolean>('created')) ?? false
     if (!url.pathname.endsWith('/ws')) {
       const players = (await this.ctx.storage.get<Players>('players')) ?? {}
+      const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
       const token = url.searchParams.get('token')
+      const email = await this.accountEmail(url.searchParams.get('auth'))
       const hasSeat =
-        !players.black || !players.white || token === players.black || token === players.white
+        !players.black ||
+        !players.white ||
+        token === players.black ||
+        token === players.white ||
+        (email !== null && (accounts.black === email || accounts.white === email))
       return Response.json({ exists: created, full: !hasSeat })
     }
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -61,9 +67,13 @@ export class Room extends DurableObject<Env> {
     }
 
     const players = (await this.ctx.storage.get<Players>('players')) ?? {}
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    const email = await this.accountEmail(url.searchParams.get('auth'))
     let seat: Seat
     if (players.black === token) seat = 'black'
     else if (players.white === token) seat = 'white'
+    else if (email !== null && accounts.black === email) seat = 'black'
+    else if (email !== null && accounts.white === email) seat = 'white'
     else if (!players.black) seat = 'black'
     else if (!players.white) seat = 'white'
     else return new Response('Room is full', { status: 409 })
@@ -71,6 +81,10 @@ export class Room extends DurableObject<Env> {
     if (players[seat] !== token) {
       players[seat] = token
       await this.ctx.storage.put('players', players)
+    }
+    if (email !== null && accounts[seat] !== email) {
+      accounts[seat] = email
+      await this.ctx.storage.put('accounts', accounts)
     }
 
     for (const other of this.ctx.getWebSockets()) {
@@ -119,6 +133,15 @@ export class Room extends DurableObject<Env> {
     }
 
     return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  private async accountEmail(auth: string | null): Promise<string | null> {
+    if (!auth) return null
+    try {
+      return await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).me(auth)
+    } catch {
+      return null
+    }
   }
 
   private async broadcastLobby(exclude?: WebSocket): Promise<void> {

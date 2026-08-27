@@ -20,10 +20,11 @@ async function createRoom(code: string, frame?: number, mode?: string): Promise<
   })
 }
 
-async function connect(code: string, token: string): Promise<Client> {
-  const res = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?token=${token}`, {
-    headers: { Upgrade: 'websocket' },
-  })
+async function connect(code: string, token: string, auth?: string): Promise<Client> {
+  const res = await SELF.fetch(
+    `https://example.com/api/rooms/${code}/ws?token=${token}${auth ? `&auth=${auth}` : ''}`,
+    { headers: { Upgrade: 'websocket' } },
+  )
   expect(res.status).toBe(101)
   const ws = res.webSocket!
   ws.accept()
@@ -471,5 +472,59 @@ describe('Room', () => {
 
     const res = await SELF.fetch('https://example.com/api/rooms/ROOM11')
     expect(await res.json()).toEqual({ exists: false, full: false })
+  })
+})
+
+describe('account seat recovery', () => {
+  async function sessionFor(email: string): Promise<string> {
+    const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    const registered = await stub.register(email)
+    if (!registered.ok) throw new Error(registered.error)
+    const verified = await stub.verify(email, registered.code, 'secret123')
+    if (!verified.ok) throw new Error(verified.error)
+    return verified.token
+  }
+
+  it('reclaims the seat from a new device via the login session', async () => {
+    await createRoom('ACCT01')
+    const session = await sessionFor('seat@example.com')
+    const a = await connect('ACCT01', 'device-1', session)
+    expect(await a.next('joined')).toMatchObject({ seat: 'black' })
+    const b = await connect('ACCT01', 'token-b')
+    expect(await b.next('joined')).toMatchObject({ seat: 'white' })
+
+    const closed = new Promise<{ reason: string }>((resolve) =>
+      a.ws.addEventListener('close', resolve),
+    )
+    const a2 = await connect('ACCT01', 'device-2', session)
+    expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
+    expect((await closed).reason).toBe('replaced by reconnect')
+  })
+
+  it('rejects a stranger token while the account still gets in', async () => {
+    await createRoom('ACCT02')
+    const session = await sessionFor('seat2@example.com')
+    ;(await connect('ACCT02', 'device-1', session)).ready()
+    ;(await connect('ACCT02', 'token-b')).ready()
+
+    const stranger = await SELF.fetch('https://example.com/api/rooms/ACCT02/ws?token=stranger', {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(stranger.status).toBe(409)
+
+    const guest = await SELF.fetch('https://example.com/api/rooms/ACCT02?token=stranger')
+    expect(await guest.json()).toEqual({ exists: true, full: true })
+    const owner = await SELF.fetch(
+      `https://example.com/api/rooms/ACCT02?token=device-2&auth=${session}`,
+    )
+    expect(await owner.json()).toEqual({ exists: true, full: false })
+  })
+
+  it('ignores an invalid auth token and falls back to guest behavior', async () => {
+    await createRoom('ACCT03')
+    const a = await connect('ACCT03', 'token-a', 'bogus-session')
+    expect(await a.next('joined')).toMatchObject({ seat: 'black' })
+    const again = await connect('ACCT03', 'token-a', 'bogus-session')
+    expect(await again.next('joined')).toMatchObject({ seat: 'black' })
   })
 })

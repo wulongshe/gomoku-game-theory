@@ -32,5 +32,5 @@ export function useAuth() {
     email.value = ''
   }
 
-  return { email, loggedIn, setSession, refresh, logout }
+  return { token, email, loggedIn, setSession, refresh, logout }
 }

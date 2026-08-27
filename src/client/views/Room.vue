@@ -19,6 +19,7 @@ import IconLogout from '~/components/icons/IconLogout.vue'
 import IconSettings from '~/components/icons/IconSettings.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
+import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { MODE_LABELS } from '~/constants/branding'
 import {
@@ -73,6 +74,7 @@ const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
 
 const token = useStorage(`room-token:${props.code}`, nanoid())
+const { token: authToken } = useAuth()
 
 function forgetToken() {
   localStorage.removeItem(`room-token:${props.code}`)
@@ -80,7 +82,7 @@ function forgetToken() {
 const now = useTimestamp({ interval: 250 })
 
 let replaced = false
-const { send, open } = useWebSocket(roomWsUrl(props.code, token.value), {
+const { send, open } = useWebSocket(roomWsUrl(props.code, token.value, authToken.value || undefined), {
   immediate: false,
   autoReconnect: {
     retries: (retried) => retried < 5 && !replaced && !roomClosed.value,
@@ -106,7 +108,7 @@ const { send, open } = useWebSocket(roomWsUrl(props.code, token.value), {
 onMounted(async () => {
   let status = { exists: true, full: false }
   try {
-    status = await roomStatus(props.code, token.value)
+    status = await roomStatus(props.code, token.value, authToken.value || undefined)
   } catch {}
   if (!status.exists) {
     notFound.value = true
