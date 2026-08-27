@@ -23,6 +23,7 @@ export type LobbyServerMessage = { type: 'matched'; code: string }
 export type ServerMessage =
   | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
+  | { type: 'players'; accounts: Record<Seat, string | null> }
   | {
       type: 'start'
       state: GameState

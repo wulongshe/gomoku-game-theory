@@ -104,6 +104,10 @@ export class Room extends DurableObject<Env> {
       frameSeconds: await this.frameSeconds(),
       mode: await this.mode(),
     })
+    this.broadcast({
+      type: 'players',
+      accounts: { black: accounts.black ?? null, white: accounts.white ?? null },
+    })
 
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {

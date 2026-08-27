@@ -527,4 +527,23 @@ describe('account seat recovery', () => {
     const again = await connect('ACCT03', 'token-a', 'bogus-session')
     expect(await again.next('joined')).toMatchObject({ seat: 'black' })
   })
+
+  it('broadcasts seat accounts to both players', async () => {
+    await createRoom('ACCT04')
+    const session = await sessionFor('info@example.com')
+    const a = await connect('ACCT04', 'device-1', session)
+    expect(await a.next('players')).toEqual({
+      type: 'players',
+      accounts: { black: 'info@example.com', white: null },
+    })
+    const b = await connect('ACCT04', 'token-b')
+    expect(await b.next('players')).toEqual({
+      type: 'players',
+      accounts: { black: 'info@example.com', white: null },
+    })
+    expect(await a.next('players')).toEqual({
+      type: 'players',
+      accounts: { black: 'info@example.com', white: null },
+    })
+  })
 })

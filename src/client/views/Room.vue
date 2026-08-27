@@ -7,6 +7,7 @@ import AppDialog from '~/components/AppDialog.vue'
 import Board from '~/components/Board.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
+import PlayersDialog from '~/components/PlayersDialog.vue'
 import RematchInviteDialog from '~/components/RematchInviteDialog.vue'
 import ResultOverlay from '~/components/ResultOverlay.vue'
 import RoomReady from '~/components/RoomReady.vue'
@@ -17,6 +18,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconSettings from '~/components/icons/IconSettings.vue'
+import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
@@ -69,6 +71,8 @@ const myReady = ref(false)
 const oppReady = ref(false)
 const showRules = ref(false)
 const showSettings = ref(false)
+const showPlayers = ref(false)
+const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null })
 const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
@@ -184,6 +188,9 @@ function handleMessage(msg: ServerMessage) {
       break
     case 'opponent_returned':
       oppLeft.value = false
+      break
+    case 'players':
+      seatAccounts.value = msg.accounts
       break
     case 'room_closed':
       roomClosed.value = true
@@ -527,13 +534,23 @@ function exitRoom() {
             </template>
             <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
           </p>
-          <button
-            class="cursor-pointer self-center p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-            aria-label="对局设置"
-            @click="showSettings = true"
-          >
-            <IconSettings class="size-5" />
-          </button>
+          <div class="flex items-center justify-center gap-1">
+            <button
+              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+              aria-label="对局设置"
+              @click="showSettings = true"
+            >
+              <IconSettings class="size-5" />
+            </button>
+            <button
+              v-if="seatAccounts.black || seatAccounts.white"
+              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+              aria-label="玩家信息"
+              @click="showPlayers = true"
+            >
+              <IconUsers class="size-5" />
+            </button>
+          </div>
         </template>
 
         <template v-else>
@@ -622,6 +639,13 @@ function exitRoom() {
         />
       </label>
     </AppDialog>
+
+    <PlayersDialog
+      v-if="showPlayers"
+      :accounts="seatAccounts"
+      :seat="seat"
+      @close="showPlayers = false"
+    />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
   </main>
