@@ -100,27 +100,6 @@ function closeMatchDialog() {
   <main
     class="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
   >
-    <div class="absolute left-5 top-5 flex items-center gap-1">
-      <a
-        href="https://www.xiaohongshu.com/user/profile/610795550000000001005301"
-        target="_blank"
-        rel="noopener"
-        aria-label="小红书"
-        class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
-      >
-        <IconXiaohongshu class="h-5 w-auto" />
-      </a>
-      <a
-        href="https://github.com/wulongshe/gomoku-game-theory"
-        target="_blank"
-        rel="noopener"
-        aria-label="GitHub"
-        class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
-      >
-        <IconGithub class="size-5" />
-      </a>
-    </div>
-
     <button
       class="absolute right-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
       @click="showRules = true"
@@ -153,18 +132,48 @@ function closeMatchDialog() {
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <AppButton secondary class="w-full" @click="showMatch = true">随机匹配</AppButton>
-      <AppButton class="w-full" @click="showInvite = true">邀请好友</AppButton>
       <div class="flex w-full gap-2">
+        <AppButton secondary class="flex-1" @click="showMatch = true">随机匹配</AppButton>
+        <AppButton class="flex-1" @click="showInvite = true">邀请好友</AppButton>
+      </div>
+      <div
+        class="flex w-full overflow-hidden rounded-xl border border-stone-300 bg-white/80 shadow-sm focus-within:border-stone-500 dark:border-stone-600 dark:bg-stone-800/80 dark:focus-within:border-stone-400"
+      >
         <input
           v-model="joinCode"
           :maxlength="ROOM_CODE_LENGTH"
           placeholder="输入房间号"
-          class="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white/80 px-4 py-3 text-lg text-stone-800 shadow-sm placeholder:text-stone-400 focus:border-stone-500 focus:outline-none dark:border-stone-600 dark:bg-stone-800/80 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-stone-400"
+          class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
           @input="joinCode = joinCode.toUpperCase()"
           @keyup.enter="join"
         />
-        <AppButton :disabled="!joinCodeValid" @click="join">进入</AppButton>
+        <button
+          class="cursor-pointer bg-stone-800 px-6 text-lg font-medium text-white active:bg-stone-600 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
+          :disabled="!joinCodeValid"
+          @click="join"
+        >
+          进入
+        </button>
+      </div>
+      <div class="flex items-center gap-1">
+        <a
+          href="https://www.xiaohongshu.com/user/profile/610795550000000001005301"
+          target="_blank"
+          rel="noopener"
+          aria-label="小红书"
+          class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
+        >
+          <IconXiaohongshu class="h-5 w-auto" />
+        </a>
+        <a
+          href="https://github.com/wulongshe/gomoku-game-theory"
+          target="_blank"
+          rel="noopener"
+          aria-label="GitHub"
+          class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
+        >
+          <IconGithub class="size-5" />
+        </a>
       </div>
       <p class="text-xs text-stone-400 dark:text-stone-500">免下载 · 免注册，10 秒开局</p>
     </div>
