@@ -10,6 +10,7 @@ import {
   type Seat,
 } from '@/engine/game'
 import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
+import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -283,6 +284,7 @@ export class Room extends DurableObject<Env> {
         cleared: [],
       }
       this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now() })
+      await this.recordResult(resigned.phase)
       for (const socket of this.ctx.getWebSockets()) {
         if (socket === ws) socket.close(1000, 'room closed')
         else this.send(socket, { type: 'room_closed' })
@@ -377,7 +379,23 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       await this.ctx.storage.put('game', next)
       this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now() })
+      await this.recordResult(next.phase)
     }
+  }
+
+  private async recordResult(phase: GameState['phase']): Promise<void> {
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    const results = (['black', 'white'] as const).flatMap((seat) => {
+      const email = accounts[seat]
+      if (!email) return []
+      const outcome: GameOutcome =
+        phase === 'draw' ? 'draw' : phase === `${seat}_won` ? 'win' : 'loss'
+      return [{ email, outcome }]
+    })
+    if (results.length === 0) return
+    try {
+      await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).recordResult(results)
+    } catch {}
   }
 
   private async close(): Promise<void> {

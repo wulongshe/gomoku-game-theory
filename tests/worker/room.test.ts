@@ -528,6 +528,59 @@ describe('account seat recovery', () => {
     expect(await again.next('joined')).toMatchObject({ seat: 'black' })
   })
 
+  it('records the result for logged-in players when the game ends', async () => {
+    await createRoom('ACCT05')
+    const winner = await sessionFor('winner@example.com')
+    const loser = await sessionFor('loser@example.com')
+    const a = await connect('ACCT05', 'token-a', winner)
+    const b = await connect('ACCT05', 'token-b', loser)
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+    const settled = await playToBlackWin(a, b)
+    expect(settled.state.phase).toBe('black_won')
+
+    const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    const emails = ['winner@example.com', 'loser@example.com']
+    await vi.waitFor(async () => {
+      const board = await stub.leaderboard()
+      expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
+        { email: 'winner@example.com', wins: 1, losses: 0, draws: 0 },
+        { email: 'loser@example.com', wins: 0, losses: 1, draws: 0 },
+      ])
+    })
+  })
+
+  it('records a resignation as a loss, skipping guest opponents', async () => {
+    await createRoom('ACCT06')
+    const session = await sessionFor('quitter@example.com')
+    const a = await connect('ACCT06', 'token-a', session)
+    const b = await connect('ACCT06', 'token-b')
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+
+    a.ws.send(JSON.stringify({ type: 'leave' }))
+    await b.next('room_closed')
+
+    const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    await vi.waitFor(async () => {
+      const board = await stub.leaderboard()
+      expect(board.find((entry) => entry.email === 'quitter@example.com')).toEqual({
+        email: 'quitter@example.com',
+        wins: 0,
+        losses: 1,
+        draws: 0,
+      })
+    })
+  })
+
   it('broadcasts seat accounts to both players', async () => {
     await createRoom('ACCT04')
     const session = await sessionFor('info@example.com')

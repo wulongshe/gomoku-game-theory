@@ -12,6 +12,14 @@ export type VerifyResult =
   | { ok: true; token: string }
   | { ok: false; error: 'code_invalid' | 'code_expired' }
 export type LoginResult = { ok: true; token: string } | { ok: false; error: 'bad_credentials' }
+export type GameOutcome = 'win' | 'loss' | 'draw'
+
+export interface LeaderboardEntry {
+  email: string
+  wins: number
+  losses: number
+  draws: number
+}
 
 interface UserRecord {
   hash: string
@@ -28,6 +36,12 @@ interface PendingRecord {
 interface SessionRecord {
   email: string
   expires: number
+}
+
+interface StatsRecord {
+  wins: number
+  losses: number
+  draws: number
 }
 
 function randomCode(): string {
@@ -120,6 +134,31 @@ export class Accounts extends DurableObject<Env> {
 
   async logout(token: string): Promise<void> {
     await this.ctx.storage.delete(`session:${token}`)
+  }
+
+  async recordResult(results: Array<{ email: string; outcome: GameOutcome }>): Promise<void> {
+    for (const { email, outcome } of results) {
+      const stats = (await this.ctx.storage.get<StatsRecord>(`stats:${email}`)) ?? {
+        wins: 0,
+        losses: 0,
+        draws: 0,
+      }
+      if (outcome === 'win') stats.wins += 1
+      else if (outcome === 'loss') stats.losses += 1
+      else stats.draws += 1
+      await this.ctx.storage.put(`stats:${email}`, stats)
+    }
+  }
+
+  async leaderboard(): Promise<LeaderboardEntry[]> {
+    const users = await this.ctx.storage.list<UserRecord>({ prefix: 'user:' })
+    const stats = await this.ctx.storage.list<StatsRecord>({ prefix: 'stats:' })
+    return [...users.keys()]
+      .map((key) => {
+        const email = key.slice('user:'.length)
+        return { email, wins: 0, losses: 0, draws: 0, ...stats.get(`stats:${email}`) }
+      })
+      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))
   }
 
   private async createSession(email: string): Promise<string> {

@@ -30,6 +30,19 @@ function wsProto(): string {
   return location.protocol === 'https:' ? 'wss' : 'ws'
 }
 
+export interface LeaderboardEntry {
+  email: string
+  wins: number
+  losses: number
+  draws: number
+}
+
+export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
+  const res = await fetch('/api/leaderboard')
+  if (!res.ok) throw new Error(`fetchLeaderboard failed: ${res.status}`)
+  return (await res.json()) as LeaderboardEntry[]
+}
+
 export class AuthError extends Error {
   constructor(public code: string) {
     super(code)

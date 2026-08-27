@@ -69,6 +69,10 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     return handleAuth(request, env, url)
   }
   if (url.pathname.startsWith('/api/')) {
+    if (request.method === 'GET' && url.pathname === '/api/leaderboard') {
+      const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+      return Response.json(await accounts.leaderboard())
+    }
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode

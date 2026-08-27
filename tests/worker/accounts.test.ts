@@ -89,6 +89,30 @@ describe('login and sessions', () => {
     expect(unknown.status).toBe(401)
   })
 
+  it('lists registered users on the leaderboard, best record first', async () => {
+    for (const email of ['h@example.com', 'i@example.com', 'j@example.com']) {
+      await createUser(email, 'secret123')
+    }
+    const stub = accountsStub()
+    await stub.recordResult([
+      { email: 'i@example.com', outcome: 'win' },
+      { email: 'h@example.com', outcome: 'loss' },
+    ])
+    await stub.recordResult([
+      { email: 'i@example.com', outcome: 'draw' },
+      { email: 'h@example.com', outcome: 'draw' },
+    ])
+
+    const res = await SELF.fetch('https://example.com/api/leaderboard')
+    const board = await res.json<Array<{ email: string }>>()
+    const emails = ['h@example.com', 'i@example.com', 'j@example.com']
+    expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
+      { email: 'i@example.com', wins: 1, losses: 0, draws: 1 },
+      { email: 'j@example.com', wins: 0, losses: 0, draws: 0 },
+      { email: 'h@example.com', wins: 0, losses: 1, draws: 1 },
+    ])
+  })
+
   it('invalidates the session on logout', async () => {
     await createUser('g@example.com', 'secret123')
     const login = await post('login', { email: 'g@example.com', password: 'secret123' })

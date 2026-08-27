@@ -4,7 +4,9 @@ import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
+import LeaderboardDialog from '~/components/LeaderboardDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
+import IconChevronRight from '~/components/icons/IconChevronRight.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconUser from '~/components/icons/IconUser.vue'
@@ -28,6 +30,7 @@ const showRules = ref(false)
 const showInvite = ref(false)
 const showMatch = ref(false)
 const showAuth = ref(false)
+const showLeaderboard = ref(false)
 
 const { email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
@@ -145,6 +148,19 @@ function closeMatchDialog() {
           <p class="text-xs text-stone-500 dark:text-stone-400">{{ rule.text }}</p>
         </div>
       </div>
+      <button
+        class="flex cursor-pointer items-center gap-4 rounded-xl bg-white/80 px-5 py-3.5 text-left shadow-sm backdrop-blur transition-colors hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-800"
+        @click="showLeaderboard = true"
+      >
+        <span
+          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-wood/30 text-base leading-none"
+        ><span class="block -translate-y-px">🏆</span></span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">排行榜</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">注册玩家的对局战绩</p>
+        </div>
+        <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
+      </button>
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
@@ -197,6 +213,8 @@ function closeMatchDialog() {
     <RulesDialog v-if="showRules" @close="showRules = false" />
 
     <AuthDialog v-if="showAuth" @close="showAuth = false" />
+
+    <LeaderboardDialog v-if="showLeaderboard" @close="showLeaderboard = false" />
 
     <GameConfigDialog
       v-if="showInvite"
