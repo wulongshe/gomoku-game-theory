@@ -17,6 +17,11 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ ready: [] }>()
 
+const HINTS = ['对方已离开，等待对方回来…', '等待对方准备…', '对方已加入，双方准备后开局']
+const hint = computed(() =>
+  props.oppLeft ? HINTS[0] : props.myReady ? HINTS[1] : HINTS[2],
+)
+
 const players = computed(() => [
   {
     label: props.seat === 'black' ? '你执黑' : '你执白',
@@ -67,14 +72,19 @@ const players = computed(() => [
         {{ myReady ? '已准备，等待对方…' : '准备' }}
       </AppButton>
     </div>
-    <p class="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-      <span
-        class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full"
-        :class="oppLeft ? 'bg-red-500' : 'bg-amber-400'"
-      />
-      {{
-        oppLeft ? '对方已离开，等待对方回来…' : myReady ? '等待对方准备…' : '对方已加入，双方准备后开局'
-      }}
-    </p>
+    <div class="grid">
+      <p
+        v-for="text in HINTS"
+        :key="text"
+        class="col-start-1 row-start-1 flex items-center justify-center gap-2 text-sm text-stone-500 transition-opacity dark:text-stone-400"
+        :class="text !== hint && 'opacity-0'"
+      >
+        <span
+          class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full"
+          :class="oppLeft ? 'bg-red-500' : 'bg-amber-400'"
+        />
+        {{ text }}
+      </p>
+    </div>
   </div>
 </template>
