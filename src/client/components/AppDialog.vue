@@ -12,7 +12,7 @@ const emit = defineEmits<{ close: [] }>()
         <p class="text-base font-semibold text-stone-800 dark:text-stone-100">{{ title }}</p>
         <button
           v-if="closable"
-          class="cursor-pointer p-1 text-stone-400 hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+          class="-mr-4 -mt-8 cursor-pointer p-1 text-stone-400 hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
           aria-label="关闭"
           @click="emit('close')"
         >

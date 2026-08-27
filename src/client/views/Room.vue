@@ -16,6 +16,7 @@ import IconCross from '~/components/icons/IconCross.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
+import IconSettings from '~/components/icons/IconSettings.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
 import { useCountdown } from '~/composables/useCountdown'
@@ -66,6 +67,7 @@ const roomFull = ref(false)
 const myReady = ref(false)
 const oppReady = ref(false)
 const showRules = ref(false)
+const showSettings = ref(false)
 const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
@@ -516,22 +518,20 @@ function exitRoom() {
                     : '点击棋盘选择落点'
             }}
           </AppButton>
-          <div class="flex min-h-4 items-center justify-between text-xs text-stone-400 dark:text-stone-500">
-            <label class="flex cursor-pointer items-center gap-2 select-none">
-              <input v-model="autoSubmit" type="checkbox" class="peer sr-only" />
-              <span
-                class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5 dark:bg-stone-600 dark:peer-checked:bg-emerald-600"
-              />
-              落子自动提交
-            </label>
-            <span>
-              <template v-if="errorNotice">{{ errorNotice }}</template>
-              <template v-else-if="frameSeconds > 0 && selected && !submitted">
-                倒计时结束将自动提交已选落点
-              </template>
-              <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
-            </span>
-          </div>
+          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
+            <template v-if="errorNotice">{{ errorNotice }}</template>
+            <template v-else-if="frameSeconds > 0 && selected && !submitted">
+              倒计时结束将自动提交已选落点
+            </template>
+            <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
+          </p>
+          <button
+            class="cursor-pointer self-center p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+            aria-label="对局设置"
+            @click="showSettings = true"
+          >
+            <IconSettings class="size-5" />
+          </button>
         </template>
 
         <template v-else>
@@ -609,6 +609,16 @@ function exitRoom() {
         <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
         <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
       </div>
+    </AppDialog>
+
+    <AppDialog v-if="showSettings" title="对局设置" @close="showSettings = false">
+      <label class="flex cursor-pointer items-center justify-between select-none text-sm text-stone-700 dark:text-stone-200">
+        落子自动提交
+        <input v-model="autoSubmit" type="checkbox" class="peer sr-only" />
+        <span
+          class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5 dark:bg-stone-600 dark:peer-checked:bg-emerald-600"
+        />
+      </label>
     </AppDialog>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
