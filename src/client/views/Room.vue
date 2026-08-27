@@ -14,6 +14,7 @@ import RoomWaiting from '~/components/RoomWaiting.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
 import IconCross from '~/components/icons/IconCross.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
+import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
@@ -431,7 +432,8 @@ function exitRoom() {
             </template>
           </span>
           <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
-            房间 {{ props.code }}
+            <IconHome class="size-3.5" />
+            {{ props.code }}
             <button
               class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
               aria-label="退出房间"
