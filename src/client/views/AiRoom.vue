@@ -26,7 +26,7 @@ import {
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
-import { DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
+import { DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
 import { AI_GAME_KEY } from '~/constants/storage'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
@@ -194,7 +194,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </span>
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
-          人机对战
+          AI · {{ DIFFICULTY_LABELS[difficulty] }}
           <button
             class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
             aria-label="退出对局"
