@@ -82,9 +82,10 @@ export interface BoardAnalysis {
   threatOpp: number
 }
 
-// 把 point 按 key 降序插入定长（≤limit）榜单，等值时先到者在前（与稳定排序取 topK 等价）。
+// 把 point 按 key 降序插入定长（≤limit）榜单；等值键随机插入、随机挤出，并列点机会均等
+// （固定顺序会让开局八点全等值时永远先下 (6,6)）。
 function insertTop(top: { point: Point; key: number }[], point: Point, key: number, limit: number): void {
-  if (top.length >= limit && key <= top[top.length - 1].key) return
+  if (top.length >= limit && key < top[top.length - 1].key) return
   let lo = 0
   let hi = top.length
   while (lo < hi) {
@@ -92,7 +93,9 @@ function insertTop(top: { point: Point; key: number }[], point: Point, key: numb
     if (top[mid].key < key) hi = mid
     else lo = mid + 1
   }
-  top.splice(lo, 0, { point, key })
+  let runStart = lo
+  while (runStart > 0 && top[runStart - 1].key === key) runStart--
+  top.splice(runStart + Math.floor(Math.random() * (lo - runStart + 1)), 0, { point, key })
   if (top.length > limit) top.pop()
 }
 
