@@ -11,7 +11,8 @@ export const MODE_LABELS: Record<GameMode, string> = {
   minus: '负子',
 }
 
-export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard', 'master']
+// 大师难度入口暂时隐藏
+export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard']
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
