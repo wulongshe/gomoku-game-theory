@@ -6,6 +6,7 @@ import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import LeaderboardDialog from '~/components/LeaderboardDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
+import IconBilibili from '~/components/icons/IconBilibili.vue'
 import IconChevronRight from '~/components/icons/IconChevronRight.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
@@ -198,6 +199,15 @@ function closeMatchDialog() {
           class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
         >
           <IconXiaohongshu class="h-5 w-auto" />
+        </a>
+        <a
+          href="https://space.bilibili.com/358762350?spm_id_from=333.1007.0.0"
+          target="_blank"
+          rel="noopener"
+          aria-label="哔哩哔哩"
+          class="p-2 transition-opacity hover:opacity-80 active:opacity-80"
+        >
+          <IconBilibili class="size-5" />
         </a>
         <a
           href="https://github.com/wulongshe/gomoku-game-theory"
