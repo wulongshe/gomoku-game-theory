@@ -9,9 +9,9 @@ import {
   analyzeBoard,
   DIFFICULTY_SETTINGS,
   evaluateState,
+  MAX_THREAT_VALUE,
   sampleIndex,
   TERMINAL,
-  WIN_SCORE,
   type Difficulty,
 } from './ai'
 
@@ -20,8 +20,8 @@ const MAX_ITERATIONS = 60_000
 // 递归深度上限：常规下每帧棋盘单调填满、深度天然 ≤ 可填帧数，
 // 唯有「双方同帧成五湮灭清子」会破坏单调，这里硬顶住避免病态深链爆栈。
 const MAX_DEPTH = 300
-// 非终局 threatScore 差的量级上限（best ≤ WIN_SCORE，再加 0.25×次强）。
-const HEURISTIC_LOG = Math.log1p(WIN_SCORE * 1.25)
+// 非终局威胁差的量级上限（含多胜点重奖），保证多威胁不被对数归一挤到与单威胁齐平。
+const HEURISTIC_LOG = Math.log1p(MAX_THREAT_VALUE)
 
 // 归一化到 [-1, 1]：终局 ±1；非终局按 |值| 的对数单调映射到 (-0.95, 0.95)，
 // 全量级都保留梯度。tanh 会在冲四以上直接饱和到 ±1，把「双威胁」「已成五」拉平，故弃用。

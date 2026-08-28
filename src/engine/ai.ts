@@ -83,6 +83,18 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
   return total
 }
 
+// 多出胜点的封顶数。
+const EXTRA_WIN_CAP = 4
+// 非终局威胁强度上限（best + 0.25 次强 + 至多 EXTRA_WIN_CAP 个多余胜点），供叶子归一化定标。
+export const MAX_THREAT_VALUE = WIN_SCORE * (1.25 + EXTRA_WIN_CAP)
+
+// 威胁强度：最强两手加权和，再按「多出的胜点数」重奖。撞点规则下单个胜点必被对方撞掉（≈防得住），
+// 两个及以上才形成对手撞不全的猜点局面（约 (k-1)/k 概率撞中），故 wins-1 显式加分，
+// 让双威胁/叉的价值远高于单威胁 —— 这正是本变体分胜负的核心。
+function threatValue(best: number, second: number, wins: number): number {
+  return best + 0.25 * second + WIN_SCORE * Math.min(EXTRA_WIN_CAP, Math.max(0, wins - 1))
+}
+
 export interface BoardAnalysis {
   aiMoves: Point[]
   oppMoves: Point[]
@@ -102,6 +114,8 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
   let self2 = 0
   let opp1 = 0
   let opp2 = 0
+  let selfWins = 0
+  let oppWins = 0
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const point = { x, y }
@@ -109,6 +123,8 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
       const self = placementScore(state, point, seat)
       const oppScore = placementScore(state, point, opp)
       scored.push({ point, self, opp: oppScore })
+      if (self >= WIN_SCORE) selfWins++
+      if (oppScore >= WIN_SCORE) oppWins++
       if (self > self1) {
         self2 = self1
         self1 = self
@@ -133,19 +149,25 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
     .sort((a, b) => b.opp + contest * b.self - (a.opp + contest * a.self))
     .slice(0, limit)
     .map((s) => s.point)
-  return { aiMoves, oppMoves, threatSelf: self1 + 0.25 * self2, threatOpp: opp1 + 0.25 * opp2 }
+  return {
+    aiMoves,
+    oppMoves,
+    threatSelf: threatValue(self1, self2, selfWins),
+    threatOpp: threatValue(opp1, opp2, oppWins),
+  }
 }
 
-// 全盘威胁强度：取最强两手的加权和。撞点规则下单个胜点会被对方撞掉，
-// 需两个胜点（双威胁/叉）才必胜，故让次强手也计分，比单一强点更值钱。
+// 结算后某方的全盘威胁强度：最强两手加权和 + 多出胜点重奖（见 threatValue）。
 function threatScore(state: GameState, seat: Seat): number {
   let best = 0
   let second = 0
+  let wins = 0
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const point = { x, y }
       if (!isLegalChoice(state, point)) continue
       const score = placementScore(state, point, seat)
+      if (score >= WIN_SCORE) wins++
       if (score > best) {
         second = best
         best = score
@@ -154,7 +176,7 @@ function threatScore(state: GameState, seat: Seat): number {
       }
     }
   }
-  return best + 0.25 * second
+  return threatValue(best, second, wins)
 }
 
 // 从 seat 视角评估结算后的局面：终局用 ±TERMINAL，进行中用双方威胁强度之差。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiMove } from '@/engine/ai'
+import { chooseAiMove, evaluateState } from '@/engine/ai'
 import {
   BOARD_SIZE,
   createGame,
@@ -111,5 +111,12 @@ describe('chooseAiMove', () => {
       seen.add(`${move!.x},${move!.y}`)
     }
     expect(seen.size).toBeGreaterThan(1)
+  })
+
+  // 活四（两个胜点 (3,7)/(8,7)）对手撞不全，应比左端被堵、只剩单胜点的四明显更值钱。
+  it('values a double threat above a single threat', () => {
+    const doubleThreat = withStones({ white: row(7, [4, 5, 6, 7]) })
+    const singleThreat = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
+    expect(evaluateState(doubleThreat, 'white')).toBeGreaterThan(evaluateState(singleThreat, 'white'))
   })
 })
