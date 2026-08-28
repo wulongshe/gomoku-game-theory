@@ -555,20 +555,16 @@ function exitRoom() {
 
         <template v-if="stage === 'playing'">
           <AppButton
+            v-if="!autoSubmit"
             class="w-full"
-            :disabled="!selected || submitted || autoSubmit"
+            :disabled="!selected || submitted"
             @click="submitChoice"
           >
-            {{
-              submitted
-                ? '已提交，等待对方'
-                : autoSubmit
-                  ? '点击棋盘落子即提交'
-                  : selected
-                    ? '确认提交'
-                    : '点击棋盘选择落点'
-            }}
+            {{ submitted ? '已提交，等待对方' : selected ? '确认提交' : '点击棋盘选择落点' }}
           </AppButton>
+          <p v-else class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
+            {{ submitted ? '已提交，等待对方' : '点击棋盘落子即提交' }}
+          </p>
           <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
             <template v-if="errorNotice">{{ errorNotice }}</template>
             <template v-else-if="frameSeconds > 0 && selected && !submitted">
