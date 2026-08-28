@@ -83,58 +83,6 @@ describe('settleFrame', () => {
     expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
   })
 
-  it('shares a collision point as a half cell in half mode', () => {
-    const next = settleFrame(createGame('half'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
-    expect(cellAt(next, { x: 6, y: 6 })).toBe('half')
-    expect(next.phase).toBe('playing')
-    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
-  })
-
-  it('counts a half cell as only half a stone', () => {
-    const game = withStones({ black: [1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
-    game.board[5 * BOARD_SIZE + 0] = 'half'
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 6, y: 5 } })
-    expect(next.phase).toBe('playing')
-  })
-
-  it('wins once a run reaches five including half cells', () => {
-    const game = withStones({ black: [1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'half')
-    game.board[5 * BOARD_SIZE + 0] = 'half'
-    game.board[5 * BOARD_SIZE + 5] = 'half'
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 8, y: 8 } })
-    expect(next.phase).toBe('black_won')
-  })
-
-  it('shares a collision point as a full stone for both sides in shared mode', () => {
-    const next = settleFrame(createGame('shared'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
-    expect(cellAt(next, { x: 6, y: 6 })).toBe('shared')
-    expect(next.phase).toBe('playing')
-    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
-  })
-
-  it('counts a shared cell as a whole stone', () => {
-    const game = withStones({ black: [1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'shared')
-    game.board[5 * BOARD_SIZE + 0] = 'shared'
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 8, y: 8 } })
-    expect(next.phase).toBe('black_won')
-  })
-
-  it('annihilates both runs when a shared collision completes five for both', () => {
-    const game = withStones(
-      {
-        black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })),
-        white: [1, 2, 3, 4].map((i) => ({ x: 4, y: i })),
-      },
-      'shared',
-    )
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 4, y: 5 } })
-    expect(next.phase).toBe('playing')
-    expect(next.cleared).toHaveLength(2)
-    expect(cellAt(next, { x: 4, y: 5 })).toBe('empty')
-    expect(cellAt(next, { x: 0, y: 5 })).toBe('empty')
-    expect(cellAt(next, { x: 4, y: 1 })).toBe('empty')
-  })
-
   it('records every winning line through the final move', () => {
     const game = withStones({
       black: [

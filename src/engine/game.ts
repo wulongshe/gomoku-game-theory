@@ -2,9 +2,9 @@ export const BOARD_SIZE = 15
 export const FRAME_SECONDS = 30
 
 export type Seat = 'black' | 'white'
-export type CellState = 'empty' | 'black' | 'white' | 'forbidden' | 'half' | 'shared' | 'minus'
+export type CellState = 'empty' | 'black' | 'white' | 'forbidden' | 'minus'
 export type Phase = 'playing' | 'black_won' | 'white_won' | 'draw'
-export type GameMode = 'forbidden' | 'half' | 'shared' | 'race' | 'minus'
+export type GameMode = 'forbidden' | 'race' | 'minus'
 
 export interface Point {
   x: number
@@ -82,8 +82,7 @@ const DIRECTIONS = [
 const WIN_SCORE = 5
 
 export function cellValue(cell: CellState, seat: Seat): number {
-  if (cell === seat || cell === 'shared') return 1
-  if (cell === 'half') return 0.5
+  if (cell === seat) return 1
   if (cell === 'minus') return -1
   return 0
 }
@@ -154,15 +153,11 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
 
   if (black && white && black.x === white.x && black.y === white.y) {
     board[black.y * BOARD_SIZE + black.x] =
-      state.mode === 'half'
-        ? 'half'
-        : state.mode === 'shared'
-          ? 'shared'
-          : state.mode === 'minus'
-            ? 'minus'
-            : state.mode === 'race'
-              ? (choices.first ?? 'forbidden')
-              : 'forbidden'
+      state.mode === 'minus'
+        ? 'minus'
+        : state.mode === 'race'
+          ? (choices.first ?? 'forbidden')
+          : 'forbidden'
   } else {
     if (black) board[black.y * BOARD_SIZE + black.x] = 'black'
     if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
@@ -213,7 +208,7 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
   const lastMoves = (collided ? [black] : [black, white]).filter(
     (p): p is Point =>
       p !== null &&
-      ['black', 'white', 'half', 'shared', 'minus'].includes(board[p.y * BOARD_SIZE + p.x]),
+      ['black', 'white', 'minus'].includes(board[p.y * BOARD_SIZE + p.x]),
   )
 
   return {

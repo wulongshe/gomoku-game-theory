@@ -36,9 +36,6 @@ const MARK_CORNERS = [
   [-1, -1],
 ] as const
 
-const R = STONE_R
-const TAIJI_PATH = `M0,${-R} A${R},${R} 0 0 1 0,${R} A${R / 2},${R / 2} 0 0 1 0,0 A${R / 2},${R / 2} 0 0 0 0,${-R} Z`
-const TAIJI_EYE = R / 5
 const FORBID_R = STONE_R
 
 const STARS: Point[] = [
@@ -70,10 +67,6 @@ const stones = computed(() =>
 )
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
-
-const halves = computed(() =>
-  ALL_POINTS.filter((p) => ['half', 'shared'].includes(cellAt(props.state, p))),
-)
 
 const minuses = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'minus'))
 
@@ -237,15 +230,6 @@ function isLastMove(p: Point): boolean {
       />
     </g>
 
-    <g v-for="p in halves" :key="`half${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
-      <g class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]">
-        <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
-        <path :d="TAIJI_PATH" fill="url(#stone-black)" />
-        <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
-        <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
-      </g>
-    </g>
-
     <g v-for="p in minuses" :key="`m${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
       <g
         stroke="#7c3aed"
@@ -281,12 +265,6 @@ function isLastMove(p: Point): boolean {
             :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
             stroke-width="1"
           />
-        </template>
-        <template v-else-if="v.cell === 'half' || v.cell === 'shared'">
-          <circle :r="STONE_R" fill="url(#stone-white)" stroke="#a8a29e" stroke-width="1" />
-          <path :d="TAIJI_PATH" fill="url(#stone-black)" />
-          <circle cx="0" :cy="STONE_R / 2" :r="TAIJI_EYE" fill="#f5f5f4" />
-          <circle cx="0" :cy="-STONE_R / 2" :r="TAIJI_EYE" fill="#1c1917" />
         </template>
         <template v-else-if="v.cell === 'minus'">
           <g stroke="#7c3aed" stroke-linecap="round">

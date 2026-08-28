@@ -1,7 +1,6 @@
 import type { GameMode, GameState, Point, Seat } from '@/engine/game'
 
 export const FRAME_OPTIONS = [30, 60, 120, 0]
-// 共子（shared）、半子（half）入口暂时下线
 export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus', 'race']
 
 // 人机对战本地单步结算，抢点撞子只能随机归属，沦为运气，故不开放给 AI

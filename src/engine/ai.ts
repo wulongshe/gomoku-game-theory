@@ -23,13 +23,11 @@ const WIN_SCORE = 1_000_000
 const CONTEST_FACTOR: Record<GameMode, number> = {
   forbidden: 0.9, // 撞点 → 死点，免费封杀
   minus: 0.9, // 撞点 → 负子，封杀且反噬对方连线
-  half: 0.85, // 撞点 → 半子，仍使对方连线不足五
   race: 0.45, // 撞点 → 按提交顺序归属，本地是掷硬币，倾向减半
-  shared: 0.2, // 撞点 → 双方各计一子，抢点反而资敌
 }
 
-// sum 为连线上的加权和（己子/共子 +1、半子 +0.5、负子 -1），与引擎判胜一致：
-// 满五即 sum ≥ 5，故按「还差多少到五」分级，半子/负子在线内也算数。
+// sum 为连线上的加权和（己子 +1、负子 -1），与引擎判胜一致：
+// 满五即 sum ≥ 5，故按「还差多少到五」分级，负子在线内也算数。
 function lineScore(sum: number, openEnds: number): number {
   if (sum >= 5) return WIN_SCORE
   if (openEnds === 0) return 0
