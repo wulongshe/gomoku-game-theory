@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiMove, evaluateState } from '@/engine/ai'
+import { chooseAiMove } from '@/engine/ai'
+import { evaluateState } from '@/engine/eval'
 import {
   BOARD_SIZE,
   createGame,
