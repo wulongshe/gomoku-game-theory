@@ -11,6 +11,7 @@
     "build": "vite build",
     "deploy": "pnpm build && wrangler deploy",
     "check": "vue-tsc -b",
+    "ai:battle": "node --import ./scripts/loader.ts scripts/ai-battle/main.ts",
     "test": "vitest run",
     "typegen": "wrangler types"
   },
