@@ -20,14 +20,13 @@ import {
   type Point,
 } from '@/engine/game'
 import { MODE_LABELS } from '~/constants/branding'
-import { FRAME_OPTIONS } from '@/shared/protocol'
+import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
-const AI_MODES: GameMode[] = ['forbidden']
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
 const rawFrame = Number(params.get('frame'))
 
-const mode = ref<GameMode>(AI_MODES.includes(rawMode) ? rawMode : 'forbidden')
+const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
 const frameSeconds = ref(FRAME_OPTIONS.includes(rawFrame) ? rawFrame : 0)
 
 const game = ref(createGame(mode.value))
@@ -225,7 +224,7 @@ const resultTextCls = computed(() => {
       v-if="showConfig"
       v-model:frame="configFrame"
       v-model:mode="configMode"
-      :enabled-modes="AI_MODES"
+      :enabled-modes="AI_MODE_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
       @cancel="showConfig = false"

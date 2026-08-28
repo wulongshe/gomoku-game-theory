@@ -17,6 +17,7 @@ import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import {
+  AI_MODE_OPTIONS,
   FRAME_OPTIONS,
   MODE_OPTIONS,
   ROOM_CODE_LENGTH,
@@ -60,7 +61,6 @@ const inviteMode = useStorage<GameMode>('invite-mode', MODE_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
 if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
-const AI_MODE_OPTIONS: GameMode[] = ['forbidden']
 const aiFrame = useStorage('ai-frame', 0)
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 if (!FRAME_OPTIONS.includes(aiFrame.value)) aiFrame.value = 0

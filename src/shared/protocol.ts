@@ -4,6 +4,9 @@ export const FRAME_OPTIONS = [30, 60, 120, 0]
 // 共子（shared）入口暂时下线
 export const MODE_OPTIONS: GameMode[] = ['forbidden', 'half', 'minus', 'race']
 
+// 人机对战本地单步结算，抢点撞子只能随机归属，沦为运气，故不开放给 AI
+export const AI_MODE_OPTIONS: GameMode[] = MODE_OPTIONS.filter((mode) => mode !== 'race')
+
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const ROOM_CODE_LENGTH = 6
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/

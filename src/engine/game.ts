@@ -81,7 +81,7 @@ const DIRECTIONS = [
 
 const WIN_SCORE = 5
 
-function cellValue(cell: CellState, seat: Seat): number {
+export function cellValue(cell: CellState, seat: Seat): number {
   if (cell === seat || cell === 'shared') return 1
   if (cell === 'half') return 0.5
   if (cell === 'minus') return -1

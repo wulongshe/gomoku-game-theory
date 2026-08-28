@@ -63,4 +63,62 @@ describe('chooseAiMove', () => {
     game.board.fill('forbidden')
     expect(chooseAiMove(game, 'black')).toBeNull()
   })
+
+  const MODES: GameMode[] = ['forbidden', 'half', 'minus']
+
+  it.each(MODES)('completes its own five in %s mode', (mode) => {
+    const game = withStones({ black: row(7, [4, 5, 6, 7]) }, mode)
+    const move = chooseAiMove(game, 'black')
+    expect([
+      { x: 3, y: 7 },
+      { x: 8, y: 7 },
+    ]).toContainEqual(move)
+  })
+
+  it.each(MODES)('contests the opponent winning point in %s mode', (mode) => {
+    const game = withStones({ white: row(7, [4, 5, 6, 7]) }, mode)
+    const move = chooseAiMove(game, 'black')
+    expect([
+      { x: 3, y: 7 },
+      { x: 8, y: 7 },
+    ]).toContainEqual(move)
+  })
+
+  // ● ● ● [负子] ● ●：加权和已达 4，再落一子即达 5 获胜，负子在连线中间
+  it('completes a win through a minus cell in its own line', () => {
+    const game = withStones({ black: row(7, [4, 5, 6, 8, 9]) }, 'minus')
+    game.board[7 * BOARD_SIZE + 7] = 'minus'
+    const move = chooseAiMove(game, 'black')
+    const next = settleFrame(game, { black: move, white: null })
+    expect(next.phase).toBe('black_won')
+  })
+
+  // ● ● [半子] ● ●：加权和 4.5，再落一子达 5.5 获胜，半子在连线中间
+  it('completes a win through a half cell in its own line', () => {
+    const game = withStones({ black: row(7, [4, 5, 7, 8]) }, 'half')
+    game.board[7 * BOARD_SIZE + 6] = 'half'
+    const move = chooseAiMove(game, 'black')
+    const next = settleFrame(game, { black: move, white: null })
+    expect(next.phase).toBe('black_won')
+  })
+
+  // ● [半] ● [半] ● 交替：4 己子 + 2 半子 = 5，连线中含多个特殊子
+  it('completes a win through multiple half cells in one line', () => {
+    const game = withStones({ black: row(7, [4, 6, 8]) }, 'half')
+    game.board[7 * BOARD_SIZE + 5] = 'half'
+    game.board[7 * BOARD_SIZE + 7] = 'half'
+    const move = chooseAiMove(game, 'black')
+    const next = settleFrame(game, { black: move, white: null })
+    expect(next.phase).toBe('black_won')
+  })
+
+  it('contests an opponent win that runs through a minus cell', () => {
+    const game = withStones({ white: row(7, [4, 5, 6, 8, 9]) }, 'minus')
+    game.board[7 * BOARD_SIZE + 7] = 'minus'
+    const move = chooseAiMove(game, 'black')
+    expect([
+      { x: 3, y: 7 },
+      { x: 10, y: 7 },
+    ]).toContainEqual(move)
+  })
 })
