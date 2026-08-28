@@ -111,21 +111,23 @@ function closeMatchDialog() {
   <main
     class="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
   >
-    <button
-      class="absolute left-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-      @click="showAuth = true"
-    >
-      <IconUser class="size-5" />
-      <span>{{ authLabel }}</span>
-    </button>
+    <div class="absolute inset-x-6 top-5 mx-auto flex max-w-md items-center justify-between">
+      <button
+        class="-mx-2 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+        @click="showAuth = true"
+      >
+        <IconUser class="size-5" />
+        <span>{{ authLabel }}</span>
+      </button>
 
-    <button
-      class="absolute right-5 top-5 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-      @click="showRules = true"
-    >
-      <IconHelp class="size-5" />
-      <span>游戏规则</span>
-    </button>
+      <button
+        class="-mx-2 flex cursor-pointer items-center gap-1.5 rounded-full p-2 text-sm leading-none text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+        @click="showRules = true"
+      >
+        <IconHelp class="size-5" />
+        <span>游戏规则</span>
+      </button>
+    </div>
 
     <div class="flex flex-col items-center gap-3">
       <IconStones class="h-8 drop-shadow" />
