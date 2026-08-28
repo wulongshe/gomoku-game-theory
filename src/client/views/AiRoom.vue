@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '~/components/AppButton.vue'
+import AppDialog from '~/components/AppDialog.vue'
 import Board from '~/components/Board.vue'
+import DialogButton from '~/components/DialogButton.vue'
 import FrameBar from '~/components/FrameBar.vue'
 import FrameTimer from '~/components/FrameTimer.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
@@ -18,12 +20,14 @@ import {
   settleFrame,
   type ClearedGroup,
   type GameMode,
+  type GameState,
   type Point,
 } from '@/engine/game'
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
+import { AI_GAME_KEY } from '~/constants/storage'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
@@ -35,12 +39,28 @@ const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbid
 const frameSeconds = ref(FRAME_OPTIONS.includes(rawFrame) ? rawFrame : 0)
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
-const game = ref(createGame(mode.value))
+// 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
+function loadSavedGame(): GameState | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_GAME_KEY) ?? 'null') as GameState | null
+    return saved && saved.mode === mode.value ? saved : null
+  } catch {
+    return null
+  }
+}
+const reloaded =
+  (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type ===
+  'reload'
+const savedGame = reloaded ? loadSavedGame() : null
+const game = ref<GameState>(savedGame ?? createGame(mode.value))
+watch(game, (g) => localStorage.setItem(AI_GAME_KEY, JSON.stringify(g)), { immediate: true })
+
 const selected = ref<Point | null>(null)
-const lastMoves = ref<Point[]>([])
+const lastMoves = ref<Point[]>(savedGame?.lastMoves ?? [])
 const vanishing = ref<ClearedGroup[]>([])
 const overlayDismissed = ref(false)
 const showRules = ref(false)
+const confirmingExit = ref(false)
 const deadline = ref<number | null>(null)
 const frameStart = ref<number | null>(null)
 const resolving = ref(false)
@@ -118,6 +138,12 @@ function restart() {
   beginFrame()
 }
 
+// 明确退出人机对战：清空本地存档，避免下次进入又续上已放弃的对局。
+function exitRoom() {
+  localStorage.removeItem(AI_GAME_KEY)
+  location.assign('/')
+}
+
 function openConfig() {
   configFrame.value = frameSeconds.value
   configMode.value = mode.value
@@ -142,7 +168,9 @@ watch(secondsLeft, (value) => {
   if (value === 0 && playing.value) resolveFrame()
 })
 
-onMounted(beginFrame)
+onMounted(() => {
+  if (playing.value) beginFrame()
+})
 
 const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(
   () => game.value,
@@ -167,9 +195,13 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
           人机对战
-          <a class="cursor-pointer text-red-400 transition-colors hover:text-red-600" aria-label="退出对局" href="/">
+          <button
+            class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
+            aria-label="退出对局"
+            @click="confirmingExit = true"
+          >
             <IconLogout class="size-3.5" />
-          </a>
+          </button>
         </span>
         <button
           class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-200"
@@ -240,5 +272,13 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
     />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
+
+    <AppDialog v-if="confirmingExit" title="退出人机对战？" :closable="false">
+      <p class="text-sm text-stone-500 dark:text-stone-400">退出后本局将清空，无法继续。</p>
+      <div class="flex gap-2">
+        <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
+        <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
+      </div>
+    </AppDialog>
   </main>
 </template>
