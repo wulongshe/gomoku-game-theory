@@ -14,6 +14,7 @@ const props = defineProps<{
   state: GameState
   seat: Seat
   selected: Point | null
+  submitted: boolean
   lastMoves: Point[]
   vanishing: ClearedGroup[]
   interactive: boolean
@@ -25,6 +26,15 @@ const U = 40
 const PAD = 34
 const SIZE = (BOARD_SIZE - 1) * U + PAD * 2
 const STONE_R = U * 0.46
+
+const MARK_D = STONE_R + 5
+const MARK_L = 8
+const MARK_CORNERS = [
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+] as const
 
 const R = STONE_R
 const TAIJI_PATH = `M0,${-R} A${R},${R} 0 0 1 0,${R} A${R / 2},${R / 2} 0 0 1 0,0 A${R / 2},${R / 2} 0 0 0 0,${-R} Z`
@@ -334,6 +344,7 @@ function isLastMove(p: Point): boolean {
         opacity="0.55"
       />
       <circle
+        v-if="!submitted"
         :cx="pos(selected.x)"
         :cy="pos(selected.y)"
         :r="STONE_R + 4"
@@ -342,6 +353,21 @@ function isLastMove(p: Point): boolean {
         stroke-width="2.5"
         class="animate-[breathe_1.6s_ease-in-out_infinite]"
       />
+      <g
+        v-else
+        :transform="`translate(${pos(selected.x)}, ${pos(selected.y)})`"
+        :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        fill="none"
+      >
+        <path
+          v-for="[sx, sy] in MARK_CORNERS"
+          :key="`c${sx},${sy}`"
+          :d="`M ${sx * (MARK_D - MARK_L)} ${sy * MARK_D} L ${sx * MARK_D} ${sy * MARK_D} L ${sx * MARK_D} ${sy * (MARK_D - MARK_L)}`"
+          class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
+        />
+      </g>
     </g>
 
     <g v-if="interactive">

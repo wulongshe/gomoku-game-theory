@@ -540,6 +540,7 @@ function exitRoom() {
             :state="game"
             :seat="seat"
             :selected="selected"
+            :submitted="submitted"
             :last-moves="lastMoves"
             :vanishing="vanishing"
             :interactive="stage === 'playing' && (!submitted || !oppSubmitted)"
