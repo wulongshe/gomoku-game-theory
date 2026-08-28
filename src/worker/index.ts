@@ -2,7 +2,7 @@ import { FRAME_SECONDS, type GameMode } from '@/engine/game'
 import { EMAIL_PATTERN, FRAME_OPTIONS, MODE_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
 import { parseMatchOptions } from './lobby'
-import { newRoomCode } from './roomCode'
+import { allocateRoom } from './roomCode'
 
 export { Room } from './room'
 export { Lobby } from './lobby'
@@ -93,11 +93,7 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       if (!FRAME_OPTIONS.includes(frame) || !MODE_OPTIONS.includes(mode)) {
         return new Response('Invalid options', { status: 400 })
       }
-      const code = newRoomCode()
-      await env.ROOM.get(env.ROOM.idFromName(code)).fetch(
-        `https://room/create?frame=${frame}&mode=${mode}`,
-        { method: 'POST' },
-      )
+      const code = await allocateRoom(env, frame, mode)
       return Response.json({ code })
     }
     if (url.pathname === '/api/match/ws') {
@@ -106,7 +102,7 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       }
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
     }
-    const roomMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})(\/ws)?$/)
+    const roomMatch = url.pathname.match(/^\/api\/rooms\/(\d{4,8})(\/ws)?$/)
     if (roomMatch && request.method === 'GET') {
       return env.ROOM.get(env.ROOM.idFromName(roomMatch[1])).fetch(request)
     }

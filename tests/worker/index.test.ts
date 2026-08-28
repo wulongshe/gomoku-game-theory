@@ -26,6 +26,7 @@ describe('POST /api/rooms', () => {
     expect(res.status).toBe(200)
     const { code } = await res.json<{ code: string }>()
     expect(code).toMatch(ROOM_CODE_PATTERN)
+    expect(code).toHaveLength(4) // 空房间空间下优先分配 4 位短号
     const check = await SELF.fetch(`https://example.com/api/rooms/${code}`)
     expect(await check.json()).toEqual({ exists: true, full: false })
   })
@@ -49,14 +50,14 @@ describe('GET /api/match/ws', () => {
 
 describe('GET /api/rooms/:code', () => {
   it('reports a never-created room as missing', async () => {
-    const res = await SELF.fetch('https://example.com/api/rooms/ZZZZZ2')
+    const res = await SELF.fetch('https://example.com/api/rooms/9999')
     expect(await res.json()).toEqual({ exists: false, full: false })
   })
 })
 
 describe('GET /api/rooms/:code/ws', () => {
   it('rejects non-websocket requests', async () => {
-    const res = await SELF.fetch('https://example.com/api/rooms/AB3XY9/ws')
+    const res = await SELF.fetch('https://example.com/api/rooms/1234/ws')
     expect(res.status).toBe(426)
   })
 

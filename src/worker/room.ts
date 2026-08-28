@@ -41,6 +41,10 @@ export class Room extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'POST') {
+      // 房号已被占用（撞车）→ 409，让分配方换一个或升位
+      if (await this.ctx.storage.get<boolean>('created')) {
+        return new Response(null, { status: 409 })
+      }
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
       await this.ctx.storage.put({ created: true, frameSeconds, mode })

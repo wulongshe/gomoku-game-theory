@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { GameMode } from '@/engine/game'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
-import { newRoomCode } from './roomCode'
+import { allocateRoom } from './roomCode'
 
 export interface MatchOptions {
   frames: number[]
@@ -63,11 +63,7 @@ export class Lobby extends DurableObject<Env> {
       const overlap = Math.min(...candidates.map((c) => c.frames.length * c.modes.length))
       const picked = sample(candidates.filter((c) => c.frames.length * c.modes.length === overlap))
       const { frame, mode } = pickSettings(picked.frames, picked.modes)
-      const code = newRoomCode()
-      await this.env.ROOM.get(this.env.ROOM.idFromName(code)).fetch(
-        `https://room/create?frame=${frame}&mode=${mode}`,
-        { method: 'POST' },
-      )
+      const code = await allocateRoom(this.env, frame, mode)
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
       for (const ws of [picked.ws, pair[1]]) {
         try {

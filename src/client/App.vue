@@ -3,7 +3,7 @@ import AiRoom from './views/AiRoom.vue'
 import Home from './views/Home.vue'
 import Room from './views/Room.vue'
 
-const code = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/)?.[1] ?? null
+const code = location.pathname.match(/^\/room\/(\d{4,8})$/)?.[1] ?? null
 const ai = location.pathname === '/ai'
 </script>
 

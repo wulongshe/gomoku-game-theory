@@ -106,27 +106,36 @@ async function playToBlackWin(a: Client, b: Client) {
 
 describe('Room', () => {
   it('rejects joining a room that was never created', async () => {
-    const res = await SELF.fetch('https://example.com/api/rooms/NOROOM/ws?token=token-a', {
+    const res = await SELF.fetch('https://example.com/api/rooms/9099/ws?token=token-a', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(404)
   })
 
+  it('rejects re-creating an already claimed room code with 409', async () => {
+    await createRoom('1042')
+    const again = await env.ROOM.get(env.ROOM.idFromName('1042')).fetch(
+      'https://room/create?frame=30&mode=forbidden',
+      { method: 'POST' },
+    )
+    expect(again.status).toBe(409)
+  })
+
   it('keeps a waiting room alive while its creator reconnects', async () => {
-    await createRoom('ROOM18')
-    const a = await connect('ROOM18', 'token-a')
+    await createRoom('1018')
+    const a = await connect('1018', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     a.ws.close()
-    const a2 = await connect('ROOM18', 'token-a')
+    const a2 = await connect('1018', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
   })
 
   it('seats two players and starts once both are ready', async () => {
-    await createRoom('ROOM01')
-    const a = await connect('ROOM01', 'token-a')
+    await createRoom('1001')
+    const a = await connect('1001', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     expect(await a.next('lobby')).toMatchObject({ present: { black: true, white: false } })
-    const b = await connect('ROOM01', 'token-b')
+    const b = await connect('1001', 'token-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
     expect(await b.next('lobby')).toMatchObject({
       present: { black: true, white: true },
@@ -145,9 +154,9 @@ describe('Room', () => {
   })
 
   it('runs frames at the configured duration', async () => {
-    await createRoom('ROOM20', 60)
-    const a = await connect('ROOM20', 'token-a')
-    const b = await connect('ROOM20', 'token-b')
+    await createRoom('1020', 60)
+    const a = await connect('1020', 'token-a')
+    const b = await connect('1020', 'token-b')
     a.ready()
     b.ready()
     const start = await a.next('start')
@@ -158,14 +167,14 @@ describe('Room', () => {
   })
 
   it('keeps a ready flag across a pre-game reconnect', async () => {
-    await createRoom('ROOM19')
-    const a = await connect('ROOM19', 'token-a')
+    await createRoom('1019')
+    const a = await connect('1019', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     a.ready()
     a.ws.close()
-    const a2 = await connect('ROOM19', 'token-a')
+    const a2 = await connect('1019', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
-    const b = await connect('ROOM19', 'token-b')
+    const b = await connect('1019', 'token-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
     expect(await b.next('lobby')).toMatchObject({ ready: { black: true, white: false } })
     b.ready()
@@ -174,23 +183,23 @@ describe('Room', () => {
   })
 
   it('rejects a third player', async () => {
-    await startGame('ROOM02')
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM02/ws?token=token-c', {
+    await startGame('1002')
+    const res = await SELF.fetch('https://example.com/api/rooms/1002/ws?token=token-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(409)
   })
 
   it('reports a full room, except to already seated tokens', async () => {
-    await startGame('ROOM21')
-    const stranger = await SELF.fetch('https://example.com/api/rooms/ROOM21?token=token-x')
+    await startGame('1021')
+    const stranger = await SELF.fetch('https://example.com/api/rooms/1021?token=token-x')
     expect(await stranger.json()).toEqual({ exists: true, full: true })
-    const seated = await SELF.fetch('https://example.com/api/rooms/ROOM21?token=token-a')
+    const seated = await SELF.fetch('https://example.com/api/rooms/1021?token=token-a')
     expect(await seated.json()).toEqual({ exists: true, full: false })
   })
 
   it('settles as soon as both submit, hiding the opponent choice until then', async () => {
-    const [a, b] = await startGame('ROOM03')
+    const [a, b] = await startGame('1003')
     a.submit(1, { x: 6, y: 7 })
     await b.next('opponent_submitted')
     b.submit(1, { x: 8, y: 8 })
@@ -203,7 +212,7 @@ describe('Room', () => {
   })
 
   it('turns a collision into a forbidden point', async () => {
-    const [a, b] = await startGame('ROOM04')
+    const [a, b] = await startGame('1004')
     a.submit(1, { x: 6, y: 6 })
     b.submit(1, { x: 6, y: 6 })
     const settled = await settledOnBoth(a, b)
@@ -211,9 +220,9 @@ describe('Room', () => {
   })
 
   it('treats a frame timeout without any choice as a pass', async () => {
-    const [a, b] = await startGame('ROOM05')
+    const [a, b] = await startGame('1005')
     a.submit(1, { x: 6, y: 7 })
-    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM05')))).toBe(true)
+    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('1005')))).toBe(true)
     const settled = await settledOnBoth(a, b)
     expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(settled.state.board.filter((cell) => cell !== 'empty')).toHaveLength(1)
@@ -221,14 +230,14 @@ describe('Room', () => {
   })
 
   it('auto-submits an unconfirmed draft at the frame deadline', async () => {
-    const [a, b] = await startGame('ROOM12')
+    const [a, b] = await startGame('1012')
     a.submit(1, { x: 6, y: 6 }, false)
     a.submit(1, { x: 7, y: 6 }, false)
     a.submit(99, { x: 0, y: 0 }, false)
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
     b.submit(1, { x: 8, y: 8 })
     await a.next('opponent_submitted')
-    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('ROOM12')))).toBe(true)
+    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('1012')))).toBe(true)
     const settled = await settledOnBoth(a, b)
     expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
     expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('empty')
@@ -236,7 +245,7 @@ describe('Room', () => {
   })
 
   it('keeps drafts private and does not settle early on drafts', async () => {
-    const [a, b] = await startGame('ROOM13')
+    const [a, b] = await startGame('1013')
     a.submit(1, { x: 6, y: 6 }, false)
     b.submit(1, { x: 8, y: 8 })
     await a.next('opponent_submitted')
@@ -247,7 +256,7 @@ describe('Room', () => {
   })
 
   it('rejects stale frames and illegal points', async () => {
-    const [a, b] = await startGame('ROOM06')
+    const [a, b] = await startGame('1006')
     a.submit(2, { x: 0, y: 0 })
     expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
     b.submit(1, { x: 15, y: 0 })
@@ -259,7 +268,7 @@ describe('Room', () => {
   })
 
   it('lets a player revise a submission until the opponent locks in', async () => {
-    const [a, b] = await startGame('ROOM22')
+    const [a, b] = await startGame('1022')
     a.submit(1, { x: 6, y: 7 })
     expect(await b.next('opponent_submitted')).toMatchObject({ submitted: true })
     a.submit(1, { x: 7, y: 6 }, false)
@@ -273,9 +282,9 @@ describe('Room', () => {
   })
 
   it('starts an untimed game with no deadline and never auto-settles', async () => {
-    await createRoom('ROOM25', 0)
-    const a = await connect('ROOM25', 'token-a')
-    const b = await connect('ROOM25', 'token-b')
+    await createRoom('1025', 0)
+    const a = await connect('1025', 'token-a')
+    const b = await connect('1025', 'token-b')
     await a.next('joined')
     expect(await b.next('joined')).toMatchObject({ frameSeconds: 0 })
     a.ready()
@@ -287,7 +296,7 @@ describe('Room', () => {
     await b.next('start')
 
     a.submit(1, { x: 6, y: 7 })
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM25'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1025'))
     await runDurableObjectAlarm(stub)
     b.submit(1, { x: 7, y: 8 })
     const settled = await a.next('frame_settled')
@@ -298,9 +307,9 @@ describe('Room', () => {
   })
 
   it('awards a race-mode collision to the earlier final submission', async () => {
-    await createRoom('ROOM26', 30, 'race')
-    const a = await connect('ROOM26', 'token-a')
-    const b = await connect('ROOM26', 'token-b')
+    await createRoom('1026', 30, 'race')
+    const a = await connect('1026', 'token-a')
+    const b = await connect('1026', 'token-b')
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -318,13 +327,13 @@ describe('Room', () => {
   })
 
   it('notifies the opponent when a player leaves', async () => {
-    const [a, b] = await startGame('ROOM07')
+    const [a, b] = await startGame('1007')
     a.ws.close()
     await b.next('opponent_left')
   })
 
   it('plays to a win, then rematches through the lobby in the same room', async () => {
-    const [a, b] = await startGame('ROOM08')
+    const [a, b] = await startGame('1008')
     const settled = await playToBlackWin(a, b)
     expect(settled.state.phase).toBe('black_won')
     expect(settled.deadline).toBeNull()
@@ -345,7 +354,7 @@ describe('Room', () => {
   })
 
   it('applies the proposed settings when a rematch is accepted', async () => {
-    const [a, b] = await startGame('ROOM23')
+    const [a, b] = await startGame('1023')
     await playToBlackWin(a, b)
 
     a.rematch(60, 'minus')
@@ -362,7 +371,7 @@ describe('Room', () => {
   })
 
   it('treats a differing rematch proposal as a counter-offer', async () => {
-    const [a, b] = await startGame('ROOM24')
+    const [a, b] = await startGame('1024')
     await playToBlackWin(a, b)
 
     a.rematch(30, 'forbidden')
@@ -375,7 +384,7 @@ describe('Room', () => {
   })
 
   it('relays a rematch decline and allows re-inviting', async () => {
-    const [a, b] = await startGame('ROOM17')
+    const [a, b] = await startGame('1017')
     await playToBlackWin(a, b)
 
     a.rematch()
@@ -396,13 +405,13 @@ describe('Room', () => {
   })
 
   it('rejects rematch while the game is in progress', async () => {
-    const [a] = await startGame('ROOM14')
+    const [a] = await startGame('1014')
     a.rematch()
     expect(await a.next('error')).toMatchObject({ message: 'game not finished' })
   })
 
   it('forfeits the game and closes the room on leave', async () => {
-    const [a, b] = await startGame('ROOM16')
+    const [a, b] = await startGame('1016')
     a.ws.send(JSON.stringify({ type: 'leave' }))
     expect(await b.next('opponent_resigned')).toEqual({ type: 'opponent_resigned', left: true })
     const settled = await b.next('frame_settled')
@@ -411,42 +420,42 @@ describe('Room', () => {
     expect(settled.deadline).toBeNull()
     expect(await b.next('room_closed')).toEqual({ type: 'room_closed' })
 
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM16'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1016'))
     await vi.waitFor(async () => {
       const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
       expect(entries.size).toBe(0)
     })
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM16/ws?token=token-c', {
+    const res = await SELF.fetch('https://example.com/api/rooms/1016/ws?token=token-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(404)
   })
 
   it('recycles a finished room after the last player leaves', async () => {
-    const [a, b] = await startGame('ROOM15')
+    const [a, b] = await startGame('1015')
     const settled = await playToBlackWin(a, b)
     expect(settled.state.phase).toBe('black_won')
 
     a.ws.close()
     b.ws.close()
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM15'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1015'))
     await vi.waitFor(async () => {
       const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
       expect(entries.size).toBe(0)
     })
 
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM15')
+    const res = await SELF.fetch('https://example.com/api/rooms/1015')
     expect(await res.json()).toEqual({ exists: false, full: false })
   })
 
   it('lets a player reconnect mid-game and restores the frame snapshot', async () => {
-    const [a, b] = await startGame('ROOM09')
+    const [a, b] = await startGame('1009')
     a.submit(1, { x: 6, y: 7 })
     await b.next('opponent_submitted')
     a.ws.close()
     await b.next('opponent_left')
 
-    const a2 = await connect('ROOM09', 'token-a')
+    const a2 = await connect('1009', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     const start = await a2.next('start')
     expect(start).toMatchObject({
@@ -463,9 +472,9 @@ describe('Room', () => {
   })
 
   it('replaces the old socket on reconnect without notifying the opponent', async () => {
-    const [a, b] = await startGame('ROOM10')
+    const [a, b] = await startGame('1010')
     const closed = new Promise<void>((resolve) => a.ws.addEventListener('close', () => resolve()))
-    const a2 = await connect('ROOM10', 'token-a')
+    const a2 = await connect('1010', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     await a2.next('start')
     await closed
@@ -477,47 +486,47 @@ describe('Room', () => {
   })
 
   it('keeps a briefly abandoned game alive and lets a player resume it', async () => {
-    const [a, b] = await startGame('ROOM11')
+    const [a, b] = await startGame('1011')
     a.ws.close()
     b.ws.close()
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM11'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1011'))
     await waitForEmpty(stub)
     expect(await runDurableObjectAlarm(stub)).toBe(true)
 
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM11?token=token-a')
+    const res = await SELF.fetch('https://example.com/api/rooms/1011?token=token-a')
     expect(await res.json()).toEqual({ exists: true, full: false })
 
-    const a2 = await connect('ROOM11', 'token-a')
+    const a2 = await connect('1011', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     expect(await a2.next('start')).toMatchObject({ state: { frame: 1, phase: 'playing' } })
   })
 
   it('reaps an abandoned game once it has been empty past the idle TTL', async () => {
-    const [a, b] = await startGame('ROOM28')
+    const [a, b] = await startGame('1028')
     a.ws.close()
     b.ws.close()
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM28'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1028'))
     await waitForEmpty(stub)
     await runInDurableObject(stub, (_instance, state) =>
       state.storage.put('emptySince', Date.now() - 11 * 60 * 1000),
     )
     expect(await runDurableObjectAlarm(stub)).toBe(true)
 
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM28')
+    const res = await SELF.fetch('https://example.com/api/rooms/1028')
     expect(await res.json()).toEqual({ exists: false, full: false })
   })
 
   it('restarts the frame timer when a player returns after the deadline lapsed unattended', async () => {
-    const [a, b] = await startGame('ROOM29')
+    const [a, b] = await startGame('1029')
     a.ws.close()
     b.ws.close()
-    const stub = env.ROOM.get(env.ROOM.idFromName('ROOM29'))
+    const stub = env.ROOM.get(env.ROOM.idFromName('1029'))
     await waitForEmpty(stub)
     await runInDurableObject(stub, (_instance, state) =>
       state.storage.put('deadline', Date.now() - 5000),
     )
 
-    const a2 = await connect('ROOM29', 'token-a')
+    const a2 = await connect('1029', 'token-a')
     await a2.next('joined')
     const start = await a2.next('start')
     if (start.type !== 'start') throw new Error('unreachable')
@@ -526,8 +535,8 @@ describe('Room', () => {
   })
 
   it('answers a ping frame with pong without touching the message handler', async () => {
-    await createRoom('ROOM30')
-    const res = await SELF.fetch('https://example.com/api/rooms/ROOM30/ws?token=token-a', {
+    await createRoom('1030')
+    const res = await SELF.fetch('https://example.com/api/rooms/1030/ws?token=token-a', {
       headers: { Upgrade: 'websocket' },
     })
     const ws = res.webSocket!
@@ -542,7 +551,7 @@ describe('Room', () => {
   })
 
   it('ends the game when a player resigns, keeping the room open for a rematch', async () => {
-    const [a, b] = await startGame('ROOM31')
+    const [a, b] = await startGame('1031')
     a.ws.send(JSON.stringify({ type: 'resign' }))
     expect(await b.next('opponent_resigned')).toEqual({ type: 'opponent_resigned', left: false })
     const settled = await settledOnBoth(a, b)
@@ -552,7 +561,7 @@ describe('Room', () => {
   })
 
   it('settles a draw when the opponent accepts the offer', async () => {
-    const [a, b] = await startGame('ROOM32')
+    const [a, b] = await startGame('1032')
     a.ws.send(JSON.stringify({ type: 'draw_offer' }))
     await b.next('draw_offered')
     b.ws.send(JSON.stringify({ type: 'draw_response', accept: true }))
@@ -561,7 +570,7 @@ describe('Room', () => {
   })
 
   it('keeps playing when the draw offer is declined', async () => {
-    const [a, b] = await startGame('ROOM33')
+    const [a, b] = await startGame('1033')
     a.ws.send(JSON.stringify({ type: 'draw_offer' }))
     await b.next('draw_offered')
     b.ws.send(JSON.stringify({ type: 'draw_response', accept: false }))
@@ -584,54 +593,54 @@ describe('account seat recovery', () => {
   }
 
   it('reclaims the seat from a new device via the login session', async () => {
-    await createRoom('ACCT01')
+    await createRoom('2001')
     const session = await sessionFor('seat@example.com')
-    const a = await connect('ACCT01', 'device-1', session)
+    const a = await connect('2001', 'device-1', session)
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
-    const b = await connect('ACCT01', 'token-b')
+    const b = await connect('2001', 'token-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
 
     const closed = new Promise<{ reason: string }>((resolve) =>
       a.ws.addEventListener('close', resolve),
     )
-    const a2 = await connect('ACCT01', 'device-2', session)
+    const a2 = await connect('2001', 'device-2', session)
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     expect((await closed).reason).toBe('replaced by reconnect')
   })
 
   it('rejects a stranger token while the account still gets in', async () => {
-    await createRoom('ACCT02')
+    await createRoom('2002')
     const session = await sessionFor('seat2@example.com')
-    ;(await connect('ACCT02', 'device-1', session)).ready()
-    ;(await connect('ACCT02', 'token-b')).ready()
+    ;(await connect('2002', 'device-1', session)).ready()
+    ;(await connect('2002', 'token-b')).ready()
 
-    const stranger = await SELF.fetch('https://example.com/api/rooms/ACCT02/ws?token=stranger', {
+    const stranger = await SELF.fetch('https://example.com/api/rooms/2002/ws?token=stranger', {
       headers: { Upgrade: 'websocket' },
     })
     expect(stranger.status).toBe(409)
 
-    const guest = await SELF.fetch('https://example.com/api/rooms/ACCT02?token=stranger')
+    const guest = await SELF.fetch('https://example.com/api/rooms/2002?token=stranger')
     expect(await guest.json()).toEqual({ exists: true, full: true })
     const owner = await SELF.fetch(
-      `https://example.com/api/rooms/ACCT02?token=device-2&auth=${session}`,
+      `https://example.com/api/rooms/2002?token=device-2&auth=${session}`,
     )
     expect(await owner.json()).toEqual({ exists: true, full: false })
   })
 
   it('ignores an invalid auth token and falls back to guest behavior', async () => {
-    await createRoom('ACCT03')
-    const a = await connect('ACCT03', 'token-a', 'bogus-session')
+    await createRoom('2003')
+    const a = await connect('2003', 'token-a', 'bogus-session')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
-    const again = await connect('ACCT03', 'token-a', 'bogus-session')
+    const again = await connect('2003', 'token-a', 'bogus-session')
     expect(await again.next('joined')).toMatchObject({ seat: 'black' })
   })
 
   it('records the result for logged-in players when the game ends', async () => {
-    await createRoom('ACCT05')
+    await createRoom('2005')
     const winner = await sessionFor('winner@example.com')
     const loser = await sessionFor('loser@example.com')
-    const a = await connect('ACCT05', 'token-a', winner)
-    const b = await connect('ACCT05', 'token-b', loser)
+    const a = await connect('2005', 'token-a', winner)
+    const b = await connect('2005', 'token-b', loser)
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -653,10 +662,10 @@ describe('account seat recovery', () => {
   })
 
   it('records a resignation as a loss, skipping guest opponents', async () => {
-    await createRoom('ACCT06')
+    await createRoom('2006')
     const session = await sessionFor('quitter@example.com')
-    const a = await connect('ACCT06', 'token-a', session)
-    const b = await connect('ACCT06', 'token-b')
+    const a = await connect('2006', 'token-a', session)
+    const b = await connect('2006', 'token-b')
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -680,14 +689,14 @@ describe('account seat recovery', () => {
   })
 
   it('broadcasts masked seat accounts, unmasked once the owner opts in', async () => {
-    await createRoom('ACCT04')
+    await createRoom('2004')
     const session = await sessionFor('info@example.com')
-    const a = await connect('ACCT04', 'device-1', session)
+    const a = await connect('2004', 'device-1', session)
     expect(await a.next('players')).toEqual({
       type: 'players',
       accounts: { black: 'in***@example.com', white: null },
     })
-    const b = await connect('ACCT04', 'token-b')
+    const b = await connect('2004', 'token-b')
     expect(await b.next('players')).toEqual({
       type: 'players',
       accounts: { black: 'in***@example.com', white: null },

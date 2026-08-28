@@ -20,7 +20,7 @@ import {
   AI_MODE_OPTIONS,
   FRAME_OPTIONS,
   MODE_OPTIONS,
-  ROOM_CODE_LENGTH,
+  ROOM_CODE_MAX_LENGTH,
   ROOM_CODE_PATTERN,
   type LobbyServerMessage,
 } from '@/shared/protocol'
@@ -192,10 +192,11 @@ function closeMatchDialog() {
         >
           <input
             v-model="joinCode"
-            :maxlength="ROOM_CODE_LENGTH"
+            :maxlength="ROOM_CODE_MAX_LENGTH"
+            inputmode="numeric"
             placeholder="输入房间号"
             class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
-            @input="joinCode = joinCode.toUpperCase()"
+            @input="joinCode = joinCode.replace(/\D/g, '')"
             @keyup.enter="join"
           />
           <button
