@@ -32,6 +32,7 @@ const showInvite = ref(false)
 const showMatch = ref(false)
 const showAuth = ref(false)
 const showLeaderboard = ref(false)
+const showAi = ref(false)
 
 const { email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
@@ -58,6 +59,16 @@ const inviteFrame = useStorage('invite-frame', FRAME_OPTIONS[0])
 const inviteMode = useStorage<GameMode>('invite-mode', MODE_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
 if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
+
+const AI_MODE_OPTIONS: GameMode[] = ['forbidden']
+const aiFrame = useStorage('ai-frame', 0)
+const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
+if (!FRAME_OPTIONS.includes(aiFrame.value)) aiFrame.value = 0
+if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
+
+function startAi() {
+  location.assign(`/ai?mode=${aiMode.value}&frame=${aiFrame.value}`)
+}
 
 async function create() {
   if (creating.value) return
@@ -169,26 +180,29 @@ function closeMatchDialog() {
     <div class="flex w-full max-w-md flex-col items-center gap-2">
       <div class="flex w-full gap-2">
         <AppButton secondary class="flex-1" @click="showMatch = true">随机匹配</AppButton>
-        <AppButton class="flex-1" @click="showInvite = true">邀请好友</AppButton>
+        <AppButton secondary class="flex-1" @click="showAi = true">人机对战</AppButton>
       </div>
-      <div
-        class="flex w-full overflow-hidden rounded-xl border border-stone-300 bg-white/80 shadow-sm focus-within:border-stone-500 dark:border-stone-600 dark:bg-stone-800/80 dark:focus-within:border-stone-400"
-      >
-        <input
-          v-model="joinCode"
-          :maxlength="ROOM_CODE_LENGTH"
-          placeholder="输入房间号"
-          class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
-          @input="joinCode = joinCode.toUpperCase()"
-          @keyup.enter="join"
-        />
-        <button
-          class="cursor-pointer bg-stone-800 px-6 text-lg font-medium text-white active:bg-stone-600 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
-          :disabled="!joinCodeValid"
-          @click="join"
+      <div class="flex w-full gap-2">
+        <AppButton class="shrink-0" @click="showInvite = true">邀请好友</AppButton>
+        <div
+          class="flex min-w-0 flex-1 overflow-hidden rounded-xl border border-stone-300 bg-white/80 shadow-sm focus-within:border-stone-500 dark:border-stone-600 dark:bg-stone-800/80 dark:focus-within:border-stone-400"
         >
-          进入
-        </button>
+          <input
+            v-model="joinCode"
+            :maxlength="ROOM_CODE_LENGTH"
+            placeholder="输入房间号"
+            class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
+            @input="joinCode = joinCode.toUpperCase()"
+            @keyup.enter="join"
+          />
+          <button
+            class="cursor-pointer bg-stone-800 px-5 text-lg font-medium text-white active:bg-stone-600 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
+            :disabled="!joinCodeValid"
+            @click="join"
+          >
+            进入
+          </button>
+        </div>
       </div>
       <div class="flex items-center gap-1">
         <a
@@ -227,6 +241,17 @@ function closeMatchDialog() {
     <AuthDialog v-if="showAuth" @close="showAuth = false" />
 
     <LeaderboardDialog v-if="showLeaderboard" @close="showLeaderboard = false" />
+
+    <GameConfigDialog
+      v-if="showAi"
+      v-model:frame="aiFrame"
+      v-model:mode="aiMode"
+      :enabled-modes="AI_MODE_OPTIONS"
+      title="人机对战"
+      confirm-text="开始对战"
+      @cancel="showAi = false"
+      @confirm="startAi"
+    />
 
     <GameConfigDialog
       v-if="showInvite"
