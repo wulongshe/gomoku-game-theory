@@ -199,6 +199,7 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 8, y: 8 })).toBe('white')
     expect(settled.state.frame).toBe(2)
     expect(settled.deadline).toBeGreaterThan(Date.now())
+    expect(settled.passed).toEqual([])
   })
 
   it('turns a collision into a forbidden point', async () => {
@@ -216,6 +217,7 @@ describe('Room', () => {
     const settled = await settledOnBoth(a, b)
     expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
     expect(settled.state.board.filter((cell) => cell !== 'empty')).toHaveLength(1)
+    expect(settled.passed).toEqual(['white'])
   })
 
   it('auto-submits an unconfirmed draft at the frame deadline', async () => {

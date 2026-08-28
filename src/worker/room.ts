@@ -310,7 +310,7 @@ export class Room extends DurableObject<Env> {
         phase: seat === 'black' ? 'white_won' : 'black_won',
         cleared: [],
       }
-      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now() })
+      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now(), passed: [] })
       await this.recordResult(resigned.phase)
       for (const socket of this.ctx.getWebSockets()) {
         if (socket === ws) socket.close(1000, 'room closed')
@@ -405,15 +405,16 @@ export class Room extends DurableObject<Env> {
       white: choices.white?.point ?? null,
       first: this.firstSubmitter(choices),
     })
+    const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
       await this.ctx.storage.delete('choices')
       const deadline = await this.scheduleFrame(next, await this.frameSeconds())
-      this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now() })
+      this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed })
     } else {
       await this.ctx.storage.delete('choices')
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       await this.ctx.storage.put('game', next)
-      this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now() })
+      this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
       await this.recordResult(next.phase)
     }
   }

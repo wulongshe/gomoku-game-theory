@@ -42,7 +42,7 @@ export type ServerMessage =
       yourChoice: Point | null
     }
   | { type: 'opponent_submitted'; submitted: boolean }
-  | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number }
+  | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number; passed: Seat[] }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
   | { type: 'room_closed' }

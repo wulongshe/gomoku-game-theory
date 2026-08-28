@@ -78,6 +78,14 @@ const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null
 const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
+const toast = ref('')
+
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+function showToast(message: string) {
+  toast.value = message
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 3000)
+}
 
 const token = useStorage(`${ROOM_TOKEN_PREFIX}${props.code}`, nanoid())
 const { token: authToken, refresh: refreshAuth } = useAuth()
@@ -196,6 +204,9 @@ function handleMessage(msg: ServerMessage) {
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
     case 'frame_settled':
+      if (msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
+        showToast('对方上一回合弃着')
+      }
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
@@ -674,5 +685,21 @@ function exitRoom() {
     />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
+
+    <div class="pointer-events-none fixed inset-x-0 top-6 z-50 flex justify-center">
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="-translate-y-2 opacity-0"
+        leave-active-class="transition duration-200 ease-in"
+        leave-to-class="opacity-0"
+      >
+        <span
+          v-if="toast"
+          class="rounded-full bg-stone-800/90 px-4 py-2 text-sm text-white shadow-lg dark:bg-stone-200/90 dark:text-stone-900"
+        >
+          {{ toast }}
+        </span>
+      </Transition>
+    </div>
   </main>
 </template>
