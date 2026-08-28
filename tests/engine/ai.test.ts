@@ -37,6 +37,14 @@ describe('chooseAiMove', () => {
     expect(next.phase).toBe('black_won')
   })
 
+  it('master fallback completes its only winning point', () => {
+    const game = withStones({ black: row(7, [4, 5, 6, 7]), white: [{ x: 3, y: 7 }] })
+    const move = chooseAiMove(game, 'black', 'master')
+    expect(move).toEqual({ x: 8, y: 7 })
+    const next = settleFrame(game, { black: move, white: null })
+    expect(next.phase).toBe('black_won')
+  })
+
   it('blocks the opponent open four', () => {
     const game = withStones({ white: row(7, [4, 5, 6, 7]) })
     const move = chooseAiMove(game, 'black', 'hard')

@@ -1,5 +1,5 @@
 import { settleFrame, type GameState, type Point, type Seat } from './game'
-import { analyzeBoard, evaluateState, sampleIndex } from './eval'
+import { analyzeBoard, evaluateState, immediateWinningMoves, sampleIndex } from './eval'
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
 
@@ -18,6 +18,11 @@ export const DIFFICULTY_SETTINGS: Record<
 }
 
 const FICTITIOUS_ITERATIONS = 300
+
+export function chooseImmediateWinningMove(state: GameState, seat: Seat): Point | null {
+  const moves = immediateWinningMoves(state, seat)
+  return moves.length ? moves[Math.floor(Math.random() * moves.length)] : null
+}
 
 // 「AI 下 ai、对手下 opp」这一格的收益（AI 视角）。抢点撞同点时先手随机，取两种先手的均值。
 function payoff(state: GameState, seat: Seat, ai: Point, opp: Point): number {
@@ -73,6 +78,11 @@ export function chooseAiMove(
   seat: Seat,
   difficulty: Difficulty = 'normal',
 ): Point | null {
+  if (difficulty === 'master') {
+    const winningMove = chooseImmediateWinningMove(state, seat)
+    if (winningMove) return winningMove
+  }
+
   const { candidates, explore } = DIFFICULTY_SETTINGS[difficulty]
   const { aiMoves, oppMoves } = analyzeBoard(state, seat, candidates)
   if (aiMoves.length <= 1) return aiMoves[0] ?? null

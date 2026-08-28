@@ -141,6 +141,19 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
   }
 }
 
+export function immediateWinningMoves(state: GameState, seat: Seat): Point[] {
+  const moves: Point[] = []
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const point = { x, y }
+      if (isLegalChoice(state, point) && placementScore(state, point, seat) >= WIN_SCORE) {
+        moves.push(point)
+      }
+    }
+  }
+  return moves
+}
+
 // 结算后某方威胁强度（threatValue 的全盘扫描版）。
 function threatScore(state: GameState, seat: Seat): number {
   let best = 0

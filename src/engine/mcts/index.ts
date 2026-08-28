@@ -1,5 +1,5 @@
 import { type GameState, type Point, type Seat } from '../game'
-import { DIFFICULTY_SETTINGS, type Difficulty } from '../ai'
+import { chooseImmediateWinningMove, DIFFICULTY_SETTINGS, type Difficulty } from '../ai'
 import { ductSearch } from './duct'
 import { rmSearch } from './rm'
 
@@ -12,6 +12,11 @@ export function searchBestMove(
   budgetMs?: number,
 ): Point | null {
   const settings = DIFFICULTY_SETTINGS[difficulty]
+  if (settings.policy === 'rm') {
+    const winningMove = chooseImmediateWinningMove(state, seat)
+    if (winningMove) return winningMove
+  }
+
   const budget = budgetMs ?? settings.budgetMs
   return settings.policy === 'rm'
     ? rmSearch(state, seat, settings.candidates, budget)

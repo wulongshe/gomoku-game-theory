@@ -5,6 +5,7 @@ import {
   createGame,
   inOpeningArea,
   isLegalChoice,
+  settleFrame,
   type GameMode,
   type GameState,
   type Point,
@@ -74,6 +75,14 @@ describe('searchBestMove', () => {
       if (move?.x === 8 && move?.y === 7) denied++
     }
     expect(denied).toBeGreaterThan(6)
+  })
+
+  it('master completes its only winning point', () => {
+    const game = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
+    const move = searchBestMove(game, 'white', 'master', 1)
+    expect(move).toEqual({ x: 8, y: 7 })
+    const next = settleFrame(game, { black: null, white: move })
+    expect(next.phase).toBe('white_won')
   })
 
   it('master always returns a legal move mid-game', () => {
