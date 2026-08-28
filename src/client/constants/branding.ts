@@ -11,12 +11,13 @@ export const MODE_LABELS: Record<GameMode, string> = {
   minus: '负子',
 }
 
-export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard']
+export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard', 'master']
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
   normal: '普通',
   hard: '困难',
+  master: '大师',
 }
 
 export function frameLabel(seconds: number): string {

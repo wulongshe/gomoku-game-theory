@@ -26,16 +26,20 @@ const CONTEST_FACTOR: Record<GameMode, number> = {
   race: 0.45, // 撞点 → 按提交顺序归属，本地是掷硬币，倾向减半
 }
 
-export type Difficulty = 'easy' | 'normal' | 'hard'
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
+
+// 节点策略：duct 解耦 UCB（贪最强手、可被针对）；rm 遗憾匹配（平均策略收敛混合纳什、不可被利用）。
+export type AiPolicy = 'duct' | 'rm'
 
 // explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
 export const DIFFICULTY_SETTINGS: Record<
   Difficulty,
-  { candidates: number; explore: number; budgetMs: number }
+  { candidates: number; explore: number; budgetMs: number; policy: AiPolicy }
 > = {
-  easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
-  normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
-  hard: { candidates: 7, explore: 0, budgetMs: 800 },
+  easy: { candidates: 5, explore: 0.55, budgetMs: 200, policy: 'duct' },
+  normal: { candidates: 6, explore: 0.22, budgetMs: 450, policy: 'duct' },
+  hard: { candidates: 7, explore: 0, budgetMs: 800, policy: 'duct' },
+  master: { candidates: 7, explore: 0, budgetMs: 1200, policy: 'rm' },
 }
 
 const FICTITIOUS_ITERATIONS = 300
