@@ -1,6 +1,6 @@
-import { settleFrame, type GameState, type Point, type Seat } from '../game'
-import { sampleIndex } from '../eval'
-import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core'
+import { settleFrame, type GameState, type Point, type Seat } from '../game.ts'
+import { sampleIndex } from '../eval.ts'
+import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core.ts'
 
 // 第五层：遗憾匹配（RM），把每个节点当重复矩阵博弈求解，双方平均策略收敛混合纳什。
 interface RmNode extends Core {

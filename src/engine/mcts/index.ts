@@ -1,7 +1,7 @@
-import { type GameState, type Point, type Seat } from '../game'
-import { chooseImmediateWinningMove, DIFFICULTY_SETTINGS, type Difficulty } from '../ai'
-import { ductSearch } from './duct'
-import { rmSearch } from './rm'
+import { type GameState, type Point, type Seat } from '../game.ts'
+import { chooseImmediateWinningMove, DIFFICULTY_SETTINGS, type Difficulty } from '../ai.ts'
+import { ductSearch } from './duct.ts'
+import { rmSearch } from './rm.ts'
 
 // SM-MCTS：解耦 UCB 逐帧向前搜，anytime + 时间盒；节点策略按难度选 DUCT（第四层）或遗憾匹配（第五层）。
 // budgetMs 可覆盖难度默认时间盒。

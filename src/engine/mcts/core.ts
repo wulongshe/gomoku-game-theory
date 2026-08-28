@@ -1,5 +1,5 @@
-import { type FrameChoices, type GameState, type Point, type Seat } from '../game'
-import { analyzeBoard, evaluateState, MAX_THREAT_VALUE, TERMINAL } from '../eval'
+import { type FrameChoices, type GameState, type Point, type Seat } from '../game.ts'
+import { analyzeBoard, evaluateState, MAX_THREAT_VALUE, TERMINAL } from '../eval.ts'
 
 export const MAX_ITERATIONS = 60_000
 // 递归深度上限：常规下棋盘单调填满、深度天然有界，唯「双方同帧成五湮灭清子」会破坏单调，硬顶防爆栈。

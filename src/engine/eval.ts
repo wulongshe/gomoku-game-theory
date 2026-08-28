@@ -6,7 +6,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from './game'
+} from './game.ts'
 
 const DIRECTIONS = [
   [1, 0],

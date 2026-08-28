@@ -1,6 +1,6 @@
-import { settleFrame, type GameState, type Point, type Seat } from '../game'
-import { sampleIndex } from '../eval'
-import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core'
+import { settleFrame, type GameState, type Point, type Seat } from '../game.ts'
+import { sampleIndex } from '../eval.ts'
+import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core.ts'
 
 const EXPLORATION = 1.0
 

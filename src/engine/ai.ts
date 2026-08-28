@@ -1,5 +1,5 @@
-import { settleFrame, type GameState, type Point, type Seat } from './game'
-import { analyzeBoard, evaluateState, immediateWinningMoves, sampleIndex } from './eval'
+import { settleFrame, type GameState, type Point, type Seat } from './game.ts'
+import { analyzeBoard, evaluateState, immediateWinningMoves, sampleIndex } from './eval.ts'
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
 
