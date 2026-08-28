@@ -16,8 +16,8 @@ const DIRECTIONS = [
   [1, -1],
 ] as const
 
-const WIN_SCORE = 1_000_000
-const TERMINAL = 1_000_000_000
+export const WIN_SCORE = 1_000_000
+export const TERMINAL = 1_000_000_000
 
 // 同时落子下，抢占对方的强点即是防守：不撞点则该点归己（挡住对方连线），
 // 撞点则结果随模式而变。系数衡量「与对方争抢同一点」的收益。
@@ -29,16 +29,20 @@ const CONTEST_FACTOR: Record<GameMode, number> = {
 
 export type Difficulty = 'easy' | 'normal' | 'hard'
 
-// candidates：候选宽度 K；explore：在均衡混合策略里混入均匀探索的比例（越高越随机、越弱）。
-const DIFFICULTY_SETTINGS: Record<Difficulty, { candidates: number; explore: number }> = {
-  easy: { candidates: 5, explore: 0.55 },
-  normal: { candidates: 6, explore: 0.22 },
-  hard: { candidates: 7, explore: 0 },
+// candidates：候选宽度 K；explore：在均衡混合策略里混入均匀探索的比例（越高越随机、越弱）；
+// budgetMs：第四层 SM-MCTS 后台搜索的时间盒（毫秒），到点即返回当前最优/混合策略。
+export const DIFFICULTY_SETTINGS: Record<
+  Difficulty,
+  { candidates: number; explore: number; budgetMs: number }
+> = {
+  easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
+  normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
+  hard: { candidates: 7, explore: 0, budgetMs: 800 },
 }
 
 const FICTITIOUS_ITERATIONS = 300
 
-function other(seat: Seat): Seat {
+export function other(seat: Seat): Seat {
   return seat === 'black' ? 'white' : 'black'
 }
 
@@ -87,7 +91,7 @@ function moveScore(state: GameState, point: Point, seat: Seat): number {
   )
 }
 
-function topCandidates(state: GameState, seat: Seat, limit: number): Point[] {
+export function candidateMoves(state: GameState, seat: Seat, limit: number): Point[] {
   const scored: { point: Point; score: number }[] = []
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
@@ -100,28 +104,35 @@ function topCandidates(state: GameState, seat: Seat, limit: number): Point[] {
   return scored.slice(0, limit).map((s) => s.point)
 }
 
-// 一方在当前局面下最强的一手威胁值，作为静态局面评估的基石。
-function bestThreat(state: GameState, seat: Seat): number {
+// 全盘威胁强度：取最强两手的加权和。撞点规则下单个胜点会被对方撞掉，
+// 需两个胜点（双威胁/叉）才必胜，故让次强手也计分，比单一强点更值钱。
+function threatScore(state: GameState, seat: Seat): number {
   let best = 0
+  let second = 0
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const point = { x, y }
       if (!isLegalChoice(state, point)) continue
       const score = placementScore(state, point, seat)
-      if (score > best) best = score
+      if (score > best) {
+        second = best
+        best = score
+      } else if (score > second) {
+        second = score
+      }
     }
   }
-  return best
+  return best + 0.25 * second
 }
 
-// 从 seat 视角评估结算后的局面：终局用 ±TERMINAL，进行中用双方最强威胁之差。
-function evaluate(state: GameState, seat: Seat): number {
+// 从 seat 视角评估结算后的局面：终局用 ±TERMINAL，进行中用双方威胁强度之差。
+export function evaluateState(state: GameState, seat: Seat): number {
   if (state.phase !== 'playing') {
     if (state.phase === 'draw') return 0
     const won = state.phase === (seat === 'black' ? 'black_won' : 'white_won')
     return won ? TERMINAL : -TERMINAL
   }
-  return bestThreat(state, seat) - bestThreat(state, other(seat))
+  return threatScore(state, seat) - threatScore(state, other(seat))
 }
 
 // 「AI 下 ai、对手下 opp」这一格的收益（AI 视角）。抢点撞同点时先手随机，取两种先手的均值。
@@ -130,12 +141,12 @@ function payoff(state: GameState, seat: Seat, ai: Point, opp: Point): number {
     seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
   if (state.mode === 'race' && ai.x === opp.x && ai.y === opp.y) {
     return (
-      (evaluate(settleFrame(state, { ...choices, first: 'black' }), seat) +
-        evaluate(settleFrame(state, { ...choices, first: 'white' }), seat)) /
+      (evaluateState(settleFrame(state, { ...choices, first: 'black' }), seat) +
+        evaluateState(settleFrame(state, { ...choices, first: 'white' }), seat)) /
       2
     )
   }
-  return evaluate(settleFrame(state, choices), seat)
+  return evaluateState(settleFrame(state, choices), seat)
 }
 
 // 虚拟对弈（fictitious play）求解零和博弈：双方反复对当前经验分布做最优回应，
@@ -172,7 +183,7 @@ function solveMaximin(matrix: number[][]): number[] {
   return rowCount.map((c) => c / FICTITIOUS_ITERATIONS)
 }
 
-function sampleIndex(dist: number[]): number {
+export function sampleIndex(dist: number[]): number {
   const r = Math.random()
   let acc = 0
   for (let i = 0; i < dist.length; i++) {
@@ -188,10 +199,10 @@ export function chooseAiMove(
   difficulty: Difficulty = 'normal',
 ): Point | null {
   const { candidates, explore } = DIFFICULTY_SETTINGS[difficulty]
-  const aiMoves = topCandidates(state, seat, candidates)
+  const aiMoves = candidateMoves(state, seat, candidates)
   if (aiMoves.length <= 1) return aiMoves[0] ?? null
 
-  const oppMoves = topCandidates(state, other(seat), candidates)
+  const oppMoves = candidateMoves(state, other(seat), candidates)
   const matrix = aiMoves.map((ai) => oppMoves.map((opp) => payoff(state, seat, ai, opp)))
 
   // 必胜手：某行对手所有回应都稳赢，直接落子，不做随机化。

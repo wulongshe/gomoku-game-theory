@@ -10,7 +10,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { chooseAiMove, type Difficulty } from '@/engine/ai'
+import { type Difficulty } from '@/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -19,6 +19,7 @@ import {
   type GameMode,
   type Point,
 } from '@/engine/game'
+import { useAiOpponent } from '~/composables/useAiOpponent'
 import { DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
@@ -38,6 +39,11 @@ const vanishing = ref<ClearedGroup[]>([])
 const overlayDismissed = ref(false)
 const showRules = ref(false)
 const deadline = ref<number | null>(null)
+const frameStart = ref<number | null>(null)
+const resolving = ref(false)
+
+const ai = useAiOpponent()
+let pendingAiMove: Promise<Point | null> | null = null
 
 const showConfig = ref(false)
 const configFrame = ref(frameSeconds.value)
@@ -62,31 +68,54 @@ const urgency = computed(() => {
   return 'calm'
 })
 
-function startFrame() {
+const elapsedSeconds = computed(() => {
+  if (frameStart.value === null || !playing.value) return 0
+  return Math.max(0, Math.floor((now.value - frameStart.value) / 1000))
+})
+
+const aiStatus = computed(() => {
+  if (!playing.value) return null
+  if (resolving.value)
+    return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
+  if (ai.thinking.value)
+    return { text: 'AI 思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
+  return { text: 'AI 已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700 dark:text-emerald-400' }
+})
+
+// 本帧一开始就让 AI 在后台开算：AI 选点只依赖帧初局面、与人本帧隐藏选点无关，
+// 故与人同时思考，结算时（await pendingAiMove）通常已备好，人零等待。
+function beginFrame() {
   deadline.value = frameSeconds.value > 0 ? Date.now() + frameSeconds.value * 1000 : null
+  frameStart.value = Date.now()
+  pendingAiMove = ai.request(game.value, 'white', difficulty.value)
 }
 
-function resolveFrame() {
+async function resolveFrame() {
+  if (resolving.value || !playing.value) return
+  resolving.value = true
+  const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const next = settleFrame(game.value, {
     black: selected.value,
-    white: chooseAiMove(game.value, 'white', difficulty.value),
+    white: aiMove,
     first: Math.random() < 0.5 ? 'black' : 'white',
   })
   lastMoves.value = next.lastMoves
   vanishing.value = next.cleared
   game.value = next
   selected.value = null
-  if (next.phase === 'playing') startFrame()
+  pendingAiMove = null
+  resolving.value = false
+  if (next.phase === 'playing') beginFrame()
   else deadline.value = null
 }
 
 function select(point: Point) {
-  if (!playing.value || !isLegalChoice(game.value, point)) return
+  if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
   selected.value = point
 }
 
 function submitChoice() {
-  if (!playing.value || !selected.value) return
+  if (!playing.value || !selected.value || resolving.value) return
   resolveFrame()
 }
 
@@ -96,7 +125,9 @@ function restart() {
   lastMoves.value = []
   vanishing.value = []
   overlayDismissed.value = false
-  startFrame()
+  pendingAiMove = null
+  resolving.value = false
+  beginFrame()
 }
 
 function openConfig() {
@@ -123,7 +154,7 @@ watch(secondsLeft, (value) => {
   if (value === 0 && playing.value) resolveFrame()
 })
 
-onMounted(startFrame)
+onMounted(beginFrame)
 
 const resultChar = computed(() => {
   if (game.value.phase === 'draw') return '和'
@@ -173,10 +204,14 @@ const resultTextCls = computed(() => {
         </button>
       </div>
 
-      <div class="grid grid-cols-[1fr_auto] items-center text-sm">
+      <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
         <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game.frame }} 回合</span>
+        <span v-if="aiStatus" class="flex items-center gap-1.5" :class="aiStatus.cls">
+          <span class="size-2 rounded-full" :class="aiStatus.dot" />
+          {{ aiStatus.text }}
+        </span>
+        <span v-else />
         <span
-          v-if="frameSeconds > 0"
           class="justify-self-end text-base font-semibold tabular-nums"
           :class="{
             'text-stone-600 dark:text-stone-300': urgency === 'calm',
@@ -184,7 +219,7 @@ const resultTextCls = computed(() => {
             'animate-pulse text-red-600 dark:text-red-400': urgency === 'critical',
           }"
         >
-          {{ secondsLeft ?? 0 }}s/{{ frameSeconds }}s
+          {{ frameSeconds === 0 ? `${elapsedSeconds}s/∞` : `${secondsLeft ?? 0}s/${frameSeconds}s` }}
         </span>
       </div>
 
@@ -208,7 +243,7 @@ const resultTextCls = computed(() => {
           :submitted="false"
           :last-moves="lastMoves"
           :vanishing="vanishing"
-          :interactive="playing"
+          :interactive="playing && !resolving"
           @select="select"
         />
         <ResultOverlay
@@ -220,8 +255,8 @@ const resultTextCls = computed(() => {
       </div>
 
       <template v-if="playing">
-        <AppButton class="w-full" :disabled="!selected" @click="submitChoice">
-          {{ selected ? '确认提交' : '点击棋盘选择落点' }}
+        <AppButton class="w-full" :disabled="!selected || resolving" @click="submitChoice">
+          {{ resolving ? 'AI 结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
         </AppButton>
       </template>
       <template v-else>
