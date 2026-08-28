@@ -27,11 +27,13 @@ function regretMatch(regret: number[]): number[] {
 
 // 每次迭代：双方按当前遗憾匹配策略各采一手向下走，回来用子节点均值 q（未采样对按父节点静态值兜底）
 // 估两侧各动作价值并累加遗憾与平均策略。根节点按 AI 平均策略采样落子 —— 混合纳什、博弈最优、不可被针对。
+// opponentRationality ∈ [0,1] 为观察到的对手理性程度（1 = 完全理性，默认保持原行为）。
 export function rmSearch(
   state: GameState,
   seat: Seat,
   candidates: number,
   budget: number,
+  opponentRationality = 1,
 ): Point | null {
   function makeNode(s: GameState): RmNode {
     const core = expand(s, seat, candidates)
@@ -56,7 +58,11 @@ export function rmSearch(
     const n = node.aiMoves.length
     const m = node.oppMoves.length
     const sigmaAi = regretMatch(node.regretAi)
-    const sigmaOpp = regretMatch(node.regretOpp)
+    // 对手非理性时向均匀混合；采样与价值更新共用同一分布，保持一致。
+    const sigmaOpp =
+      opponentRationality < 1
+        ? regretMatch(node.regretOpp).map((p) => opponentRationality * p + (1 - opponentRationality) / m)
+        : regretMatch(node.regretOpp)
     const i = sampleIndex(sigmaAi)
     const j = sampleIndex(sigmaOpp)
     const idx = i * m + j

@@ -14,12 +14,14 @@ interface DuctNode extends Core {
   visits: number
 }
 
+// opponentRationality ∈ [0,1] 为观察到的对手理性程度（1 = 完全理性，默认保持原行为）。
 export function ductSearch(
   state: GameState,
   seat: Seat,
   candidates: number,
   explore: number,
   budget: number,
+  opponentRationality = 1,
 ): Point | null {
   function makeNode(s: GameState): DuctNode {
     const core = expand(s, seat, candidates)
@@ -51,8 +53,11 @@ export function ductSearch(
     return best
   }
 
-  // 对手是最小化方：未探索动作优先，其余取（AI 视角的）UCB 下界最小。
+  // 对手是最小化方：未探索动作优先，其余取（AI 视角的）UCB 下界最小；非理性时随机应对。
   function selectOpp(node: DuctNode): number {
+    if (opponentRationality < 1 && Math.random() >= opponentRationality) {
+      return Math.floor(Math.random() * node.oppMoves.length)
+    }
     const logN = Math.log(node.visits + 1)
     let best = 0
     let bestScore = Infinity

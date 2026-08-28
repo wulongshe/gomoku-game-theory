@@ -26,6 +26,7 @@ interface Pending {
   state: GameState
   seat: Seat
   difficulty: Difficulty
+  opponentRationality: number
 }
 
 // 后台 AI 对手：把 SM-MCTS 放进 Web Worker，本帧一开始就与人同时思考，
@@ -52,7 +53,7 @@ export function useAiOpponent() {
         worker?.terminate()
         worker = null
         for (const entry of pending.values()) {
-          entry.resolve(chooseAiMove(entry.state, entry.seat, entry.difficulty))
+          entry.resolve(chooseAiMove(entry.state, entry.seat, entry.difficulty, entry.opponentRationality))
         }
         pending.clear()
       }
@@ -62,7 +63,12 @@ export function useAiOpponent() {
     }
   }
 
-  function request(state: GameState, seat: Seat, difficulty: Difficulty): Promise<Point | null> {
+  function request(
+    state: GameState,
+    seat: Seat,
+    difficulty: Difficulty,
+    opponentRationality = 1,
+  ): Promise<Point | null> {
     ensureWorker()
     const id = ++seq
     thinking.value = true
@@ -71,11 +77,11 @@ export function useAiOpponent() {
       return move
     }
     if (!worker) {
-      return Promise.resolve(chooseAiMove(state, seat, difficulty)).then(done)
+      return Promise.resolve(chooseAiMove(state, seat, difficulty, opponentRationality)).then(done)
     }
     return new Promise<Point | null>((resolve) => {
-      pending.set(id, { resolve, state, seat, difficulty })
-      worker!.postMessage({ id, state: snapshot(state), seat, difficulty })
+      pending.set(id, { resolve, state, seat, difficulty, opponentRationality })
+      worker!.postMessage({ id, state: snapshot(state), seat, difficulty, opponentRationality })
     }).then(done)
   }
 

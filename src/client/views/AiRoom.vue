@@ -13,7 +13,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { type Difficulty } from '@/engine/ai'
+import { updateOpponentRationality, type Difficulty } from '@/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -27,7 +27,7 @@ import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
-import { AI_GAME_KEY } from '~/constants/storage'
+import { AI_GAME_KEY, AI_OPPONENT_R_KEY } from '~/constants/storage'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
@@ -54,6 +54,17 @@ const reloaded =
 const savedGame = reloaded ? loadSavedGame() : null
 const game = ref<GameState>(savedGame ?? createGame(mode.value))
 watch(game, (g) => localStorage.setItem(AI_GAME_KEY, JSON.stringify(g)), { immediate: true })
+
+// 对手理性程度随存档续上；无存档或值非法时回到 1（完全理性假设）。
+function loadSavedOpponentR(): number {
+  const raw = localStorage.getItem(AI_OPPONENT_R_KEY)
+  if (raw === null) return 1
+  const value = Number(raw)
+  return value >= 0 && value <= 1 ? value : 1
+}
+const opponentR = ref(savedGame ? loadSavedOpponentR() : 1)
+// immediate：新开局立即写入 1，抹掉上一局残留的旧值，避免新局早期刷新时复活。
+watch(opponentR, (r) => localStorage.setItem(AI_OPPONENT_R_KEY, String(r)), { immediate: true })
 
 const selected = ref<Point | null>(null)
 const lastMoves = ref<Point[]>(savedGame?.lastMoves ?? [])
@@ -95,18 +106,24 @@ const aiStatus = computed(() => {
 function beginFrame() {
   deadline.value = frameSeconds.value > 0 ? Date.now() + frameSeconds.value * 1000 : null
   frameStart.value = Date.now()
-  pendingAiMove = ai.request(game.value, 'white', difficulty.value)
+  pendingAiMove = ai.request(game.value, 'white', difficulty.value, opponentR.value)
 }
 
 async function resolveFrame() {
   if (resolving.value || !playing.value) return
   resolving.value = true
   const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
-  const next = settleFrame(game.value, {
-    black: selected.value,
+  const before = game.value
+  const humanMove = selected.value
+  const next = settleFrame(before, {
+    black: humanMove,
     white: aiMove,
     first: Math.random() < 0.5 ? 'black' : 'white',
   })
+  // 大师难度观察人类本帧应对（赢棋/封堵/落子质量），供下一帧搜索调整对手模型。
+  if (difficulty.value === 'master') {
+    opponentR.value = updateOpponentRationality(before, 'black', humanMove, next, opponentR.value)
+  }
   lastMoves.value = next.lastMoves
   vanishing.value = next.cleared
   game.value = next
@@ -135,12 +152,14 @@ function restart() {
   overlayDismissed.value = false
   pendingAiMove = null
   resolving.value = false
+  opponentR.value = 1
   beginFrame()
 }
 
 // 明确退出人机对战：清空本地存档，避免下次进入又续上已放弃的对局。
 function exitRoom() {
   localStorage.removeItem(AI_GAME_KEY)
+  localStorage.removeItem(AI_OPPONENT_R_KEY)
   location.assign('/')
 }
 

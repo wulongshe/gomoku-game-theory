@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiMove } from '@/engine/ai'
+import { chooseAiMove, updateOpponentRationality } from '@/engine/ai'
 import { evaluateState } from '@/engine/eval'
+import { searchBestMove } from '@/engine/mcts'
 import {
   BOARD_SIZE,
   createGame,
   inOpeningArea,
+  isLegalChoice,
   settleFrame,
   type GameMode,
   type GameState,
@@ -119,5 +121,64 @@ describe('chooseAiMove', () => {
     const doubleThreat = withStones({ white: row(7, [4, 5, 6, 7]) })
     const singleThreat = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
     expect(evaluateState(doubleThreat, 'white')).toBeGreaterThan(evaluateState(singleThreat, 'white'))
+  })
+})
+
+describe('updateOpponentRationality', () => {
+  it('drops when the human misses blocking the AI open four', () => {
+    const before = withStones({ white: row(7, [4, 5, 6, 7]) })
+    const humanMove = { x: 0, y: 0 }
+    const settled = settleFrame(before, { black: humanMove, white: null })
+    expect(updateOpponentRationality(before, 'black', humanMove, settled, 1)).toBe(0.75)
+  })
+
+  it('stays at 1 when the human blocks the AI open four', () => {
+    const before = withStones({ white: row(7, [4, 5, 6, 7]) })
+    const humanMove = { x: 3, y: 7 }
+    const settled = settleFrame(before, { black: humanMove, white: null })
+    expect(updateOpponentRationality(before, 'black', humanMove, settled, 1)).toBe(1)
+  })
+
+  it('drops when the human misses their own open four', () => {
+    const before = withStones({ black: row(5, [4, 5, 6, 7]), white: [{ x: 0, y: 0 }] })
+    const humanMove = { x: 7, y: 7 }
+    const settled = settleFrame(before, { black: humanMove, white: null })
+    expect(updateOpponentRationality(before, 'black', humanMove, settled, 1)).toBe(0.75)
+  })
+
+  it('rises when the human completes their own five', () => {
+    const before = withStones({ black: row(5, [4, 5, 6, 7]) })
+    const humanMove = { x: 3, y: 5 }
+    const settled = settleFrame(before, { black: humanMove, white: null })
+    expect(settled.phase).toBe('black_won')
+    expect(updateOpponentRationality(before, 'black', humanMove, settled, 0.5)).toBe(0.625)
+  })
+
+  it('rises toward 1 on a reasonable move in a quiet position', () => {
+    const before = withStones({ black: [{ x: 7, y: 7 }], white: [{ x: 7, y: 8 }] })
+    const humanMove = { x: 6, y: 7 }
+    const settled = settleFrame(before, { black: humanMove, white: null })
+    expect(updateOpponentRationality(before, 'black', humanMove, settled, 0.5)).toBe(0.625)
+  })
+
+  it('keeps r unchanged when the human passes', () => {
+    const before = withStones({ black: [{ x: 7, y: 7 }] })
+    const settled = settleFrame(before, { black: null, white: null })
+    expect(updateOpponentRationality(before, 'black', null, settled, 0.5)).toBe(0.5)
+  })
+})
+
+describe('opponent rationality in search', () => {
+  it('chooseAiMove accepts opponentRationality and returns a legal move', () => {
+    const game = withStones({ black: row(7, [4, 5, 6, 7]) })
+    const move = chooseAiMove(game, 'black', 'hard', 0)
+    expect(move).not.toBeNull()
+  })
+
+  it('searchBestMove accepts opponentRationality and returns a legal move', () => {
+    const game = withStones({ black: [{ x: 7, y: 7 }], white: [{ x: 7, y: 8 }] })
+    const move = searchBestMove(game, 'white', 'master', 40, 0)
+    expect(move).not.toBeNull()
+    expect(isLegalChoice(game, move!)).toBe(true)
   })
 })
