@@ -8,6 +8,7 @@
     "build": "vite build",
     "deploy": "pnpm build && wrangler deploy",
     "check": "vue-tsc -b",
+    "ai:battle": "node scripts/ai-battle.ts",
     "test": "vitest run",
     "typegen": "wrangler types"
   },
