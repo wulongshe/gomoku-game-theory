@@ -6,10 +6,9 @@ import {
   type Seat,
 } from './game'
 import {
-  candidateMoves,
+  analyzeBoard,
   DIFFICULTY_SETTINGS,
   evaluateState,
-  other,
   sampleIndex,
   TERMINAL,
   WIN_SCORE,
@@ -60,11 +59,25 @@ export function searchBestMove(
   const settings = DIFFICULTY_SETTINGS[difficulty]
   const budget = budgetMs ?? settings.budgetMs
   const { candidates, explore } = settings
-  const opp = other(seat)
 
   function makeNode(s: GameState): Node {
-    const aiMoves = s.phase === 'playing' ? candidateMoves(s, seat, candidates) : []
-    const oppMoves = s.phase === 'playing' ? candidateMoves(s, opp, candidates) : []
+    // 终局节点无需候选，直接用终局值；进行中节点单遍扫描出候选与威胁差，静态值即威胁差归一。
+    if (s.phase !== 'playing') {
+      return {
+        state: s,
+        aiMoves: [],
+        oppMoves: [],
+        aiSum: [],
+        aiCnt: [],
+        oppSum: [],
+        oppCnt: [],
+        children: [],
+        visits: 0,
+        value0: normalize(evaluateState(s, seat)),
+        expandable: false,
+      }
+    }
+    const { aiMoves, oppMoves, threatSelf, threatOpp } = analyzeBoard(s, seat, candidates)
     const expandable = aiMoves.length > 0 && oppMoves.length > 0
     return {
       state: s,
@@ -76,7 +89,7 @@ export function searchBestMove(
       oppCnt: new Array(oppMoves.length).fill(0),
       children: expandable ? new Array(aiMoves.length * oppMoves.length) : [],
       visits: 0,
-      value0: normalize(evaluateState(s, seat)),
+      value0: normalize(threatSelf - threatOpp),
       expandable,
     }
   }

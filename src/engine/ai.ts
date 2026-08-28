@@ -83,25 +83,57 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
   return total
 }
 
-// 攻分 + 加权守分，用来给候选点排序（攻守合一：抢占对方强点即防守）。
-function moveScore(state: GameState, point: Point, seat: Seat): number {
-  return (
-    placementScore(state, point, seat) +
-    CONTEST_FACTOR[state.mode] * placementScore(state, point, other(seat))
-  )
+export interface BoardAnalysis {
+  aiMoves: Point[]
+  oppMoves: Point[]
+  threatSelf: number
+  threatOpp: number
 }
 
-export function candidateMoves(state: GameState, seat: Seat, limit: number): Point[] {
-  const scored: { point: Point; score: number }[] = []
+// 单遍扫描全盘：每个合法点只算一次「己方 / 对方」落子威胁，一次性得到双方候选列表与双方威胁强度。
+// 候选排序用攻守合一分（自身威胁 + CONTEST×对方威胁，抢占对方强点即防守），
+// 威胁强度取最强两手的加权和（撞点规则下单胜点会被撞掉，需双威胁/叉才必胜，故次强也计分）。
+// 避免了原先候选生成与局面评估各扫全盘、同一 placementScore 重算三遍。
+export function analyzeBoard(state: GameState, seat: Seat, limit: number): BoardAnalysis {
+  const opp = other(seat)
+  const contest = CONTEST_FACTOR[state.mode]
+  const scored: { point: Point; self: number; opp: number }[] = []
+  let self1 = 0
+  let self2 = 0
+  let opp1 = 0
+  let opp2 = 0
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const point = { x, y }
       if (!isLegalChoice(state, point)) continue
-      scored.push({ point, score: moveScore(state, point, seat) })
+      const self = placementScore(state, point, seat)
+      const oppScore = placementScore(state, point, opp)
+      scored.push({ point, self, opp: oppScore })
+      if (self > self1) {
+        self2 = self1
+        self1 = self
+      } else if (self > self2) {
+        self2 = self
+      }
+      if (oppScore > opp1) {
+        opp2 = opp1
+        opp1 = oppScore
+      } else if (oppScore > opp2) {
+        opp2 = oppScore
+      }
     }
   }
-  scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, limit).map((s) => s.point)
+  const aiMoves = scored
+    .slice()
+    .sort((a, b) => b.self + contest * b.opp - (a.self + contest * a.opp))
+    .slice(0, limit)
+    .map((s) => s.point)
+  const oppMoves = scored
+    .slice()
+    .sort((a, b) => b.opp + contest * b.self - (a.opp + contest * a.self))
+    .slice(0, limit)
+    .map((s) => s.point)
+  return { aiMoves, oppMoves, threatSelf: self1 + 0.25 * self2, threatOpp: opp1 + 0.25 * opp2 }
 }
 
 // 全盘威胁强度：取最强两手的加权和。撞点规则下单个胜点会被对方撞掉，
@@ -199,10 +231,9 @@ export function chooseAiMove(
   difficulty: Difficulty = 'normal',
 ): Point | null {
   const { candidates, explore } = DIFFICULTY_SETTINGS[difficulty]
-  const aiMoves = candidateMoves(state, seat, candidates)
+  const { aiMoves, oppMoves } = analyzeBoard(state, seat, candidates)
   if (aiMoves.length <= 1) return aiMoves[0] ?? null
 
-  const oppMoves = candidateMoves(state, other(seat), candidates)
   const matrix = aiMoves.map((ai) => oppMoves.map((opp) => payoff(state, seat, ai, opp)))
 
   // 必胜手：某行对手所有回应都稳赢，直接落子，不做随机化。
