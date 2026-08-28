@@ -335,12 +335,11 @@ function select(point: Point) {
   if (submitted.value && oppSubmitted.value) return
   if (!isLegalChoice(game.value, point)) return
   selected.value = point
-  if (autoSubmit.value) {
+  if (autoSubmit.value || submitted.value) {
     sendChoice(point, true)
     submitted.value = true
   } else {
     sendChoice(point, false)
-    submitted.value = false
   }
 }
 
