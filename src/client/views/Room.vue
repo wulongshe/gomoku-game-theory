@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
+import { useEventListener, useStorage, useWebSocket } from '@vueuse/core'
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import AppDialog from '~/components/AppDialog.vue'
 import AppSwitch from '~/components/AppSwitch.vue'
 import Board from '~/components/Board.vue'
 import DialogButton from '~/components/DialogButton.vue'
+import FrameBar from '~/components/FrameBar.vue'
+import FrameTimer from '~/components/FrameTimer.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import PlayersDialog from '~/components/PlayersDialog.vue'
 import RematchInviteDialog from '~/components/RematchInviteDialog.vue'
@@ -24,6 +26,8 @@ import IconStone from '~/components/icons/IconStone.vue'
 import { roomStatus, roomWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
+import { useFrameClock } from '~/composables/useFrameClock'
+import { useGameResult } from '~/composables/useGameResult'
 import { MODE_LABELS } from '~/constants/branding'
 import { ROOM_TOKEN_PREFIX } from '~/constants/storage'
 import {
@@ -96,8 +100,6 @@ refreshAuth()
 function forgetToken() {
   localStorage.removeItem(`${ROOM_TOKEN_PREFIX}${props.code}`)
 }
-const now = useTimestamp({ interval: 250 })
-
 let replaced = false
 let everOpened = false
 const {
@@ -271,26 +273,12 @@ function onEmailVisibility() {
   send(JSON.stringify({ type: 'refresh_players' } satisfies ClientMessage))
 }
 
-const remainingRatio = computed(() => {
-  if (deadline.value === null) return 0
-  return Math.min(1, Math.max(0, (deadline.value - now.value) / (frameSeconds.value * 1000)))
-})
-
-const secondsLeft = useCountdown(deadline, frameSeconds)
-
-const overdue = computed(() => deadline.value !== null && now.value >= deadline.value)
-
-const elapsedSeconds = computed(() => {
-  if (frameStart.value === null || stage.value !== 'playing') return 0
-  return Math.max(0, Math.floor((now.value - frameStart.value) / 1000))
-})
-
-const urgency = computed(() => {
-  if (secondsLeft.value === null) return 'calm'
-  if (secondsLeft.value <= 5) return 'critical'
-  if (remainingRatio.value <= 1 / 3) return 'warning'
-  return 'calm'
-})
+const { secondsLeft, remainingRatio, urgency, elapsedSeconds, overdue } = useFrameClock(
+  deadline,
+  frameSeconds,
+  frameStart,
+  () => stage.value === 'playing',
+)
 
 const oppStatus = computed(() => {
   if (oppLeft.value)
@@ -316,28 +304,7 @@ const modeLabel = computed(() => MODE_LABELS[mode.value])
 
 const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执白'))
 
-const winnerSeat = computed<Seat | null>(() => {
-  if (game.value?.phase === 'black_won') return 'black'
-  if (game.value?.phase === 'white_won') return 'white'
-  return null
-})
-
-const resultChar = computed(() => {
-  if (!winnerSeat.value) return '和'
-  return winnerSeat.value === seat.value ? '赢' : '输'
-})
-
-const resultColors = computed(() => {
-  if (!winnerSeat.value) return ['#ffffff', '#d6d3d1']
-  return winnerSeat.value === seat.value ? ['#fbbf24', '#d97706'] : ['#a8a29e', '#57534e']
-})
-
-const resultTextCls = computed(() => {
-  if (!winnerSeat.value) return 'text-white drop-shadow-[0_1px_1px_rgba(28,25,23,0.45)]'
-  return winnerSeat.value === seat.value
-    ? 'text-amber-500 dark:text-amber-400'
-    : 'text-stone-400 dark:text-stone-500'
-})
+const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(game, seat)
 
 function sendChoice(point: Point, final: boolean) {
   if (!game.value) return
@@ -548,29 +515,15 @@ function exitRoom() {
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
-          <span
-            class="justify-self-end text-base font-semibold tabular-nums"
-            :class="{
-              'text-stone-600 dark:text-stone-300': urgency === 'calm',
-              'text-amber-600 dark:text-amber-400': urgency === 'warning',
-              'animate-pulse text-red-600 dark:text-red-400': urgency === 'critical',
-            }"
-          >
-            {{ frameSeconds === 0 ? `${elapsedSeconds}s/∞` : `${secondsLeft ?? 0}s/${frameSeconds}s` }}
-          </span>
-        </div>
-
-        <div v-if="frameSeconds > 0" class="h-1.5 overflow-hidden rounded-full bg-stone-300/70 dark:bg-stone-700/70">
-          <div
-            class="h-full rounded-full transition-[width] duration-200 ease-linear"
-            :class="{
-              'bg-stone-500 dark:bg-stone-400': urgency === 'calm',
-              'bg-amber-500': urgency === 'warning',
-              'bg-red-500': urgency === 'critical',
-            }"
-            :style="{ width: `${remainingRatio * 100}%` }"
+          <FrameTimer
+            :frame-seconds="frameSeconds"
+            :seconds-left="secondsLeft"
+            :elapsed-seconds="elapsedSeconds"
+            :urgency="urgency"
           />
         </div>
+
+        <FrameBar v-if="frameSeconds > 0" :remaining-ratio="remainingRatio" :urgency="urgency" />
 
         <div class="relative w-full">
           <Board

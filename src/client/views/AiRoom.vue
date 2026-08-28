@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useTimestamp } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import Board from '~/components/Board.vue'
+import FrameBar from '~/components/FrameBar.vue'
+import FrameTimer from '~/components/FrameTimer.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import ResultOverlay from '~/components/ResultOverlay.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
@@ -20,6 +21,8 @@ import {
   type Point,
 } from '@/engine/game'
 import { useAiOpponent } from '~/composables/useAiOpponent'
+import { useFrameClock } from '~/composables/useFrameClock'
+import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
@@ -50,28 +53,13 @@ const configFrame = ref(frameSeconds.value)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
-const now = useTimestamp({ interval: 250 })
 const playing = computed(() => game.value.phase === 'playing')
-
-const secondsLeft = computed(() => {
-  if (deadline.value === null) return null
-  return Math.max(0, Math.ceil((deadline.value - now.value) / 1000))
-})
-const remainingRatio = computed(() => {
-  if (deadline.value === null) return 0
-  return Math.min(1, Math.max(0, (deadline.value - now.value) / (frameSeconds.value * 1000)))
-})
-const urgency = computed(() => {
-  if (secondsLeft.value === null) return 'calm'
-  if (secondsLeft.value <= 5) return 'critical'
-  if (remainingRatio.value <= 1 / 3) return 'warning'
-  return 'calm'
-})
-
-const elapsedSeconds = computed(() => {
-  if (frameStart.value === null || !playing.value) return 0
-  return Math.max(0, Math.floor((now.value - frameStart.value) / 1000))
-})
+const { secondsLeft, remainingRatio, urgency, elapsedSeconds } = useFrameClock(
+  deadline,
+  frameSeconds,
+  frameStart,
+  playing,
+)
 
 const aiStatus = computed(() => {
   if (!playing.value) return null
@@ -156,22 +144,10 @@ watch(secondsLeft, (value) => {
 
 onMounted(beginFrame)
 
-const resultChar = computed(() => {
-  if (game.value.phase === 'draw') return '和'
-  return game.value.phase === 'black_won' ? '赢' : '输'
-})
-
-const resultColors = computed(() => {
-  if (game.value.phase === 'draw') return ['#ffffff', '#d6d3d1']
-  return game.value.phase === 'black_won' ? ['#fbbf24', '#d97706'] : ['#a8a29e', '#57534e']
-})
-
-const resultTextCls = computed(() => {
-  if (game.value.phase === 'draw') return 'text-white drop-shadow-[0_1px_1px_rgba(28,25,23,0.45)]'
-  return game.value.phase === 'black_won'
-    ? 'text-amber-500 dark:text-amber-400'
-    : 'text-stone-400 dark:text-stone-500'
-})
+const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(
+  () => game.value,
+  'black',
+)
 </script>
 
 <template>
@@ -211,29 +187,15 @@ const resultTextCls = computed(() => {
           {{ aiStatus.text }}
         </span>
         <span v-else />
-        <span
-          class="justify-self-end text-base font-semibold tabular-nums"
-          :class="{
-            'text-stone-600 dark:text-stone-300': urgency === 'calm',
-            'text-amber-600 dark:text-amber-400': urgency === 'warning',
-            'animate-pulse text-red-600 dark:text-red-400': urgency === 'critical',
-          }"
-        >
-          {{ frameSeconds === 0 ? `${elapsedSeconds}s/∞` : `${secondsLeft ?? 0}s/${frameSeconds}s` }}
-        </span>
-      </div>
-
-      <div v-if="frameSeconds > 0" class="h-1.5 overflow-hidden rounded-full bg-stone-300/70 dark:bg-stone-700/70">
-        <div
-          class="h-full rounded-full transition-[width] duration-200 ease-linear"
-          :class="{
-            'bg-stone-500 dark:bg-stone-400': urgency === 'calm',
-            'bg-amber-500': urgency === 'warning',
-            'bg-red-500': urgency === 'critical',
-          }"
-          :style="{ width: `${remainingRatio * 100}%` }"
+        <FrameTimer
+          :frame-seconds="frameSeconds"
+          :seconds-left="secondsLeft"
+          :elapsed-seconds="elapsedSeconds"
+          :urgency="urgency"
         />
       </div>
+
+      <FrameBar v-if="frameSeconds > 0" :remaining-ratio="remainingRatio" :urgency="urgency" />
 
       <div class="relative w-full">
         <Board
