@@ -79,12 +79,34 @@ export function authLogin(email: string, password: string): Promise<AuthSession>
   return authPost('login', { email, password })
 }
 
-export async function authMe(token: string): Promise<string | null> {
+export interface EmailVisibility {
+  leaderboard: boolean
+  game: boolean
+}
+
+export interface AuthProfile {
+  email: string
+  emailVisibility: EmailVisibility
+}
+
+export async function authMe(token: string): Promise<AuthProfile | null> {
   const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`authMe failed: ${res.status}`)
-  const { email } = (await res.json()) as { email: string }
-  return email
+  return (await res.json()) as AuthProfile
+}
+
+export async function authSetEmailVisible(
+  token: string,
+  scope: keyof EmailVisibility,
+  visible: boolean,
+): Promise<void> {
+  const res = await fetch('/api/auth/visibility', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ scope, visible }),
+  })
+  if (!res.ok) throw new Error(`authSetEmailVisible failed: ${res.status}`)
 }
 
 export async function authLogout(token: string): Promise<void> {

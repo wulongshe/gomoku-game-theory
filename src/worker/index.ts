@@ -20,8 +20,8 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
 
   if (action === 'me' && request.method === 'GET') {
     const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
-    const email = token ? await accounts.me(token) : null
-    return email ? Response.json({ email }) : authError('unauthorized', 401)
+    const profile = token ? await accounts.me(token) : null
+    return profile ? Response.json(profile) : authError('unauthorized', 401)
   }
   if (request.method !== 'POST') return authError('not_found', 404)
 
@@ -29,6 +29,20 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
     const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
     if (token) await accounts.logout(token)
     return new Response(null, { status: 204 })
+  }
+  if (action === 'visibility') {
+    const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
+    const body = (await request.json().catch(() => null)) as {
+      scope?: string
+      visible?: boolean
+    } | null
+    if (body?.scope !== 'leaderboard' && body?.scope !== 'game') {
+      return authError('scope_invalid', 400)
+    }
+    const ok = token
+      ? await accounts.setEmailVisible(token, body.scope, body.visible === true)
+      : false
+    return ok ? new Response(null, { status: 204 }) : authError('unauthorized', 401)
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, string> | null

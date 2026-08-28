@@ -11,12 +11,19 @@ export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 8
 
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  const visible = local.length > 2 ? local.slice(0, 2) : local.slice(0, 1)
+  return `${visible}***@${domain}`
+}
+
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
   | { type: 'ready' }
   | { type: 'rematch'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_decline' }
   | { type: 'leave' }
+  | { type: 'refresh_players' }
 
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
@@ -60,6 +67,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }
+  if (msg.type === 'refresh_players') return { type: 'refresh_players' }
   if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
     return null
   }

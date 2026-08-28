@@ -9,7 +9,7 @@ import {
   type Point,
   type Seat,
 } from '@/engine/game'
-import { parseClientMessage, type ServerMessage } from '@/shared/protocol'
+import { maskEmail, parseClientMessage, type ServerMessage } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -110,10 +110,7 @@ export class Room extends DurableObject<Env> {
       frameSeconds: await this.frameSeconds(),
       mode: await this.mode(),
     })
-    this.broadcast({
-      type: 'players',
-      accounts: { black: accounts.black ?? null, white: accounts.white ?? null },
-    })
+    this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
 
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
@@ -155,9 +152,23 @@ export class Room extends DurableObject<Env> {
   private async accountEmail(auth: string | null): Promise<string | null> {
     if (!auth) return null
     try {
-      return await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).me(auth)
+      const profile = await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).me(auth)
+      return profile?.email ?? null
     } catch {
       return null
+    }
+  }
+
+  private async displayAccounts(accounts: Players): Promise<Record<Seat, string | null>> {
+    const emails = [accounts.black ?? null, accounts.white ?? null]
+    try {
+      const [black, white] = await this.env.ACCOUNTS.get(
+        this.env.ACCOUNTS.idFromName('accounts'),
+      ).displayEmails(emails)
+      return { black, white }
+    } catch {
+      const [black, white] = emails.map((email) => (email === null ? null : maskEmail(email)))
+      return { black, white }
     }
   }
 
@@ -225,6 +236,10 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
     const { seat } = ws.deserializeAttachment() as Attachment
+    if (msg.type === 'refresh_players') {
+      const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+      return this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
+    }
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(ws, seat, game)

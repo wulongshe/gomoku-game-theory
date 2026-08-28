@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
+import { maskEmail } from '@/shared/protocol'
 
 const CODE_TTL = 10 * 60_000
 const SEND_COOLDOWN = 60_000
@@ -21,10 +22,16 @@ export interface LeaderboardEntry {
   draws: number
 }
 
+export interface EmailVisibility {
+  leaderboard: boolean
+  game: boolean
+}
+
 interface UserRecord {
   hash: string
   salt: string
   createdAt: number
+  emailVisibility?: Partial<EmailVisibility>
 }
 
 interface PendingRecord {
@@ -122,14 +129,45 @@ export class Accounts extends DurableObject<Env> {
     return { ok: true, token: await this.createSession(email) }
   }
 
-  async me(token: string): Promise<string | null> {
+  async me(token: string): Promise<{ email: string; emailVisibility: EmailVisibility } | null> {
     const session = await this.ctx.storage.get<SessionRecord>(`session:${token}`)
     if (!session) return null
     if (Date.now() > session.expires) {
       await this.ctx.storage.delete(`session:${token}`)
       return null
     }
-    return session.email
+    const user = await this.ctx.storage.get<UserRecord>(`user:${session.email}`)
+    return {
+      email: session.email,
+      emailVisibility: {
+        leaderboard: user?.emailVisibility?.leaderboard ?? false,
+        game: user?.emailVisibility?.game ?? false,
+      },
+    }
+  }
+
+  async setEmailVisible(
+    token: string,
+    scope: keyof EmailVisibility,
+    visible: boolean,
+  ): Promise<boolean> {
+    const profile = await this.me(token)
+    if (!profile) return false
+    const user = await this.ctx.storage.get<UserRecord>(`user:${profile.email}`)
+    if (!user) return false
+    user.emailVisibility = { ...user.emailVisibility, [scope]: visible }
+    await this.ctx.storage.put(`user:${profile.email}`, user)
+    return true
+  }
+
+  async displayEmails(emails: (string | null)[]): Promise<(string | null)[]> {
+    return Promise.all(
+      emails.map(async (email) => {
+        if (!email) return null
+        const user = await this.ctx.storage.get<UserRecord>(`user:${email}`)
+        return user?.emailVisibility?.game ? email : maskEmail(email)
+      }),
+    )
   }
 
   async logout(token: string): Promise<void> {
@@ -153,10 +191,16 @@ export class Accounts extends DurableObject<Env> {
   async leaderboard(): Promise<LeaderboardEntry[]> {
     const users = await this.ctx.storage.list<UserRecord>({ prefix: 'user:' })
     const stats = await this.ctx.storage.list<StatsRecord>({ prefix: 'stats:' })
-    return [...users.keys()]
-      .map((key) => {
+    return [...users.entries()]
+      .map(([key, user]) => {
         const email = key.slice('user:'.length)
-        return { email, wins: 0, losses: 0, draws: 0, ...stats.get(`stats:${email}`) }
+        return {
+          email: user.emailVisibility?.leaderboard ? email : maskEmail(email),
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          ...stats.get(`stats:${email}`),
+        }
       })
       .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))
   }

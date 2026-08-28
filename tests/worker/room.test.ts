@@ -608,12 +608,12 @@ describe('account seat recovery', () => {
     expect(settled.state.phase).toBe('black_won')
 
     const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
-    const emails = ['winner@example.com', 'loser@example.com']
+    const emails = ['wi***@example.com', 'lo***@example.com']
     await vi.waitFor(async () => {
       const board = await stub.leaderboard()
       expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
-        { email: 'winner@example.com', wins: 1, losses: 0, draws: 0 },
-        { email: 'loser@example.com', wins: 0, losses: 1, draws: 0 },
+        { email: 'wi***@example.com', wins: 1, losses: 0, draws: 0 },
+        { email: 'lo***@example.com', wins: 0, losses: 1, draws: 0 },
       ])
     })
   })
@@ -636,8 +636,8 @@ describe('account seat recovery', () => {
     const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
     await vi.waitFor(async () => {
       const board = await stub.leaderboard()
-      expect(board.find((entry) => entry.email === 'quitter@example.com')).toEqual({
-        email: 'quitter@example.com',
+      expect(board.find((entry) => entry.email === 'qu***@example.com')).toEqual({
+        email: 'qu***@example.com',
         wins: 0,
         losses: 1,
         draws: 0,
@@ -645,20 +645,32 @@ describe('account seat recovery', () => {
     })
   })
 
-  it('broadcasts seat accounts to both players', async () => {
+  it('broadcasts masked seat accounts, unmasked once the owner opts in', async () => {
     await createRoom('ACCT04')
     const session = await sessionFor('info@example.com')
     const a = await connect('ACCT04', 'device-1', session)
     expect(await a.next('players')).toEqual({
       type: 'players',
-      accounts: { black: 'info@example.com', white: null },
+      accounts: { black: 'in***@example.com', white: null },
     })
     const b = await connect('ACCT04', 'token-b')
     expect(await b.next('players')).toEqual({
       type: 'players',
-      accounts: { black: 'info@example.com', white: null },
+      accounts: { black: 'in***@example.com', white: null },
     })
     expect(await a.next('players')).toEqual({
+      type: 'players',
+      accounts: { black: 'in***@example.com', white: null },
+    })
+
+    const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    expect(await stub.setEmailVisible(session, 'game', true)).toBe(true)
+    a.ws.send(JSON.stringify({ type: 'refresh_players' }))
+    expect(await a.next('players')).toEqual({
+      type: 'players',
+      accounts: { black: 'info@example.com', white: null },
+    })
+    expect(await b.next('players')).toEqual({
       type: 'players',
       accounts: { black: 'info@example.com', white: null },
     })

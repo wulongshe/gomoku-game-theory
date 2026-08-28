@@ -35,7 +35,10 @@ describe('registration', () => {
     expect(email).toBe('a@example.com')
 
     const me = await SELF.fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${token}` } })
-    expect(await me.json()).toEqual({ email: 'a@example.com' })
+    expect(await me.json()).toEqual({
+      email: 'a@example.com',
+      emailVisibility: { leaderboard: false, game: false },
+    })
   })
 
   it('rejects an invalid email and a short password', async () => {
@@ -105,12 +108,40 @@ describe('login and sessions', () => {
 
     const res = await SELF.fetch('https://example.com/api/leaderboard')
     const board = await res.json<Array<{ email: string }>>()
-    const emails = ['h@example.com', 'i@example.com', 'j@example.com']
+    const emails = ['h***@example.com', 'i***@example.com', 'j***@example.com']
     expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
-      { email: 'i@example.com', wins: 1, losses: 0, draws: 1 },
-      { email: 'j@example.com', wins: 0, losses: 0, draws: 0 },
-      { email: 'h@example.com', wins: 0, losses: 1, draws: 1 },
+      { email: 'i***@example.com', wins: 1, losses: 0, draws: 1 },
+      { email: 'j***@example.com', wins: 0, losses: 0, draws: 0 },
+      { email: 'h***@example.com', wins: 0, losses: 1, draws: 1 },
     ])
+  })
+
+  it('reveals the leaderboard email only for the leaderboard scope', async () => {
+    await createUser('reveal@example.com', 'secret123')
+    const login = await post('login', { email: 'reveal@example.com', password: 'secret123' })
+    const { token } = await login.json<{ token: string }>()
+
+    const setGame = await post('visibility', { scope: 'game', visible: true }, token)
+    expect(setGame.status).toBe(204)
+    const board = await SELF.fetch('https://example.com/api/leaderboard')
+    const masked = await board.json<Array<{ email: string }>>()
+    expect(masked.some((entry) => entry.email === 're***@example.com')).toBe(true)
+
+    const setBoard = await post('visibility', { scope: 'leaderboard', visible: true }, token)
+    expect(setBoard.status).toBe(204)
+    const me = await SELF.fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(await me.json()).toEqual({
+      email: 'reveal@example.com',
+      emailVisibility: { leaderboard: true, game: true },
+    })
+    const revealed = await SELF.fetch('https://example.com/api/leaderboard')
+    const entries = await revealed.json<Array<{ email: string }>>()
+    expect(entries.some((entry) => entry.email === 'reveal@example.com')).toBe(true)
+
+    const badScope = await post('visibility', { scope: 'everywhere', visible: true }, token)
+    expect(badScope.status).toBe(400)
+    const anonymous = await post('visibility', { scope: 'leaderboard', visible: true })
+    expect(anonymous.status).toBe(401)
   })
 
   it('invalidates the session on logout', async () => {

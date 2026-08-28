@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppDialog from '~/components/AppDialog.vue'
+import AppSwitch from '~/components/AppSwitch.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { fetchLeaderboard, type LeaderboardEntry } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
+import { maskEmail } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -14,10 +16,22 @@ const LEGEND = [
   { label: '平', dot: 'bg-stone-400' },
 ]
 
-const { email: myEmail } = useAuth()
+const { email: myEmail, loggedIn, emailVisibility, setEmailVisible } = useAuth()
 const entries = ref<LeaderboardEntry[]>([])
 const loading = ref(true)
 const failed = ref(false)
+
+function isMine(entry: LeaderboardEntry): boolean {
+  return !!myEmail.value && (entry.email === myEmail.value || entry.email === maskEmail(myEmail.value))
+}
+
+const visible = computed({
+  get: () => emailVisibility.value.leaderboard,
+  set: async (value: boolean) => {
+    await setEmailVisible('leaderboard', value)
+    entries.value = await fetchLeaderboard().catch(() => entries.value)
+  },
+})
 
 onMounted(async () => {
   try {
@@ -42,7 +56,7 @@ onMounted(async () => {
       还没有注册玩家
     </p>
     <div v-else class="-mx-3 -mb-2 flex flex-col gap-2">
-      <div class="flex items-center justify-end gap-4 text-xs text-stone-500 dark:text-stone-400">
+      <div class="flex items-center justify-center gap-4 text-xs text-stone-500 dark:text-stone-400">
         <span v-for="item in LEGEND" :key="item.label" class="flex items-center gap-1.5">
           <span class="size-2 rounded-full" :class="item.dot" />
           {{ item.label }}
@@ -54,13 +68,13 @@ onMounted(async () => {
           :key="entry.email"
           class="relative flex items-center gap-2 rounded-xl px-3 py-3"
           :class="
-            entry.email === myEmail
+            isMine(entry)
               ? 'sticky top-0 bottom-0 z-10 bg-amber-100 ring-1 ring-wood/60 dark:bg-stone-600'
               : 'bg-stone-100 dark:bg-stone-700/50'
           "
         >
           <span
-            v-if="entry.email === myEmail"
+            v-if="isMine(entry)"
             class="absolute right-0 top-0 rounded-bl-lg rounded-tr-xl bg-wood-deep px-1.5 py-0.5 text-[10px] leading-none text-white"
           >我</span>
           <span class="min-w-5 shrink-0 text-center">
@@ -87,6 +101,9 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+      <AppSwitch v-if="loggedIn" v-model="visible" class="mx-3 mt-1">
+        允许他人查看我的完整邮箱
+      </AppSwitch>
     </div>
   </AppDialog>
 </template>

@@ -4,6 +4,7 @@ import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueus
 import { nanoid } from 'nanoid'
 import AppButton from '~/components/AppButton.vue'
 import AppDialog from '~/components/AppDialog.vue'
+import AppSwitch from '~/components/AppSwitch.vue'
 import Board from '~/components/Board.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
@@ -79,7 +80,8 @@ const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
 
 const token = useStorage(`${ROOM_TOKEN_PREFIX}${props.code}`, nanoid())
-const { token: authToken } = useAuth()
+const { token: authToken, refresh: refreshAuth } = useAuth()
+refreshAuth()
 
 function forgetToken() {
   localStorage.removeItem(`${ROOM_TOKEN_PREFIX}${props.code}`)
@@ -237,6 +239,10 @@ function handleMessage(msg: ServerMessage) {
       errorNotice.value = msg.message
       break
   }
+}
+
+function onEmailVisibility() {
+  send(JSON.stringify({ type: 'refresh_players' } satisfies ClientMessage))
 }
 
 const remainingRatio = computed(() => {
@@ -656,13 +662,7 @@ function exitRoom() {
     </AppDialog>
 
     <AppDialog v-if="showSettings" title="对局设置" @close="showSettings = false">
-      <label class="flex cursor-pointer items-center justify-between select-none text-sm text-stone-700 dark:text-stone-200">
-        落子自动提交
-        <input v-model="autoSubmit" type="checkbox" class="peer sr-only" />
-        <span
-          class="relative h-4.5 w-8 rounded-full bg-stone-300 transition-colors peer-checked:bg-stone-800 after:absolute after:top-0.5 after:left-0.5 after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-3.5 dark:bg-stone-600 dark:peer-checked:bg-emerald-600"
-        />
-      </label>
+      <AppSwitch v-model="autoSubmit">落子自动提交</AppSwitch>
     </AppDialog>
 
     <PlayersDialog
@@ -670,6 +670,7 @@ function exitRoom() {
       :accounts="seatAccounts"
       :seat="seat"
       @close="showPlayers = false"
+      @visibility="onEmailVisibility"
     />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
