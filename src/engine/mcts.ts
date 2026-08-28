@@ -17,14 +17,12 @@ import {
 
 const EXPLORATION = 1.0
 const MAX_ITERATIONS = 60_000
-// 递归深度上限：常规下每帧棋盘单调填满、深度天然 ≤ 可填帧数，
-// 唯有「双方同帧成五湮灭清子」会破坏单调，这里硬顶住避免病态深链爆栈。
+// 递归深度上限：常规下棋盘单调填满、深度天然有界，唯「双方同帧成五湮灭清子」会破坏单调，硬顶防爆栈。
 const MAX_DEPTH = 300
 // 非终局威胁差的量级上限（含多胜点重奖），保证多威胁不被对数归一挤到与单威胁齐平。
 const HEURISTIC_LOG = Math.log1p(MAX_THREAT_VALUE)
 
-// 归一化到 [-1, 1]：终局 ±1；非终局按 |值| 的对数单调映射到 (-0.95, 0.95)，
-// 全量级都保留梯度。tanh 会在冲四以上直接饱和到 ±1，把「双威胁」「已成五」拉平，故弃用。
+// 归一化到 [-1,1]：终局 ±1；非终局按 |值| 对数映射到 ±0.95，全量级保留梯度（tanh 会在冲四以上饱和，弃用）。
 function normalize(raw: number): number {
   if (raw >= TERMINAL / 2) return 1
   if (raw <= -TERMINAL / 2) return -1
@@ -32,8 +30,7 @@ function normalize(raw: number): number {
   return raw < 0 ? -mag : mag
 }
 
-// 同时落子博弈树节点：双方各持一份候选与其收益统计（decoupled-UCB），
-// 子节点按「AI 选点 × 对手选点」的联合动作索引。value0 为首次展开时的静态/终局值。
+// 同时落子博弈树节点：双方各持候选与收益统计（解耦 UCB），子节点按「AI×对手」联合动作索引；value0 为首展静态/终局值。
 interface Node {
   state: GameState
   aiMoves: Point[]
@@ -48,8 +45,7 @@ interface Node {
   expandable: boolean
 }
 
-// SM-MCTS：解耦 UCB 逐帧向前搜索，anytime + 时间盒，到点即从根的访问频率采样落子。
-// budgetMs 缺省用难度对应的时间盒，测试/调参可显式覆盖。
+// SM-MCTS：解耦 UCB 向前搜，anytime + 时间盒，到点从根访问频率采样落子；budgetMs 可覆盖难度默认值。
 export function searchBestMove(
   state: GameState,
   seat: Seat,
@@ -61,7 +57,6 @@ export function searchBestMove(
   const { candidates, explore } = settings
 
   function makeNode(s: GameState): Node {
-    // 终局节点无需候选，直接用终局值；进行中节点单遍扫描出候选与威胁差，静态值即威胁差归一。
     if (s.phase !== 'playing') {
       return {
         state: s,
@@ -171,8 +166,7 @@ export function searchBestMove(
   const totalVisits = root.aiCnt.reduce((a, b) => a + b, 0)
   if (totalVisits === 0) return root.aiMoves[0]
 
-  // 困难（explore=0）：取访问数最多的一手，最强且不再按频率误采次优；
-  // 其余难度：在访问频率上混入均匀探索后采样，保留多样、不可预判。
+  // 困难（explore=0）取访问最多手（最强）；其余在访问频率上混入均匀探索后采样（多样、不可预判）。
   if (explore === 0) {
     let best = 0
     for (let i = 1; i < root.aiCnt.length; i++) {

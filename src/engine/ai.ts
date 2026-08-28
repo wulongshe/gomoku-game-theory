@@ -19,8 +19,7 @@ const DIRECTIONS = [
 export const WIN_SCORE = 1_000_000
 export const TERMINAL = 1_000_000_000
 
-// 同时落子下，抢占对方的强点即是防守：不撞点则该点归己（挡住对方连线），
-// 撞点则结果随模式而变。系数衡量「与对方争抢同一点」的收益。
+// 同时落子下抢占对方强点即防守；系数衡量「与对方争抢同一点」的净收益（恒 < 1，能赢时优先自己赢）。
 const CONTEST_FACTOR: Record<GameMode, number> = {
   forbidden: 0.9, // 撞点 → 死点，免费封杀
   minus: 0.9, // 撞点 → 负子，封杀且反噬对方连线
@@ -29,8 +28,7 @@ const CONTEST_FACTOR: Record<GameMode, number> = {
 
 export type Difficulty = 'easy' | 'normal' | 'hard'
 
-// candidates：候选宽度 K；explore：在均衡混合策略里混入均匀探索的比例（越高越随机、越弱）；
-// budgetMs：第四层 SM-MCTS 后台搜索的时间盒（毫秒），到点即返回当前最优/混合策略。
+// explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
 export const DIFFICULTY_SETTINGS: Record<
   Difficulty,
   { candidates: number; explore: number; budgetMs: number }
@@ -46,8 +44,7 @@ export function other(seat: Seat): Seat {
   return seat === 'black' ? 'white' : 'black'
 }
 
-// sum 为连线上的加权和（己子 +1、负子 -1），与引擎判胜一致：
-// 满五即 sum ≥ 5，故按「还差多少到五」分级，负子在线内也算数。
+// sum 为连线加权和（己子 +1、负子 -1），与判胜一致（≥5 即五连）；按「还差几子到五」分级。
 function lineScore(sum: number, openEnds: number): number {
   if (sum >= 5) return WIN_SCORE
   if (openEnds === 0) return 0
@@ -83,14 +80,12 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
   return total
 }
 
-// 多出胜点的封顶数。
 const EXTRA_WIN_CAP = 4
 // 非终局威胁强度上限（best + 0.25 次强 + 至多 EXTRA_WIN_CAP 个多余胜点），供叶子归一化定标。
 export const MAX_THREAT_VALUE = WIN_SCORE * (1.25 + EXTRA_WIN_CAP)
 
-// 威胁强度：最强两手加权和，再按「多出的胜点数」重奖。撞点规则下单个胜点必被对方撞掉（≈防得住），
-// 两个及以上才形成对手撞不全的猜点局面（约 (k-1)/k 概率撞中），故 wins-1 显式加分，
-// 让双威胁/叉的价值远高于单威胁 —— 这正是本变体分胜负的核心。
+// 威胁强度：最强两手加权和 + 多出胜点重奖。撞点下单胜点必被撞掉，两个及以上才成「对手撞不全」的猜点局面，
+// 故 wins-1 显式加分，让双威胁/叉远高于单威胁 —— 本变体分胜负的核心。
 function threatValue(best: number, second: number, wins: number): number {
   return best + 0.25 * second + WIN_SCORE * Math.min(EXTRA_WIN_CAP, Math.max(0, wins - 1))
 }
@@ -102,10 +97,8 @@ export interface BoardAnalysis {
   threatOpp: number
 }
 
-// 单遍扫描全盘：每个合法点只算一次「己方 / 对方」落子威胁，一次性得到双方候选列表与双方威胁强度。
-// 候选排序用攻守合一分（自身威胁 + CONTEST×对方威胁，抢占对方强点即防守），
-// 威胁强度取最强两手的加权和（撞点规则下单胜点会被撞掉，需双威胁/叉才必胜，故次强也计分）。
-// 避免了原先候选生成与局面评估各扫全盘、同一 placementScore 重算三遍。
+// 单遍扫全盘：每个合法点只算一次双方 placementScore，一次产出双方候选（攻守合一分排序）与威胁强度，
+// 免去候选、评估各扫一遍、同一分重算三遍。
 export function analyzeBoard(state: GameState, seat: Seat, limit: number): BoardAnalysis {
   const opp = other(seat)
   const contest = CONTEST_FACTOR[state.mode]
@@ -157,7 +150,7 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
   }
 }
 
-// 结算后某方的全盘威胁强度：最强两手加权和 + 多出胜点重奖（见 threatValue）。
+// 结算后某方威胁强度（threatValue 的全盘扫描版）。
 function threatScore(state: GameState, seat: Seat): number {
   let best = 0
   let second = 0
