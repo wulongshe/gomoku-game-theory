@@ -224,7 +224,7 @@ const resultTextCls = computed(() => {
       v-if="showConfig"
       v-model:frame="configFrame"
       v-model:mode="configMode"
-      :enabled-modes="AI_MODE_OPTIONS"
+      :mode-options="AI_MODE_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
       @cancel="showConfig = false"

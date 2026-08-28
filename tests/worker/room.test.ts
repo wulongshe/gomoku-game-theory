@@ -348,17 +348,17 @@ describe('Room', () => {
     const [a, b] = await startGame('ROOM23')
     await playToBlackWin(a, b)
 
-    a.rematch(60, 'half')
-    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'half' })
-    b.rematch(60, 'half')
-    expect(await a.next('joined')).toMatchObject({ seat: 'black', frameSeconds: 60, mode: 'half' })
+    a.rematch(60, 'minus')
+    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
+    b.rematch(60, 'minus')
+    expect(await a.next('joined')).toMatchObject({ seat: 'black', frameSeconds: 60, mode: 'minus' })
     await b.next('joined')
     a.ready()
     b.ready()
     const fresh = await a.next('start')
     if (fresh.type !== 'start') throw new Error('unreachable')
     expect(fresh.frameSeconds).toBe(60)
-    expect(fresh.state.mode).toBe('half')
+    expect(fresh.state.mode).toBe('minus')
   })
 
   it('treats a differing rematch proposal as a counter-offer', async () => {
@@ -367,10 +367,10 @@ describe('Room', () => {
 
     a.rematch(30, 'forbidden')
     await b.next('rematch_requested')
-    b.rematch(60, 'half')
-    expect(await a.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'half' })
-    a.rematch(60, 'half')
-    expect(await a.next('joined')).toMatchObject({ frameSeconds: 60, mode: 'half' })
+    b.rematch(60, 'minus')
+    expect(await a.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
+    a.rematch(60, 'minus')
+    expect(await a.next('joined')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
     await b.next('joined')
   })
 

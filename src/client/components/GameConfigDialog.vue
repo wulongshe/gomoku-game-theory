@@ -7,7 +7,7 @@ import { MODE_LABELS } from '~/constants/branding'
 import { FRAME_OPTIONS, MODE_OPTIONS } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     title: string
     confirmText: string
@@ -15,13 +15,11 @@ const props = withDefaults(
     multi?: boolean
     loading?: boolean
     disabled?: boolean
-    enabledModes?: GameMode[]
+    modeOptions?: GameMode[]
   }>(),
-  { enabledModes: () => MODE_OPTIONS },
+  { modeOptions: () => MODE_OPTIONS },
 )
 const emit = defineEmits<{ cancel: []; confirm: [] }>()
-
-const modeDisabled = (option: GameMode) => props.disabled || !props.enabledModes.includes(option)
 
 const frame = defineModel<number>('frame', { default: FRAME_OPTIONS[0] })
 const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
@@ -89,15 +87,12 @@ function frameLabel(option: number) {
         >
           <template v-if="multi">
             <button
-              v-for="option in MODE_OPTIONS"
+              v-for="option in modeOptions"
               :key="option"
-              class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md pb-px font-medium leading-none transition-colors"
-              :class="[
-                modes.includes(option) ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400',
-                modeDisabled(option) ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
-              ]"
-              :disabled="modeDisabled(option)"
-              @click="modes = toggled(modes, MODE_OPTIONS, option)"
+              class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md pb-px font-medium leading-none transition-colors"
+              :class="modes.includes(option) ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
+              :disabled="disabled"
+              @click="modes = toggled(modes, modeOptions, option)"
             >
               <span
                 class="flex size-3.5 items-center justify-center rounded-sm border transition-colors"
@@ -110,14 +105,11 @@ function frameLabel(option: number) {
           </template>
           <template v-else>
             <button
-              v-for="option in MODE_OPTIONS"
+              v-for="option in modeOptions"
               :key="option"
-              class="inline-flex h-7 flex-1 items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
-              :class="[
-                mode === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400',
-                modeDisabled(option) ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
-              ]"
-              :disabled="modeDisabled(option)"
+              class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md pb-px font-medium leading-none transition-colors"
+              :class="mode === option ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
+              :disabled="disabled"
               @click="mode = option"
             >
               {{ MODE_LABELS[option] }}

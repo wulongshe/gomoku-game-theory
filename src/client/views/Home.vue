@@ -246,7 +246,7 @@ function closeMatchDialog() {
       v-if="showAi"
       v-model:frame="aiFrame"
       v-model:mode="aiMode"
-      :enabled-modes="AI_MODE_OPTIONS"
+      :mode-options="AI_MODE_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
       @cancel="showAi = false"

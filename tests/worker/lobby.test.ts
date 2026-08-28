@@ -46,9 +46,9 @@ describe('pickSettings', () => {
   })
 
   it('samples uniformly when the combo is not shared', () => {
-    const pick = (roll: number) => pickSettings([30, 60], ['forbidden', 'half'], () => roll)
+    const pick = (roll: number) => pickSettings([30, 60], ['forbidden', 'minus'], () => roll)
     expect(pick(0)).toEqual({ frame: 30, mode: 'forbidden' })
-    expect(pick(0.99)).toEqual({ frame: 60, mode: 'half' })
+    expect(pick(0.99)).toEqual({ frame: 60, mode: 'minus' })
   })
 })
 
@@ -84,34 +84,34 @@ describe('Lobby', () => {
   it('matches only players whose option sets intersect', async () => {
     const a = await joinLobby('frames=30&modes=forbidden')
     const b = await joinLobby('frames=60&modes=forbidden')
-    const c = await joinLobby('frames=60&modes=half')
+    const c = await joinLobby('frames=60&modes=minus')
     const d = await joinLobby('frames=60&modes=forbidden')
     const [msgB, msgD] = await Promise.all([b.matched(), d.matched()])
     expect(msgB).toEqual(msgD)
     expect(await roomSettings(msgB.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
-    const e = await joinLobby('frames=30&modes=forbidden,half')
+    const e = await joinLobby('frames=30&modes=forbidden,minus')
     expect((await e.matched()).code).toBe((await a.matched()).code)
-    const f = await joinLobby('frames=30,60&modes=half')
+    const f = await joinLobby('frames=30,60&modes=minus')
     const msgC = await c.matched()
     expect((await f.matched()).code).toBe(msgC.code)
-    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 60, mode: 'half' })
+    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 60, mode: 'minus' })
   })
 
   it('settles the room on options both players accept', async () => {
-    const a = await joinLobby('frames=60&modes=half')
-    const b = await joinLobby('frames=30,60&modes=forbidden,half')
+    const a = await joinLobby('frames=60&modes=minus')
+    const b = await joinLobby('frames=30,60&modes=forbidden,minus')
     const [msgA] = await Promise.all([a.matched(), b.matched()])
-    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60, mode: 'half' })
+    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60, mode: 'minus' })
   })
 
   it('prefers the waiting player with the smallest option overlap', async () => {
-    const flexible = await joinLobby('frames=30&modes=forbidden,half')
+    const flexible = await joinLobby('frames=30&modes=forbidden,minus')
     const picky = await joinLobby('frames=60&modes=forbidden')
-    const joiner = await joinLobby('frames=30,60&modes=forbidden,half')
+    const joiner = await joinLobby('frames=30,60&modes=forbidden,minus')
     const [msgPicky, msgJoiner] = await Promise.all([picky.matched(), joiner.matched()])
     expect(msgJoiner).toEqual(msgPicky)
     expect(await roomSettings(msgPicky.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
-    const last = await joinLobby('frames=30&modes=half')
+    const last = await joinLobby('frames=30&modes=minus')
     expect((await last.matched()).code).toBe((await flexible.matched()).code)
   })
 
