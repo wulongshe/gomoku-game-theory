@@ -328,12 +328,12 @@ const resultChar = computed(() => {
 })
 
 const resultColors = computed(() => {
-  if (!winnerSeat.value) return ['#10b981', '#047857']
+  if (!winnerSeat.value) return ['#ffffff', '#d6d3d1']
   return winnerSeat.value === seat.value ? ['#fbbf24', '#d97706'] : ['#a8a29e', '#57534e']
 })
 
 const resultTextCls = computed(() => {
-  if (!winnerSeat.value) return 'text-emerald-600 dark:text-emerald-400'
+  if (!winnerSeat.value) return 'text-white drop-shadow-[0_1px_1px_rgba(28,25,23,0.45)]'
   return winnerSeat.value === seat.value
     ? 'text-amber-500 dark:text-amber-400'
     : 'text-stone-400 dark:text-stone-500'
