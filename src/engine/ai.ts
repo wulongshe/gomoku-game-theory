@@ -2,6 +2,7 @@ import {
   BOARD_SIZE,
   cellValue,
   isLegalChoice,
+  settleFrame,
   type GameMode,
   type GameState,
   type Point,
@@ -16,14 +17,29 @@ const DIRECTIONS = [
 ] as const
 
 const WIN_SCORE = 1_000_000
+const TERMINAL = 1_000_000_000
 
 // 同时落子下，抢占对方的强点即是防守：不撞点则该点归己（挡住对方连线），
-// 撞点则结果随模式而变。系数衡量「与对方争抢同一点」的收益，恒 < 1，
-// 保证自己能成五（攻分 = WIN_SCORE）时永远优先自己赢，而非只做防守。
+// 撞点则结果随模式而变。系数衡量「与对方争抢同一点」的收益。
 const CONTEST_FACTOR: Record<GameMode, number> = {
   forbidden: 0.9, // 撞点 → 死点，免费封杀
   minus: 0.9, // 撞点 → 负子，封杀且反噬对方连线
   race: 0.45, // 撞点 → 按提交顺序归属，本地是掷硬币，倾向减半
+}
+
+export type Difficulty = 'easy' | 'normal' | 'hard'
+
+// candidates：候选宽度 K；explore：在均衡混合策略里混入均匀探索的比例（越高越随机、越弱）。
+const DIFFICULTY_SETTINGS: Record<Difficulty, { candidates: number; explore: number }> = {
+  easy: { candidates: 5, explore: 0.55 },
+  normal: { candidates: 6, explore: 0.22 },
+  hard: { candidates: 7, explore: 0 },
+}
+
+const FICTITIOUS_ITERATIONS = 300
+
+function other(seat: Seat): Seat {
+  return seat === 'black' ? 'white' : 'black'
 }
 
 // sum 为连线上的加权和（己子 +1、负子 -1），与引擎判胜一致：
@@ -63,25 +79,136 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
   return total
 }
 
-export function chooseAiMove(state: GameState, seat: Seat): Point | null {
-  const opponent: Seat = seat === 'black' ? 'white' : 'black'
-  const contest = CONTEST_FACTOR[state.mode]
-  let bestScore = -Infinity
-  let best: Point[] = []
+// 攻分 + 加权守分，用来给候选点排序（攻守合一：抢占对方强点即防守）。
+function moveScore(state: GameState, point: Point, seat: Seat): number {
+  return (
+    placementScore(state, point, seat) +
+    CONTEST_FACTOR[state.mode] * placementScore(state, point, other(seat))
+  )
+}
+
+function topCandidates(state: GameState, seat: Seat, limit: number): Point[] {
+  const scored: { point: Point; score: number }[] = []
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const point = { x, y }
       if (!isLegalChoice(state, point)) continue
-      const score =
-        placementScore(state, point, seat) + contest * placementScore(state, point, opponent)
-      if (score > bestScore) {
-        bestScore = score
-        best = [point]
-      } else if (score === bestScore) {
-        best.push(point)
-      }
+      scored.push({ point, score: moveScore(state, point, seat) })
     }
   }
-  if (best.length === 0) return null
-  return best[Math.floor(Math.random() * best.length)]
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, limit).map((s) => s.point)
+}
+
+// 一方在当前局面下最强的一手威胁值，作为静态局面评估的基石。
+function bestThreat(state: GameState, seat: Seat): number {
+  let best = 0
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const point = { x, y }
+      if (!isLegalChoice(state, point)) continue
+      const score = placementScore(state, point, seat)
+      if (score > best) best = score
+    }
+  }
+  return best
+}
+
+// 从 seat 视角评估结算后的局面：终局用 ±TERMINAL，进行中用双方最强威胁之差。
+function evaluate(state: GameState, seat: Seat): number {
+  if (state.phase !== 'playing') {
+    if (state.phase === 'draw') return 0
+    const won = state.phase === (seat === 'black' ? 'black_won' : 'white_won')
+    return won ? TERMINAL : -TERMINAL
+  }
+  return bestThreat(state, seat) - bestThreat(state, other(seat))
+}
+
+// 「AI 下 ai、对手下 opp」这一格的收益（AI 视角）。抢点撞同点时先手随机，取两种先手的均值。
+function payoff(state: GameState, seat: Seat, ai: Point, opp: Point): number {
+  const choices =
+    seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
+  if (state.mode === 'race' && ai.x === opp.x && ai.y === opp.y) {
+    return (
+      (evaluate(settleFrame(state, { ...choices, first: 'black' }), seat) +
+        evaluate(settleFrame(state, { ...choices, first: 'white' }), seat)) /
+      2
+    )
+  }
+  return evaluate(settleFrame(state, choices), seat)
+}
+
+// 虚拟对弈（fictitious play）求解零和博弈：双方反复对当前经验分布做最优回应，
+// 行方（AI）的经验频率即收敛到极大极小混合策略。
+function solveMaximin(matrix: number[][]): number[] {
+  const rows = matrix.length
+  const cols = matrix[0].length
+  const rowCount = new Array(rows).fill(0)
+  const colCount = new Array(cols).fill(0)
+  for (let t = 0; t < FICTITIOUS_ITERATIONS; t++) {
+    let bestRow = 0
+    let bestRowValue = -Infinity
+    for (let i = 0; i < rows; i++) {
+      let v = 0
+      for (let j = 0; j < cols; j++) v += colCount[j] * matrix[i][j]
+      if (v > bestRowValue) {
+        bestRowValue = v
+        bestRow = i
+      }
+    }
+    rowCount[bestRow]++
+    let bestCol = 0
+    let bestColValue = Infinity
+    for (let j = 0; j < cols; j++) {
+      let v = 0
+      for (let i = 0; i < rows; i++) v += rowCount[i] * matrix[i][j]
+      if (v < bestColValue) {
+        bestColValue = v
+        bestCol = j
+      }
+    }
+    colCount[bestCol]++
+  }
+  return rowCount.map((c) => c / FICTITIOUS_ITERATIONS)
+}
+
+function sampleIndex(dist: number[]): number {
+  const r = Math.random()
+  let acc = 0
+  for (let i = 0; i < dist.length; i++) {
+    acc += dist[i]
+    if (r <= acc) return i
+  }
+  return dist.length - 1
+}
+
+export function chooseAiMove(
+  state: GameState,
+  seat: Seat,
+  difficulty: Difficulty = 'normal',
+): Point | null {
+  const { candidates, explore } = DIFFICULTY_SETTINGS[difficulty]
+  const aiMoves = topCandidates(state, seat, candidates)
+  if (aiMoves.length <= 1) return aiMoves[0] ?? null
+
+  const oppMoves = topCandidates(state, other(seat), candidates)
+  const matrix = aiMoves.map((ai) => oppMoves.map((opp) => payoff(state, seat, ai, opp)))
+
+  // 必胜手：某行对手所有回应都稳赢，直接落子，不做随机化。
+  let forced = 0
+  let forcedSecurity = -Infinity
+  for (let i = 0; i < aiMoves.length; i++) {
+    let security = Infinity
+    for (let j = 0; j < oppMoves.length; j++) security = Math.min(security, matrix[i][j])
+    if (security > forcedSecurity) {
+      forcedSecurity = security
+      forced = i
+    }
+  }
+  if (forcedSecurity >= TERMINAL / 2) return aiMoves[forced]
+
+  const equilibrium = solveMaximin(matrix)
+  const n = aiMoves.length
+  const dist = equilibrium.map((p) => (1 - explore) * p + explore / n)
+  return aiMoves[sampleIndex(dist)]
 }

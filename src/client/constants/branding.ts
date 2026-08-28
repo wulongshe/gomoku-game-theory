@@ -1,4 +1,5 @@
 import type { GameMode } from '@/engine/game'
+import type { Difficulty } from '@/engine/ai'
 
 export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
@@ -8,6 +9,14 @@ export const MODE_LABELS: Record<GameMode, string> = {
   race: '抢点',
   forbidden: '禁点',
   minus: '负子',
+}
+
+export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard']
+
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  easy: '简单',
+  normal: '普通',
+  hard: '困难',
 }
 
 export function frameLabel(seconds: number): string {

@@ -10,7 +10,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { chooseAiMove } from '@/engine/ai'
+import { chooseAiMove, type Difficulty } from '@/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -19,15 +19,17 @@ import {
   type GameMode,
   type Point,
 } from '@/engine/game'
-import { MODE_LABELS } from '~/constants/branding'
+import { DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
 const rawFrame = Number(params.get('frame'))
+const rawLevel = params.get('level') as Difficulty
 
 const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
 const frameSeconds = ref(FRAME_OPTIONS.includes(rawFrame) ? rawFrame : 0)
+const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
 const game = ref(createGame(mode.value))
 const selected = ref<Point | null>(null)
@@ -40,6 +42,7 @@ const deadline = ref<number | null>(null)
 const showConfig = ref(false)
 const configFrame = ref(frameSeconds.value)
 const configMode = ref<GameMode>(mode.value)
+const configDifficulty = ref<Difficulty>(difficulty.value)
 
 const now = useTimestamp({ interval: 250 })
 const playing = computed(() => game.value.phase === 'playing')
@@ -66,7 +69,7 @@ function startFrame() {
 function resolveFrame() {
   const next = settleFrame(game.value, {
     black: selected.value,
-    white: chooseAiMove(game.value, 'white'),
+    white: chooseAiMove(game.value, 'white', difficulty.value),
     first: Math.random() < 0.5 ? 'black' : 'white',
   })
   lastMoves.value = next.lastMoves
@@ -99,6 +102,7 @@ function restart() {
 function openConfig() {
   configFrame.value = frameSeconds.value
   configMode.value = mode.value
+  configDifficulty.value = difficulty.value
   showConfig.value = true
 }
 
@@ -106,7 +110,12 @@ function confirmConfig() {
   showConfig.value = false
   frameSeconds.value = configFrame.value
   mode.value = configMode.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&frame=${frameSeconds.value}`)
+  difficulty.value = configDifficulty.value
+  history.replaceState(
+    null,
+    '',
+    `/ai?mode=${mode.value}&frame=${frameSeconds.value}&level=${difficulty.value}`,
+  )
   restart()
 }
 
@@ -224,7 +233,9 @@ const resultTextCls = computed(() => {
       v-if="showConfig"
       v-model:frame="configFrame"
       v-model:mode="configMode"
+      v-model:difficulty="configDifficulty"
       :mode-options="AI_MODE_OPTIONS"
+      :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
       @cancel="showConfig = false"

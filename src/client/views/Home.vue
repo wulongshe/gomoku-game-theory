@@ -15,7 +15,7 @@ import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
-import { RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { DIFFICULTY_OPTIONS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import {
   AI_MODE_OPTIONS,
   FRAME_OPTIONS,
@@ -25,6 +25,7 @@ import {
   type LobbyServerMessage,
 } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
+import type { Difficulty } from '@/engine/ai'
 
 const creating = ref(false)
 const matching = ref(false)
@@ -63,11 +64,13 @@ if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 const aiFrame = useStorage('ai-frame', 0)
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
+const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
 if (!FRAME_OPTIONS.includes(aiFrame.value)) aiFrame.value = 0
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
+if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&frame=${aiFrame.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&frame=${aiFrame.value}&level=${aiDifficulty.value}`)
 }
 
 async function create() {
@@ -246,7 +249,9 @@ function closeMatchDialog() {
       v-if="showAi"
       v-model:frame="aiFrame"
       v-model:mode="aiMode"
+      v-model:difficulty="aiDifficulty"
       :mode-options="AI_MODE_OPTIONS"
+      :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
       @cancel="showAi = false"
