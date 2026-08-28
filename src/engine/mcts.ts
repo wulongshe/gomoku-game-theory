@@ -94,7 +94,6 @@ export function searchBestMove(
     const op = node.oppMoves[j]
     const choices: FrameChoices =
       seat === 'black' ? { black: ai, white: op } : { black: op, white: ai }
-    if (ai.x === op.x && ai.y === op.y) choices.first = 'black'
     return choices
   }
 

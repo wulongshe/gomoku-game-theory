@@ -97,12 +97,27 @@ export interface BoardAnalysis {
   threatOpp: number
 }
 
-// 单遍扫全盘：每个合法点只算一次双方 placementScore，一次产出双方候选（攻守合一分排序）与威胁强度，
-// 免去候选、评估各扫一遍、同一分重算三遍。
+// 把 point 按 key 降序插入定长（≤limit）榜单，等值时先到者在前（与稳定排序取 topK 等价）。
+function insertTop(top: { point: Point; key: number }[], point: Point, key: number, limit: number): void {
+  if (top.length >= limit && key <= top[top.length - 1].key) return
+  let lo = 0
+  let hi = top.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (top[mid].key < key) hi = mid
+    else lo = mid + 1
+  }
+  top.splice(lo, 0, { point, key })
+  if (top.length > limit) top.pop()
+}
+
+// 单遍扫全盘：每个合法点只算一次双方 placementScore，直接维护两份定长榜单选出候选（攻守合一分），
+// 同时累计双方威胁强度；免去候选、评估各扫一遍、同一分重算三遍，也省掉整盘 scored 数组与两次排序。
 export function analyzeBoard(state: GameState, seat: Seat, limit: number): BoardAnalysis {
   const opp = other(seat)
   const contest = CONTEST_FACTOR[state.mode]
-  const scored: { point: Point; self: number; opp: number }[] = []
+  const aiTop: { point: Point; key: number }[] = []
+  const oppTop: { point: Point; key: number }[] = []
   let self1 = 0
   let self2 = 0
   let opp1 = 0
@@ -115,7 +130,6 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
       if (!isLegalChoice(state, point)) continue
       const self = placementScore(state, point, seat)
       const oppScore = placementScore(state, point, opp)
-      scored.push({ point, self, opp: oppScore })
       if (self >= WIN_SCORE) selfWins++
       if (oppScore >= WIN_SCORE) oppWins++
       if (self > self1) {
@@ -130,21 +144,13 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
       } else if (oppScore > opp2) {
         opp2 = oppScore
       }
+      insertTop(aiTop, point, self + contest * oppScore, limit)
+      insertTop(oppTop, point, oppScore + contest * self, limit)
     }
   }
-  const aiMoves = scored
-    .slice()
-    .sort((a, b) => b.self + contest * b.opp - (a.self + contest * a.opp))
-    .slice(0, limit)
-    .map((s) => s.point)
-  const oppMoves = scored
-    .slice()
-    .sort((a, b) => b.opp + contest * b.self - (a.opp + contest * a.self))
-    .slice(0, limit)
-    .map((s) => s.point)
   return {
-    aiMoves,
-    oppMoves,
+    aiMoves: aiTop.map((t) => t.point),
+    oppMoves: oppTop.map((t) => t.point),
     threatSelf: threatValue(self1, self2, selfWins),
     threatOpp: threatValue(opp1, opp2, oppWins),
   }
@@ -250,20 +256,6 @@ export function chooseAiMove(
   if (aiMoves.length <= 1) return aiMoves[0] ?? null
 
   const matrix = aiMoves.map((ai) => oppMoves.map((opp) => payoff(state, seat, ai, opp)))
-
-  // 必胜手：某行对手所有回应都稳赢，直接落子，不做随机化。
-  let forced = 0
-  let forcedSecurity = -Infinity
-  for (let i = 0; i < aiMoves.length; i++) {
-    let security = Infinity
-    for (let j = 0; j < oppMoves.length; j++) security = Math.min(security, matrix[i][j])
-    if (security > forcedSecurity) {
-      forcedSecurity = security
-      forced = i
-    }
-  }
-  if (forcedSecurity >= TERMINAL / 2) return aiMoves[forced]
-
   const equilibrium = solveMaximin(matrix)
   const n = aiMoves.length
   const dist = equilibrium.map((p) => (1 - explore) * p + explore / n)
