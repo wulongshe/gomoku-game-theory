@@ -24,6 +24,9 @@ export type ClientMessage =
   | { type: 'rematch_decline' }
   | { type: 'leave' }
   | { type: 'refresh_players' }
+  | { type: 'resign' }
+  | { type: 'draw_offer' }
+  | { type: 'draw_response'; accept: boolean }
 
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
@@ -45,6 +48,9 @@ export type ServerMessage =
   | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number; passed: Seat[] }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
+  | { type: 'opponent_resigned'; left: boolean }
+  | { type: 'draw_offered' }
+  | { type: 'draw_declined' }
   | { type: 'room_closed' }
   | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_declined' }
@@ -68,6 +74,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }
   if (msg.type === 'refresh_players') return { type: 'refresh_players' }
+  if (msg.type === 'resign') return { type: 'resign' }
+  if (msg.type === 'draw_offer') return { type: 'draw_offer' }
+  if (msg.type === 'draw_response') {
+    return typeof msg.accept === 'boolean' ? { type: 'draw_response', accept: msg.accept } : null
+  }
   if (msg.type !== 'submit' || !Number.isInteger(msg.frame) || typeof msg.final !== 'boolean') {
     return null
   }

@@ -271,6 +271,34 @@ export class Room extends DurableObject<Env> {
       }
       return
     }
+    if (msg.type === 'resign' || msg.type === 'draw_offer' || msg.type === 'draw_response') {
+      if (!game || game.phase !== 'playing') {
+        return this.send(ws, { type: 'error', message: 'game not in progress' })
+      }
+      if (msg.type === 'resign') {
+        for (const other of this.ctx.getWebSockets()) {
+          if (other !== ws) this.send(other, { type: 'opponent_resigned', left: false })
+        }
+        return this.endGame({
+          ...game,
+          phase: seat === 'black' ? 'white_won' : 'black_won',
+          cleared: [],
+        })
+      }
+      if (msg.type === 'draw_offer') {
+        for (const other of this.ctx.getWebSockets()) {
+          if (other !== ws) this.send(other, { type: 'draw_offered' })
+        }
+        return
+      }
+      if (msg.accept) {
+        return this.endGame({ ...game, phase: 'draw', cleared: [] })
+      }
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws) this.send(other, { type: 'draw_declined' })
+      }
+      return
+    }
     if (!game || game.phase !== 'playing') {
       return this.send(ws, { type: 'error', message: 'game not in progress' })
     }
@@ -309,6 +337,9 @@ export class Room extends DurableObject<Env> {
         ...game,
         phase: seat === 'black' ? 'white_won' : 'black_won',
         cleared: [],
+      }
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws) this.send(other, { type: 'opponent_resigned', left: true })
       }
       this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now(), passed: [] })
       await this.recordResult(resigned.phase)
@@ -411,12 +442,16 @@ export class Room extends DurableObject<Env> {
       const deadline = await this.scheduleFrame(next, await this.frameSeconds())
       this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed })
     } else {
-      await this.ctx.storage.delete('choices')
-      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
-      await this.ctx.storage.put('game', next)
-      this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
-      await this.recordResult(next.phase)
+      await this.endGame(next, passed)
     }
+  }
+
+  private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
+    await this.ctx.storage.delete('choices')
+    await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    await this.ctx.storage.put('game', next)
+    this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
+    await this.recordResult(next.phase)
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {

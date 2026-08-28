@@ -404,6 +404,7 @@ describe('Room', () => {
   it('forfeits the game and closes the room on leave', async () => {
     const [a, b] = await startGame('ROOM16')
     a.ws.send(JSON.stringify({ type: 'leave' }))
+    expect(await b.next('opponent_resigned')).toEqual({ type: 'opponent_resigned', left: true })
     const settled = await b.next('frame_settled')
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
     expect(settled.state.phase).toBe('white_won')
@@ -538,6 +539,37 @@ describe('Room', () => {
       expect(messages).toContain('pong')
     })
     expect(messages.some((raw) => raw.includes('malformed'))).toBe(false)
+  })
+
+  it('ends the game when a player resigns, keeping the room open for a rematch', async () => {
+    const [a, b] = await startGame('ROOM31')
+    a.ws.send(JSON.stringify({ type: 'resign' }))
+    expect(await b.next('opponent_resigned')).toEqual({ type: 'opponent_resigned', left: false })
+    const settled = await settledOnBoth(a, b)
+    expect(settled.state.phase).toBe('white_won')
+    b.rematch()
+    await a.next('rematch_requested')
+  })
+
+  it('settles a draw when the opponent accepts the offer', async () => {
+    const [a, b] = await startGame('ROOM32')
+    a.ws.send(JSON.stringify({ type: 'draw_offer' }))
+    await b.next('draw_offered')
+    b.ws.send(JSON.stringify({ type: 'draw_response', accept: true }))
+    const settled = await settledOnBoth(a, b)
+    expect(settled.state.phase).toBe('draw')
+  })
+
+  it('keeps playing when the draw offer is declined', async () => {
+    const [a, b] = await startGame('ROOM33')
+    a.ws.send(JSON.stringify({ type: 'draw_offer' }))
+    await b.next('draw_offered')
+    b.ws.send(JSON.stringify({ type: 'draw_response', accept: false }))
+    await a.next('draw_declined')
+    a.submit(1, { x: 6, y: 7 })
+    b.submit(1, { x: 8, y: 8 })
+    const settled = await settledOnBoth(a, b)
+    expect(settled.state.frame).toBe(2)
   })
 })
 

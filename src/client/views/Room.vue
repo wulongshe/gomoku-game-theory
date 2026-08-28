@@ -60,7 +60,6 @@ const rematchDeadline = ref<number | null>(null)
 const oppLeft = ref(false)
 const rematchInvite = ref(false)
 const inviteDeadline = ref<number | null>(null)
-const overNotice = ref('')
 const overlayDismissed = ref(false)
 const errorNotice = ref('')
 const lastMoves = ref<Point[]>([])
@@ -78,6 +77,9 @@ const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null
 const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
 const autoSubmit = useStorage('auto-submit', false)
+const showConcede = ref(false)
+const drawInvite = ref(false)
+const drawInviteDeadline = ref<number | null>(null)
 const toast = ref('')
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -198,9 +200,11 @@ function handleMessage(msg: ServerMessage) {
       rematchInvite.value = false
       rematchDeadline.value = null
       inviteDeadline.value = null
-      overNotice.value = ''
       overlayDismissed.value = false
       errorNotice.value = ''
+      showConcede.value = false
+      drawInvite.value = false
+      drawInviteDeadline.value = null
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
     case 'frame_settled':
@@ -227,6 +231,17 @@ function handleMessage(msg: ServerMessage) {
     case 'opponent_returned':
       oppLeft.value = false
       break
+    case 'opponent_resigned':
+      showConcede.value = false
+      showToast(msg.left ? '对方退出房间，本局你获胜' : '对方认输，本局你获胜')
+      break
+    case 'draw_offered':
+      drawInvite.value = true
+      drawInviteDeadline.value = Date.now() + 5000
+      break
+    case 'draw_declined':
+      showToast('对方拒绝了求和')
+      break
     case 'players':
       seatAccounts.value = msg.accounts
       break
@@ -244,7 +259,7 @@ function handleMessage(msg: ServerMessage) {
     case 'rematch_declined':
       rematchAsked.value = false
       rematchDeadline.value = null
-      overNotice.value = '对方拒绝了再来一局'
+      showToast('对方拒绝了再来一局')
       break
     case 'error':
       errorNotice.value = msg.message
@@ -351,6 +366,30 @@ function submitChoice() {
 
 watch(autoSubmit, (on) => {
   if (on && stage.value === 'playing') submitChoice()
+})
+
+function resign() {
+  showConcede.value = false
+  send(JSON.stringify({ type: 'resign' } satisfies ClientMessage))
+}
+
+function offerDraw() {
+  showConcede.value = false
+  send(JSON.stringify({ type: 'draw_offer' } satisfies ClientMessage))
+  showToast('已向对方发起求和')
+}
+
+function respondDraw(accept: boolean) {
+  if (!drawInvite.value) return
+  drawInvite.value = false
+  drawInviteDeadline.value = null
+  send(JSON.stringify({ type: 'draw_response', accept } satisfies ClientMessage))
+}
+
+const drawInviteSeconds = useCountdown(drawInviteDeadline, 5)
+
+watch(drawInviteSeconds, (s) => {
+  if (s === 0) respondDraw(false)
 })
 
 function sendReady() {
@@ -572,21 +611,30 @@ function exitRoom() {
             </template>
             <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
           </p>
-          <div class="flex items-center justify-center gap-1">
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+            <span />
+            <div class="flex items-center justify-center gap-1">
+              <button
+                class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+                aria-label="对局设置"
+                @click="showSettings = true"
+              >
+                <IconSettings class="size-5" />
+              </button>
+              <button
+                v-if="seatAccounts.black || seatAccounts.white"
+                class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+                aria-label="玩家信息"
+                @click="showPlayers = true"
+              >
+                <IconUsers class="size-5" />
+              </button>
+            </div>
             <button
-              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-              aria-label="对局设置"
-              @click="showSettings = true"
+              class="cursor-pointer justify-self-end p-1 text-xs font-medium text-stone-400 transition-colors hover:text-red-500 active:text-red-500 dark:text-stone-500 dark:hover:text-red-400 dark:active:text-red-400"
+              @click="showConcede = true"
             >
-              <IconSettings class="size-5" />
-            </button>
-            <button
-              v-if="seatAccounts.black || seatAccounts.white"
-              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-              aria-label="玩家信息"
-              @click="showPlayers = true"
-            >
-              <IconUsers class="size-5" />
+              认输/求和
             </button>
           </div>
         </template>
@@ -601,7 +649,6 @@ function exitRoom() {
             {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
           </AppButton>
           <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
-          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">{{ overNotice }}</p>
         </template>
       </div>
     </template>
@@ -665,6 +712,26 @@ function exitRoom() {
       <div class="flex gap-2">
         <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
         <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
+      </div>
+    </AppDialog>
+
+    <AppDialog v-if="showConcede" title="认输/求和" @close="showConcede = false">
+      <p class="text-sm text-stone-500 dark:text-stone-400">
+        认输将判对方获胜；求和需对方同意，同意后本局记为平局。
+      </p>
+      <div class="flex gap-2">
+        <DialogButton variant="secondary" @click="offerDraw">求和</DialogButton>
+        <DialogButton variant="danger" @click="resign">认输</DialogButton>
+      </div>
+    </AppDialog>
+
+    <AppDialog v-if="drawInvite" title="对方求和" :closable="false">
+      <p class="text-sm text-stone-500 dark:text-stone-400">
+        对方提议和棋，同意后本局记为平局。{{ drawInviteSeconds }} 秒后自动拒绝。
+      </p>
+      <div class="flex gap-2">
+        <DialogButton variant="secondary" @click="respondDraw(false)">拒绝</DialogButton>
+        <DialogButton @click="respondDraw(true)">同意</DialogButton>
       </div>
     </AppDialog>
 
