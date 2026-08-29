@@ -1,21 +1,17 @@
 import { settleFrame, type GameState, type Point, type Seat } from './game'
 import { analyzeBoard, evaluateState, sampleIndex } from './eval'
 
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'master' | 'hell'
-
-// 节点策略：duct 解耦 UCB（贪最强手、可被针对）；rm 遗憾匹配（平均策略收敛混合纳什、不可被利用）。
-export type AiPolicy = 'duct' | 'rm'
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'hell'
 
 // explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
 export const DIFFICULTY_SETTINGS: Record<
   Difficulty,
-  { candidates: number; explore: number; budgetMs: number; policy: AiPolicy }
+  { candidates: number; explore: number; budgetMs: number }
 > = {
-  easy: { candidates: 5, explore: 0.55, budgetMs: 200, policy: 'duct' },
-  normal: { candidates: 6, explore: 0.22, budgetMs: 450, policy: 'duct' },
-  hard: { candidates: 7, explore: 0, budgetMs: 800, policy: 'duct' },
-  master: { candidates: 7, explore: 0, budgetMs: 1200, policy: 'rm' },
-  hell: { candidates: 8, explore: 0, budgetMs: 800, policy: 'duct' },
+  easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
+  normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
+  hard: { candidates: 7, explore: 0, budgetMs: 800 },
+  hell: { candidates: 8, explore: 0, budgetMs: 800 },
 }
 
 const FICTITIOUS_ITERATIONS = 300

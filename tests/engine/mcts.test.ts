@@ -65,26 +65,6 @@ describe('searchBestMove', () => {
     expect(performance.now() - start).toBeLessThan(600)
   })
 
-  // 大师用遗憾匹配：平均策略应收敛到唯一非受控防守手（撞掉黑的唯一胜点 (8,7)）。
-  it('master denies the opponent’s only winning point', () => {
-    let denied = 0
-    for (let i = 0; i < 10; i++) {
-      const game = withStones({ black: row(7, [4, 5, 6, 7]), white: [{ x: 3, y: 7 }] })
-      const move = searchBestMove(game, 'white', 'master', 350)
-      if (move?.x === 8 && move?.y === 7) denied++
-    }
-    expect(denied).toBeGreaterThan(6)
-  })
-
-  it('master always returns a legal move mid-game', () => {
-    const game = withStones({ black: row(7, [6, 7, 8]), white: row(8, [6, 7]) })
-    for (let i = 0; i < 10; i++) {
-      const move = searchBestMove(game, 'white', 'master', 60)
-      expect(move).not.toBeNull()
-      expect(isLegalChoice(game, move!)).toBe(true)
-    }
-  })
-
   // 把对手落点固定到搜索根后，应手是确定的最优回应，故这些断言是精确的（不再是概率阈值）。
   // 对手手固定为其唯一胜点 (8,7)，白必撞点封杀，每次都对。
   it('best-responds to a fixed opponent move by contesting its winning point', () => {

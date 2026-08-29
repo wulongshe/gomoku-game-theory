@@ -11,14 +11,12 @@ export const MODE_LABELS: Record<GameMode, string> = {
   minus: '负子',
 }
 
-// 大师（遗憾匹配）入口暂时隐藏。
 export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard', 'hell']
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
   normal: '普通',
   hard: '困难',
-  master: '大师',
   hell: '地狱',
 }
 
