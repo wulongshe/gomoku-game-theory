@@ -12,7 +12,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { type Difficulty } from '@/engine/ai'
+import { DIFFICULTY_SETTINGS, type Difficulty } from '@/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -77,8 +77,7 @@ const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
 const responds = computed(() => difficulty.value === 'hell')
-// 地狱难度每帧有此概率“放水”，改用常规盲算，给人类留出取胜空间，避免几乎无解。
-const HELL_SLIP = 0.5
+const slipChance = computed(() => DIFFICULTY_SETTINGS[difficulty.value].slip ?? 0)
 let slipFrame = false
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
@@ -110,7 +109,7 @@ function beginFrame(startAt: number = Date.now()) {
   pendingResponse = null
   responseFor = null
   if (responds.value) {
-    slipFrame = Math.random() < HELL_SLIP
+    slipFrame = Math.random() < slipChance.value
     pendingAiMove = slipFrame ? ai.request(game.value, 'white', difficulty.value, null, true) : null
     showThinking.value = true
     thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
