@@ -1,5 +1,7 @@
 .claude/
 CLAUDE.md
+.gemini
+GEMINI.md
 node_modules/
 dist/
 .wrangler/
