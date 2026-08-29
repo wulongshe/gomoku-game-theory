@@ -4,14 +4,26 @@ import { createGame, settleFrame, type GameMode, type GameState, type Point, typ
 import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====
-const MODE: GameMode = 'forbidden' // 撞子规则：forbidden 禁点 / race 竞速 / minus 负子
-const ROUNDS = 20
-const PARALLEL_ROUNDS = 4 // 并行对局数，每局占 2 个线程；8 核可开到 4
+const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / race 竞速 / minus 负子
+const ROUNDS = Number(process.env.ROUNDS ?? 20)
+const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 4) // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 300 // 单局帧数上限，超限判平（防异常对局死循环）
 // 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
-// 困难 vs 地狱：白方 respond 每帧先看黑方本帧手再应（根固定对手手），黑方照常盲搜。
-const BLACK: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 800 } // 困难
-const WHITE: SideConfig = { policy: 'respond', candidates: 8, explore: 0, budgetMs: 800 } // 地狱
+// 黑方盲搜进攻，白方 respond 每帧先看黑方本帧手再应（根固定对手手）。
+const BLACK: SideConfig = {
+  policy: 'duct',
+  candidates:  Number(process.env.CAND_BLACK ?? 7),
+  explore: Number(process.env.EXPLORE_BLACK ?? 0),
+  budgetMs: Number(process.env.BUDGET_BLACK ?? 800)
+}
+const WHITE: SideConfig = {
+  policy: 'respond',
+  candidates:  Number(process.env.CAND_WHITE ?? 6),
+  explore: Number(process.env.EXPLORE_WHITE ?? 0.22),
+  budgetMs: Number(process.env.BUDGET_WHITE ?? 450),
+  // 地狱方每帧放水（改盲搜）的概率
+  slip: Number(process.env.HELL_SLIP ?? 0.25)
+}
 // ==========================
 
 interface MatchConfig {
@@ -174,7 +186,8 @@ function formatMove(point: Point | null): string {
 
 function formatSide(side: SideConfig): string {
   if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms)`
-  if (side.policy === 'respond') return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
+  if (side.policy === 'respond')
+    return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms${side.slip ? `·slip${side.slip}` : ''})`
   return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
 }
 
