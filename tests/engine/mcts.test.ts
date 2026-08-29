@@ -84,4 +84,32 @@ describe('searchBestMove', () => {
       expect(isLegalChoice(game, move!)).toBe(true)
     }
   })
+
+  // 机会性终结：白四（4..7,row7）左端被 (3,7) 堵，唯一胜点 (8,7)。对手不常堵（低封堵率）时应直接兑现。
+  it('master cashes a simple four against a non-blocking opponent', () => {
+    const game = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
+    const move = searchBestMove(game, 'white', 'master', 120, 0.1)
+    expect(move).toEqual({ x: 8, y: 7 })
+  })
+
+  // 对手稳堵（高封堵率）时不该往撞点上送单胜点四子，转而保留威胁继续发展。
+  it('master keeps a simple four latent against a reliable blocker', () => {
+    let shot = 0
+    for (let i = 0; i < 10; i++) {
+      const game = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
+      const move = searchBestMove(game, 'white', 'master', 120, 0.95)
+      if (move?.x === 8 && move?.y === 7) shot++
+    }
+    expect(shot).toBeLessThan(4)
+  })
+
+  // 活四两端皆胜点，对手每帧至多撞一个，撞不全 —— 即便面对稳堵也该出手兑现。
+  it('master cashes an open four even against a reliable blocker', () => {
+    const game = withStones({ white: row(7, [4, 5, 6, 7]) })
+    const move = searchBestMove(game, 'white', 'master', 120, 0.95)
+    expect([
+      { x: 3, y: 7 },
+      { x: 8, y: 7 },
+    ]).toContainEqual(move)
+  })
 })

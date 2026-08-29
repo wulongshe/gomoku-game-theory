@@ -166,6 +166,19 @@ function threatScore(state: GameState, seat: Seat): number {
   return threatValue(best, second, wins)
 }
 
+// 立即取胜点：落此空点即连成 ≥5 的合法点集合（单方向连线满 5 才达 WIN_SCORE，四向叠加也不会误报）。
+export function winningPoints(state: GameState, seat: Seat): Point[] {
+  const points: Point[] = []
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const point = { x, y }
+      if (!isLegalChoice(state, point)) continue
+      if (placementScore(state, point, seat) >= WIN_SCORE) points.push(point)
+    }
+  }
+  return points
+}
+
 // 从 seat 视角评估结算后的局面：终局用 ±TERMINAL，进行中用双方威胁强度之差。
 export function evaluateState(state: GameState, seat: Seat): number {
   if (state.phase !== 'playing') {

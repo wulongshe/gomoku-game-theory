@@ -23,11 +23,12 @@ import {
   type GameState,
   type Point,
 } from '@/engine/game'
+import { DEFAULT_BLOCK_RATE, observeBlock } from '@/engine/opponent'
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
-import { AI_GAME_KEY } from '~/constants/storage'
+import { AI_BLOCK_RATE_KEY, AI_GAME_KEY } from '~/constants/storage'
 import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
@@ -54,6 +55,11 @@ const reloaded =
 const savedGame = reloaded ? loadSavedGame() : null
 const game = ref<GameState>(savedGame ?? createGame(mode.value))
 watch(game, (g) => localStorage.setItem(AI_GAME_KEY, JSON.stringify(g)), { immediate: true })
+
+// 对手封堵率：随存档一起在刷新后续上，导航进入则回到保守先验。
+const savedRate = savedGame ? Number(localStorage.getItem(AI_BLOCK_RATE_KEY)) : NaN
+const blockRate = ref(Number.isFinite(savedRate) ? savedRate : DEFAULT_BLOCK_RATE)
+watch(blockRate, (r) => localStorage.setItem(AI_BLOCK_RATE_KEY, String(r)), { immediate: true })
 
 const selected = ref<Point | null>(null)
 const lastMoves = ref<Point[]>(savedGame?.lastMoves ?? [])
@@ -95,18 +101,21 @@ const aiStatus = computed(() => {
 function beginFrame() {
   deadline.value = frameSeconds.value > 0 ? Date.now() + frameSeconds.value * 1000 : null
   frameStart.value = Date.now()
-  pendingAiMove = ai.request(game.value, 'white', difficulty.value)
+  pendingAiMove = ai.request(game.value, 'white', difficulty.value, blockRate.value)
 }
 
 async function resolveFrame() {
   if (resolving.value || !playing.value) return
   resolving.value = true
-  const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
-  const next = settleFrame(game.value, {
-    black: selected.value,
+  const prev = game.value
+  const humanMove = selected.value
+  const aiMove = await (pendingAiMove ?? ai.request(prev, 'white', difficulty.value, blockRate.value))
+  const next = settleFrame(prev, {
+    black: humanMove,
     white: aiMove,
     first: Math.random() < 0.5 ? 'black' : 'white',
   })
+  if (humanMove) blockRate.value = observeBlock(blockRate.value, prev, humanMove, 'white')
   lastMoves.value = next.lastMoves
   vanishing.value = next.cleared
   game.value = next
@@ -129,6 +138,7 @@ function submitChoice() {
 
 function restart() {
   game.value = createGame(mode.value)
+  blockRate.value = DEFAULT_BLOCK_RATE
   selected.value = null
   lastMoves.value = []
   vanishing.value = []
@@ -141,6 +151,7 @@ function restart() {
 // 明确退出人机对战：清空本地存档，避免下次进入又续上已放弃的对局。
 function exitRoom() {
   localStorage.removeItem(AI_GAME_KEY)
+  localStorage.removeItem(AI_BLOCK_RATE_KEY)
   location.assign('/')
 }
 

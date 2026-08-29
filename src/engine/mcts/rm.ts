@@ -1,5 +1,5 @@
 import { settleFrame, type GameState, type Point, type Seat } from '../game'
-import { sampleIndex } from '../eval'
+import { sampleIndex, winningPoints } from '../eval'
 import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core'
 
 // 第五层：遗憾匹配（RM），把每个节点当重复矩阵博弈求解，双方平均策略收敛混合纳什。
@@ -13,6 +13,9 @@ interface RmNode extends Core {
   children: (RmNode | undefined)[]
   visits: number
 }
+
+// 一击得手概率达此阈值即兑现胜点（对应封堵率 < 0.6 的单胜点，或任意双威胁）。
+const FINISH_THRESHOLD = 0.4
 
 // 遗憾匹配：正遗憾归一即为当前策略，全非正时退回均匀。
 function regretMatch(regret: number[]): number[] {
@@ -32,6 +35,7 @@ export function rmSearch(
   seat: Seat,
   candidates: number,
   budget: number,
+  blockRate: number,
 ): Point | null {
   function makeNode(s: GameState): RmNode {
     const core = expand(s, seat, candidates)
@@ -113,8 +117,18 @@ export function rmSearch(
     iterations++
   }
 
-  const total = root.stratAi.reduce((a, b) => a + b, 0)
-  if (total <= 0) return root.aiMoves[0]
-  const dist = root.stratAi.map((s) => s / total)
-  return root.aiMoves[sampleIndex(dist)]
+  // 机会性终结：AI 有立即胜点时不照纳什「怕被撞」低概率出手。胜点只连既有四子，对手唯一的阻止方式是
+  // 抢占该点（撞点）；故一击得手概率仅取决于观测封堵率 blockRate：不常堵就兑现（惩罚放水），稳堵才继续发展。
+  // 多个胜点（活四/双威胁）对手每帧至多撞一个，命中率按胜点数摊薄，撞不全必成 —— 恒该出手。
+  const wins = winningPoints(state, seat)
+  if (wins.length > 0) {
+    const blockPerPoint = blockRate / wins.length
+    // 抢点模式撞点仍按提交顺序五五归属，封堵只削一半成功率。
+    const winProb = 1 - blockPerPoint * (state.mode === 'race' ? 0.5 : 1)
+    if (winProb >= FINISH_THRESHOLD) return wins[0]
+  }
+
+  const nashTotal = root.stratAi.reduce((a, b) => a + b, 0)
+  if (nashTotal <= 0) return root.aiMoves[0]
+  return root.aiMoves[sampleIndex(root.stratAi.map((s) => s / nashTotal))]
 }
