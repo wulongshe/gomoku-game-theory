@@ -28,6 +28,7 @@ export interface GameState {
   cleared: ClearedGroup[]
   lastMoves: Point[]
   winningLines: Point[][]
+  contested: Point | null
 }
 
 export interface FrameChoices {
@@ -45,6 +46,7 @@ export function createGame(mode: GameMode = 'forbidden'): GameState {
     cleared: [],
     lastMoves: [],
     winningLines: [],
+    contested: null,
   }
 }
 
@@ -211,6 +213,15 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       ['black', 'white', 'minus'].includes(board[p.y * BOARD_SIZE + p.x]),
   )
 
+  // 抢点撞子由掷币定归属：留存的那颗子先以太极呈现，再翻出先手方棋色。
+  const contested =
+    state.mode === 'race' &&
+    collided &&
+    choices.first &&
+    board[black!.y * BOARD_SIZE + black!.x] === choices.first
+      ? { x: black!.x, y: black!.y }
+      : null
+
   return {
     board,
     phase,
@@ -219,5 +230,6 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
     cleared,
     lastMoves,
     winningLines: winning.map((line) => line.map(toPoint)),
+    contested,
   }
 }

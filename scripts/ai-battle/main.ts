@@ -92,6 +92,7 @@ function snapshotState(state: GameState): GameState {
     cleared: [],
     lastMoves: [],
     winningLines: [],
+    contested: null,
   }
 }
 
