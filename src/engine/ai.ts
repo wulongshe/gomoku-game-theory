@@ -1,7 +1,7 @@
 import { settleFrame, type GameState, type Point, type Seat } from './game'
 import { analyzeBoard, evaluateState, sampleIndex } from './eval'
 
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'master' | 'hell'
 
 // 节点策略：duct 解耦 UCB（贪最强手、可被针对）；rm 遗憾匹配（平均策略收敛混合纳什、不可被利用）。
 export type AiPolicy = 'duct' | 'rm'
@@ -15,6 +15,7 @@ export const DIFFICULTY_SETTINGS: Record<
   normal: { candidates: 6, explore: 0.22, budgetMs: 450, policy: 'duct' },
   hard: { candidates: 7, explore: 0, budgetMs: 800, policy: 'duct' },
   master: { candidates: 7, explore: 0, budgetMs: 1200, policy: 'rm' },
+  hell: { candidates: 8, explore: 0, budgetMs: 800, policy: 'duct' },
 }
 
 const FICTITIOUS_ITERATIONS = 300

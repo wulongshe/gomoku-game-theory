@@ -14,12 +14,14 @@ interface DuctNode extends Core {
   visits: number
 }
 
+// rootOpp 非空时把根节点的对手候选固定为该点：AI 在此对手手下逐候选求最优应手，根以下仍常规同时落子搜索。
 export function ductSearch(
   state: GameState,
   seat: Seat,
   candidates: number,
   explore: number,
   budget: number,
+  rootOpp: Point | null = null,
 ): Point | null {
   function makeNode(s: GameState): DuctNode {
     const core = expand(s, seat, candidates)
@@ -90,6 +92,13 @@ export function ductSearch(
   }
 
   const root = makeNode(state)
+  if (rootOpp) {
+    root.oppMoves = [rootOpp]
+    root.oppSum = [0]
+    root.oppCnt = [0]
+    root.children = new Array(root.aiMoves.length)
+    root.expandable = root.aiMoves.length > 0
+  }
   if (!root.expandable) return root.aiMoves[0] ?? null
   if (root.aiMoves.length === 1) return root.aiMoves[0]
 

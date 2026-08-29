@@ -35,6 +35,7 @@ export function useAiOpponent() {
   let worker: Worker | null = null
   let supported = typeof Worker !== 'undefined'
   let seq = 0
+  let thinkingCount = 0
   const pending = new Map<number, Pending>()
 
   function ensureWorker() {
@@ -62,12 +63,26 @@ export function useAiOpponent() {
     }
   }
 
-  function request(state: GameState, seat: Seat, difficulty: Difficulty): Promise<Point | null> {
+  // 给定 oppMove 时把它带给引擎，对该固定对手手求最优应手；否则照常搜索。
+  // silent 的请求在后台预算、不点亮思考指示（供提前预算复用，命中即零等待）。
+  function request(
+    state: GameState,
+    seat: Seat,
+    difficulty: Difficulty,
+    oppMove: Point | null = null,
+    silent = false,
+  ): Promise<Point | null> {
     ensureWorker()
     const id = ++seq
-    thinking.value = true
+    if (!silent) {
+      thinkingCount++
+      thinking.value = true
+    }
     const done = (move: Point | null) => {
-      if (id === seq) thinking.value = false
+      if (!silent && --thinkingCount <= 0) {
+        thinkingCount = 0
+        thinking.value = false
+      }
       return move
     }
     if (!worker) {
@@ -75,7 +90,8 @@ export function useAiOpponent() {
     }
     return new Promise<Point | null>((resolve) => {
       pending.set(id, { resolve, state, seat, difficulty })
-      worker!.postMessage({ id, state: snapshot(state), seat, difficulty })
+      const move = oppMove ? { x: oppMove.x, y: oppMove.y } : null
+      worker!.postMessage({ id, state: snapshot(state), seat, difficulty, oppMove: move })
     }).then(done)
   }
 

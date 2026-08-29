@@ -67,12 +67,18 @@ const resolving = ref(false)
 
 const ai = useAiOpponent()
 let pendingAiMove: Promise<Point | null> | null = null
+let pendingResponse: Promise<Point | null> | null = null
+let responseFor: Point | null = null
+let responseTimer: ReturnType<typeof setTimeout> | undefined
 
 const showConfig = ref(false)
 const configFrame = ref(frameSeconds.value)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
+const responds = computed(() => difficulty.value === 'hell')
+const showThinking = ref(false)
+let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
 const { secondsLeft, remainingRatio, urgency, elapsedSeconds } = useFrameClock(
   deadline,
@@ -85,7 +91,7 @@ const aiStatus = computed(() => {
   if (!playing.value) return null
   if (resolving.value)
     return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
-  if (ai.thinking.value)
+  if (ai.thinking.value || showThinking.value)
     return { text: 'AI 思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
   return { text: 'AI 已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700 dark:text-emerald-400' }
 })
@@ -95,13 +101,34 @@ const aiStatus = computed(() => {
 function beginFrame() {
   deadline.value = frameSeconds.value > 0 ? Date.now() + frameSeconds.value * 1000 : null
   frameStart.value = Date.now()
-  pendingAiMove = ai.request(game.value, 'white', difficulty.value)
+  clearTimeout(thinkTimer)
+  clearTimeout(responseTimer)
+  pendingResponse = null
+  responseFor = null
+  if (responds.value) {
+    pendingAiMove = null
+    showThinking.value = true
+    thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
+  } else {
+    pendingAiMove = ai.request(game.value, 'white', difficulty.value)
+  }
 }
 
 async function resolveFrame() {
   if (resolving.value || !playing.value) return
   resolving.value = true
-  const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
+  clearTimeout(thinkTimer)
+  clearTimeout(responseTimer)
+  showThinking.value = false
+  const draft = selected.value
+  const ready =
+    draft && responseFor && responseFor.x === draft.x && responseFor.y === draft.y
+      ? pendingResponse
+      : null
+  const aiMove =
+    responds.value && draft
+      ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft))
+      : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const next = settleFrame(game.value, {
     black: selected.value,
     white: aiMove,
@@ -120,6 +147,19 @@ async function resolveFrame() {
 function select(point: Point) {
   if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
   selected.value = point
+  if (responds.value) scheduleResponse(point)
+}
+
+// 选点稳定后即在后台预算，提交时多半已就绪、零等待；改点则重排（旧结果作废）。
+function scheduleResponse(point: Point) {
+  if (responseFor && responseFor.x === point.x && responseFor.y === point.y) return
+  responseFor = point
+  pendingResponse = null
+  clearTimeout(responseTimer)
+  const target = point
+  responseTimer = setTimeout(() => {
+    pendingResponse = ai.request(game.value, 'white', difficulty.value, target, true)
+  }, 200)
 }
 
 function submitChoice() {
