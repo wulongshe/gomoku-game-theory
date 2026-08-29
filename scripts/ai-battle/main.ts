@@ -9,8 +9,9 @@ const ROUNDS = 20
 const PARALLEL_ROUNDS = 4 // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 300 // 单局帧数上限，超限判平（防异常对局死循环）
 // 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
-const BLACK: SideConfig = { policy: 'rm', candidates: 7, budgetMs: 1200 }
-const WHITE: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 800 }
+// 困难 vs 地狱：白方 respond 每帧先看黑方本帧手再应（根固定对手手），黑方照常盲搜。
+const BLACK: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 800 } // 困难
+const WHITE: SideConfig = { policy: 'respond', candidates: 8, explore: 0, budgetMs: 800 } // 地狱
 // ==========================
 
 interface MatchConfig {
@@ -33,7 +34,12 @@ type MatchOutcome = 'black' | 'white' | 'draw'
 // 每帧结算后的进度回调（frame 为本局已结算的帧号），展示由调用方负责，playSingleGame 保持纯函数。
 type FrameObserver = (frame: number, black: Point | null, white: Point | null) => void
 
-type SearchFn = (state: GameState, seat: Seat, side: SideConfig) => Promise<Point | null>
+type SearchFn = (
+  state: GameState,
+  seat: Seat,
+  side: SideConfig,
+  oppMove?: Point | null,
+) => Promise<Point | null>
 
 interface WorkerPool {
   search: SearchFn
@@ -63,11 +69,11 @@ function createWorkerPool(workerFile: URL, size: number, handler: { module: stri
     })
   }
   return {
-    search(state, seat, side) {
+    search(state, seat, side, oppMove = null) {
       return new Promise((resolve) => {
         const id = nextId++
         pending.set(id, resolve)
-        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side] })
+        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side, oppMove] })
       })
     },
     close() {
@@ -118,6 +124,26 @@ function frameChoices(
   return { black, white }
 }
 
+// 恰好一方为 respond（地狱）时，先算盲搜方，再让应手方以其手为 oppMove 应对（避免双方互等的死锁）；
+// 其余情形（都不应手 / 都应手）按同时搜索处理。
+async function frameMoves(
+  view: GameState,
+  config: MatchConfig,
+  search: SearchFn,
+): Promise<[Point | null, Point | null]> {
+  const blackResponds = config.black.policy === 'respond'
+  const whiteResponds = config.white.policy === 'respond'
+  if (whiteResponds && !blackResponds) {
+    const black = await search(view, 'black', config.black)
+    return [black, await search(view, 'white', config.white, black)]
+  }
+  if (blackResponds && !whiteResponds) {
+    const white = await search(view, 'white', config.white)
+    return [await search(view, 'black', config.black, white), white]
+  }
+  return Promise.all([search(view, 'black', config.black), search(view, 'white', config.white)])
+}
+
 async function playSingleGame(
   config: MatchConfig,
   search: SearchFn,
@@ -126,10 +152,7 @@ async function playSingleGame(
   let state = createGame(config.mode)
   while (state.phase === 'playing' && state.frame <= config.maxFrames) {
     const view = snapshotState(state)
-    const [black, white] = await Promise.all([
-      search(view, 'black', config.black),
-      search(view, 'white', config.white),
-    ])
+    const [black, white] = await frameMoves(view, config, search)
     if (!black && !white) return 'draw' // 双方都无合法手，判平
     const frame = state.frame
     state = settleFrame(state, frameChoices(config.mode, black, white))
@@ -150,6 +173,7 @@ function formatMove(point: Point | null): string {
 
 function formatSide(side: SideConfig): string {
   if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms)`
+  if (side.policy === 'respond') return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
   return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
 }
 
