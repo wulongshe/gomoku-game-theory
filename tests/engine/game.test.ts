@@ -253,6 +253,17 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('draw')
   })
 
+  it('declares a draw once neither side can still make five, even with empties left', () => {
+    const game = createGame('minus')
+    game.frame = 2
+    game.board.fill('minus')
+    game.board[0 * BOARD_SIZE + 0] = 'empty'
+    game.board[0 * BOARD_SIZE + 2] = 'empty'
+    const next = settleFrame(game, { black: { x: 0, y: 0 }, white: null })
+    expect(next.phase).toBe('draw')
+    expect(next.board.includes('empty')).toBe(true)
+  })
+
   it('rejects illegal choices and settled games', () => {
     const game = withStones({ black: [{ x: 7, y: 7 }] })
     expect(() => settleFrame(game, { black: { x: 7, y: 7 }, white: null })).toThrow()

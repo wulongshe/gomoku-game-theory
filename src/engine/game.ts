@@ -113,6 +113,30 @@ function winningLines(board: CellState[], seat: Seat, point: Point): number[][] 
   return lines
 }
 
+// 五连需要一段纯己方棋子，故只要存在一段长 5 的直线全落在 {空, 己方, 禁点} 内，
+// 该方就仍有夺胜可能（禁点会因成排清空而复位，作可复用处理，判定偏保守不会误判平局）。
+function canStillWin(board: CellState[], seat: Seat): boolean {
+  for (const [dx, dy] of DIRECTIONS) {
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        const ex = x + dx * (WIN_SCORE - 1)
+        const ey = y + dy * (WIN_SCORE - 1)
+        if (ex < 0 || ex >= BOARD_SIZE || ey < 0 || ey >= BOARD_SIZE) continue
+        let open = true
+        for (let k = 0; k < WIN_SCORE; k++) {
+          const cell = board[(y + dy * k) * BOARD_SIZE + (x + dx * k)]
+          if (cell !== 'empty' && cell !== seat && cell !== 'forbidden') {
+            open = false
+            break
+          }
+        }
+        if (open) return true
+      }
+    }
+  }
+  return false
+}
+
 function forbiddenRuns(board: CellState[]): number[][] {
   const runs: number[][] = []
   for (let y = 0; y < BOARD_SIZE; y++) {
@@ -203,7 +227,8 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       cleared.push({ origin: toCell(origin), cells: run.map(toCell) })
     }
     for (const i of runs.flat()) board[i] = 'empty'
-    if (!board.includes('empty')) phase = 'draw'
+    if (!board.includes('empty') || (!canStillWin(board, 'black') && !canStillWin(board, 'white')))
+      phase = 'draw'
   }
 
   const collided = black && white && black.x === white.x && black.y === white.y
