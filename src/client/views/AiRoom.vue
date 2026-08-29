@@ -77,6 +77,9 @@ const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
 const responds = computed(() => difficulty.value === 'hell')
+// 地狱难度每帧有此概率“放水”，改用常规盲算，给人类留出取胜空间，避免几乎无解。
+const HELL_SLIP = 0.5
+let slipFrame = false
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
@@ -107,7 +110,8 @@ function beginFrame(startAt: number = Date.now()) {
   pendingResponse = null
   responseFor = null
   if (responds.value) {
-    pendingAiMove = null
+    slipFrame = Math.random() < HELL_SLIP
+    pendingAiMove = slipFrame ? ai.request(game.value, 'white', difficulty.value, null, true) : null
     showThinking.value = true
     thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
   } else {
@@ -127,7 +131,7 @@ async function resolveFrame() {
       ? pendingResponse
       : null
   const aiMove =
-    responds.value && draft
+    responds.value && !slipFrame && draft
       ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft))
       : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const next = settleFrame(game.value, {
@@ -147,7 +151,7 @@ async function resolveFrame() {
 function select(point: Point) {
   if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
   selected.value = point
-  if (responds.value) scheduleResponse(point)
+  if (responds.value && !slipFrame) scheduleResponse(point)
 }
 
 // 选点稳定后即在后台预算，提交时多半已就绪、零等待；改点则重排（旧结果作废）。
