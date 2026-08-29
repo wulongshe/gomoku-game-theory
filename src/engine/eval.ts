@@ -20,9 +20,9 @@ export const TERMINAL = 1_000_000_000
 
 // 同时落子下抢占对方强点即防守；系数衡量「与对方争抢同一点」的净收益（恒 < 1，能赢时优先自己赢）。
 const CONTEST_FACTOR: Record<GameMode, number> = {
-  forbidden: 0.9, // 撞点 → 死点，免费封杀
-  minus: 0.9, // 撞点 → 负子，封杀且反噬对方连线
-  race: 0.45, // 撞点 → 按提交顺序归属，本地是掷硬币，倾向减半
+  forbidden: 0.9, // 撞子 → 死点，免费封杀
+  minus: 0.9, // 撞子 → 负子，封杀且反噬对方连线
+  race: 0.45, // 撞子 → 按提交顺序归属，本地是掷硬币，倾向减半
 }
 
 export function other(seat: Seat): Seat {
@@ -69,7 +69,7 @@ const EXTRA_WIN_CAP = 4
 // 非终局威胁强度上限（best + 0.25 次强 + 至多 EXTRA_WIN_CAP 个多余胜点），供叶子归一化定标。
 export const MAX_THREAT_VALUE = WIN_SCORE * (1.25 + EXTRA_WIN_CAP)
 
-// 威胁强度：最强两手加权和 + 多出胜点重奖。撞点下单胜点必被撞掉，两个及以上才成「对手撞不全」的猜点局面，
+// 威胁强度：最强两手加权和 + 多出胜点重奖。撞子下单胜点必被撞掉，两个及以上才成「对手撞不全」的猜点局面，
 // 故 wins-1 显式加分，让双威胁/叉远高于单威胁 —— 本变体分胜负的核心。
 function threatValue(best: number, second: number, wins: number): number {
   return best + 0.25 * second + WIN_SCORE * Math.min(EXTRA_WIN_CAP, Math.max(0, wins - 1))

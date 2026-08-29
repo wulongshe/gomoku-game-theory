@@ -105,7 +105,7 @@ function recordOutcome(summary: MatchSummary, outcome: MatchOutcome): MatchSumma
   return { ...summary, draws: summary.draws + 1 }
 }
 
-// race 模式撞点时先手掷硬币归属（与引擎评估的两种先手各半口径一致）；其余模式不需要 first。
+// race 模式撞子时先手掷硬币归属（与引擎评估的两种先手各半口径一致）；其余模式不需要 first。
 function frameChoices(
   mode: GameMode,
   black: Point | null,
@@ -168,7 +168,7 @@ async function runSeries(config: MatchConfig, search: SearchFn): Promise<MatchSu
     const outcome = await playSingleGame(config, search, (frame, black, white) => {
       const collided = black !== null && white !== null && black.x === white.x && black.y === white.y
       process.stdout.write(
-        `${prefix}帧 ${String(frame).padStart(3, ' ')}：黑 ${formatMove(black)}，白 ${formatMove(white)}${collided ? '  ⚡撞点' : ''}\n`,
+        `${prefix}帧 ${String(frame).padStart(3, ' ')}：黑 ${formatMove(black)}，白 ${formatMove(white)}${collided ? '  ⚡撞子' : ''}\n`,
       )
     })
     const seconds = ((performance.now() - startedAt) / 1000).toFixed(1)

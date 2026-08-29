@@ -83,7 +83,7 @@ function frameLabel(option: number) {
         </div>
       </div>
       <div class="flex flex-col gap-2">
-        <span class="text-center text-stone-500 dark:text-stone-400">撞点后</span>
+        <span class="text-center text-stone-500 dark:text-stone-400">撞子后</span>
         <div
           class="flex rounded-lg bg-stone-200 p-0.5 transition-opacity dark:bg-stone-700"
           :class="[multi && 'gap-0.5', disabled && 'pointer-events-none opacity-50']"
