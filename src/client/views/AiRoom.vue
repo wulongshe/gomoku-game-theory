@@ -4,7 +4,6 @@ import AppButton from '~/components/AppButton.vue'
 import AppDialog from '~/components/AppDialog.vue'
 import Board from '~/components/Board.vue'
 import DialogButton from '~/components/DialogButton.vue'
-import FrameBar from '~/components/FrameBar.vue'
 import FrameTimer from '~/components/FrameTimer.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import ResultOverlay from '~/components/ResultOverlay.vue'
@@ -27,16 +26,16 @@ import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
-import { AI_GAME_KEY } from '~/constants/storage'
-import { AI_MODE_OPTIONS, FRAME_OPTIONS } from '@/shared/protocol'
+import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
+import { AI_MODE_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
-const rawFrame = Number(params.get('frame'))
 const rawLevel = params.get('level') as Difficulty
 
 const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
-const frameSeconds = ref(FRAME_OPTIONS.includes(rawFrame) ? rawFrame : 0)
+// 人机对战恒不限时（无回合计时，仅正计时 Ns/∞）。
+const frameSeconds = 0
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
@@ -54,6 +53,8 @@ const reloaded =
 const savedGame = reloaded ? loadSavedGame() : null
 const game = ref<GameState>(savedGame ?? createGame(mode.value))
 watch(game, (g) => localStorage.setItem(AI_GAME_KEY, JSON.stringify(g)), { immediate: true })
+// 刷新续局时一并续上本回合正计时起点，避免归零。
+const savedFrameStart = savedGame ? Number(localStorage.getItem(AI_FRAME_START_KEY)) || null : null
 
 const selected = ref<Point | null>(null)
 const lastMoves = ref<Point[]>(savedGame?.lastMoves ?? [])
@@ -72,7 +73,6 @@ let responseFor: Point | null = null
 let responseTimer: ReturnType<typeof setTimeout> | undefined
 
 const showConfig = ref(false)
-const configFrame = ref(frameSeconds.value)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
@@ -80,7 +80,7 @@ const responds = computed(() => difficulty.value === 'hell')
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
-const { secondsLeft, remainingRatio, urgency, elapsedSeconds } = useFrameClock(
+const { secondsLeft, urgency, elapsedSeconds } = useFrameClock(
   deadline,
   frameSeconds,
   frameStart,
@@ -88,7 +88,8 @@ const { secondsLeft, remainingRatio, urgency, elapsedSeconds } = useFrameClock(
 )
 
 const aiStatus = computed(() => {
-  if (!playing.value) return null
+  if (!playing.value)
+    return { text: '对局结束', dot: 'bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
   if (resolving.value)
     return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
   if (ai.thinking.value || showThinking.value)
@@ -98,9 +99,9 @@ const aiStatus = computed(() => {
 
 // 本帧一开始就让 AI 在后台开算：AI 选点只依赖帧初局面、与人本帧隐藏选点无关，
 // 故与人同时思考，结算时（await pendingAiMove）通常已备好，人零等待。
-function beginFrame() {
-  deadline.value = frameSeconds.value > 0 ? Date.now() + frameSeconds.value * 1000 : null
-  frameStart.value = Date.now()
+function beginFrame(startAt: number = Date.now()) {
+  frameStart.value = startAt
+  localStorage.setItem(AI_FRAME_START_KEY, String(startAt))
   clearTimeout(thinkTimer)
   clearTimeout(responseTimer)
   pendingResponse = null
@@ -141,7 +142,6 @@ async function resolveFrame() {
   pendingAiMove = null
   resolving.value = false
   if (next.phase === 'playing') beginFrame()
-  else deadline.value = null
 }
 
 function select(point: Point) {
@@ -181,11 +181,11 @@ function restart() {
 // 明确退出人机对战：清空本地存档，避免下次进入又续上已放弃的对局。
 function exitRoom() {
   localStorage.removeItem(AI_GAME_KEY)
+  localStorage.removeItem(AI_FRAME_START_KEY)
   location.assign('/')
 }
 
 function openConfig() {
-  configFrame.value = frameSeconds.value
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
   showConfig.value = true
@@ -193,23 +193,14 @@ function openConfig() {
 
 function confirmConfig() {
   showConfig.value = false
-  frameSeconds.value = configFrame.value
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  history.replaceState(
-    null,
-    '',
-    `/ai?mode=${mode.value}&frame=${frameSeconds.value}&level=${difficulty.value}`,
-  )
+  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}`)
   restart()
 }
 
-watch(secondsLeft, (value) => {
-  if (value === 0 && playing.value) resolveFrame()
-})
-
 onMounted(() => {
-  if (playing.value) beginFrame()
+  if (playing.value) beginFrame(savedFrameStart ?? Date.now())
 })
 
 const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(
@@ -254,11 +245,10 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
       <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
         <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game.frame }} 回合</span>
-        <span v-if="aiStatus" class="flex items-center gap-1.5" :class="aiStatus.cls">
+        <span class="flex items-center gap-1.5" :class="aiStatus.cls">
           <span class="size-2 rounded-full" :class="aiStatus.dot" />
           {{ aiStatus.text }}
         </span>
-        <span v-else />
         <FrameTimer
           :frame-seconds="frameSeconds"
           :seconds-left="secondsLeft"
@@ -266,8 +256,6 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
           :urgency="urgency"
         />
       </div>
-
-      <FrameBar v-if="frameSeconds > 0" :remaining-ratio="remainingRatio" :urgency="urgency" />
 
       <div class="relative w-full">
         <Board
@@ -300,9 +288,9 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
     <GameConfigDialog
       v-if="showConfig"
-      v-model:frame="configFrame"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
+      :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"

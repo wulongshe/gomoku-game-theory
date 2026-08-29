@@ -16,10 +16,11 @@ withDefaults(
     multi?: boolean
     loading?: boolean
     disabled?: boolean
+    showFrame?: boolean
     modeOptions?: GameMode[]
     difficulties?: Difficulty[]
   }>(),
-  { modeOptions: () => MODE_OPTIONS },
+  { modeOptions: () => MODE_OPTIONS, showFrame: true },
 )
 const emit = defineEmits<{ cancel: []; confirm: [] }>()
 
@@ -44,7 +45,7 @@ function frameLabel(option: number) {
 <template>
   <AppDialog :title="title" @close="emit('cancel')">
     <div class="flex flex-col gap-3 text-sm">
-      <div class="flex flex-col gap-2">
+      <div v-if="showFrame" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">每回合</span>
         <div
           class="flex rounded-lg bg-stone-200 p-0.5 transition-opacity dark:bg-stone-700"

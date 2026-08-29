@@ -62,15 +62,14 @@ const inviteMode = useStorage<GameMode>('invite-mode', MODE_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
 if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
-const aiFrame = useStorage('ai-frame', 0)
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
-if (!FRAME_OPTIONS.includes(aiFrame.value)) aiFrame.value = 0
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
+// 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&frame=${aiFrame.value}&level=${aiDifficulty.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}`)
 }
 
 async function create() {
@@ -248,9 +247,9 @@ function closeMatchDialog() {
 
     <GameConfigDialog
       v-if="showAi"
-      v-model:frame="aiFrame"
       v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
+      :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"
