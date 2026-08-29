@@ -2,6 +2,7 @@ import {
   BOARD_SIZE,
   cellValue,
   isLegalChoice,
+  type FrameChoices,
   type GameMode,
   type GameState,
   type Point,
@@ -73,6 +74,17 @@ export const MAX_THREAT_VALUE = WIN_SCORE * (1.25 + EXTRA_WIN_CAP)
 // 故 wins-1 显式加分，让双威胁/叉远高于单威胁 —— 本变体分胜负的核心。
 function threatValue(best: number, second: number, wins: number): number {
   return best + 0.25 * second + WIN_SCORE * Math.min(EXTRA_WIN_CAP, Math.max(0, wins - 1))
+}
+
+// 叶子评估的量级上限（含多胜点重奖），保证多威胁不被对数归一挤到与单威胁齐平。
+const HEURISTIC_LOG = Math.log1p(MAX_THREAT_VALUE)
+
+// 归一化到 [-1,1]：终局 ±1；非终局按 |值| 对数映射到 ±0.95，全量级保留梯度（tanh 会在冲四以上饱和，弃用）。
+export function normalize(raw: number): number {
+  if (raw >= TERMINAL / 2) return 1
+  if (raw <= -TERMINAL / 2) return -1
+  const mag = Math.min(1, Math.log1p(Math.abs(raw)) / HEURISTIC_LOG) * 0.95
+  return raw < 0 ? -mag : mag
 }
 
 export interface BoardAnalysis {
@@ -185,4 +197,56 @@ export function sampleIndex(dist: number[]): number {
     if (r <= acc) return i
   }
   return dist.length - 1
+}
+
+// 联合动作 (AI, 对手) 落到帧提交结构；AI 执哪一色由 seat 决定。
+export function joint(seat: Seat, ai: Point, opp: Point): FrameChoices {
+  return seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
+}
+
+const FICTITIOUS_ITERATIONS = 300
+
+// 虚拟对弈（fictitious play）求解零和矩阵博弈：双方反复对当前经验分布做最优回应，
+// 行方（最大化）经验频率即收敛到极大极小混合策略。
+export function solveMaximin(matrix: number[][]): number[] {
+  const rows = matrix.length
+  const cols = matrix[0].length
+  const rowCount = new Array(rows).fill(0)
+  const colCount = new Array(cols).fill(0)
+  for (let t = 0; t < FICTITIOUS_ITERATIONS; t++) {
+    let bestRow = 0
+    let bestRowValue = -Infinity
+    for (let i = 0; i < rows; i++) {
+      let v = 0
+      for (let j = 0; j < cols; j++) v += colCount[j] * matrix[i][j]
+      if (v > bestRowValue) {
+        bestRowValue = v
+        bestRow = i
+      }
+    }
+    rowCount[bestRow]++
+    let bestCol = 0
+    let bestColValue = Infinity
+    for (let j = 0; j < cols; j++) {
+      let v = 0
+      for (let i = 0; i < rows; i++) v += rowCount[i] * matrix[i][j]
+      if (v < bestColValue) {
+        bestColValue = v
+        bestCol = j
+      }
+    }
+    colCount[bestCol]++
+  }
+  return rowCount.map((c) => c / FICTITIOUS_ITERATIONS)
+}
+
+// 行策略 row 的安全值（可保证收益）：min_j Σ_i row_i·M[i][j]，作为极大极小博弈值的估计。
+export function matrixSecurityValue(matrix: number[][], row: number[]): number {
+  let worst = Infinity
+  for (let j = 0; j < matrix[0].length; j++) {
+    let v = 0
+    for (let i = 0; i < matrix.length; i++) v += row[i] * matrix[i][j]
+    if (v < worst) worst = v
+  }
+  return worst
 }

@@ -1,6 +1,6 @@
 import { settleFrame, type GameState, type Point, type Seat } from '../game'
-import { sampleIndex } from '../eval'
-import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core'
+import { joint, sampleIndex } from '../eval'
+import { expand, MAX_DEPTH, MAX_ITERATIONS, type Core, type SearchOptions } from './core'
 
 const EXPLORATION = 1.0
 
@@ -20,9 +20,10 @@ export function ductSearch(
   candidates: number,
   explore: number,
   budget: number,
+  opts?: SearchOptions,
 ): Point | null {
   function makeNode(s: GameState): DuctNode {
-    const core = expand(s, seat, candidates)
+    const core = expand(s, seat, candidates, opts)
     const size = core.expandable ? core.aiMoves.length * core.oppMoves.length : 0
     return {
       ...core,
@@ -93,9 +94,10 @@ export function ductSearch(
   if (!root.expandable) return root.aiMoves[0] ?? null
   if (root.aiMoves.length === 1) return root.aiMoves[0]
 
+  const maxIterations = opts?.maxIterations ?? MAX_ITERATIONS
   const deadline = performance.now() + budget
   let iterations = 0
-  while (iterations < MAX_ITERATIONS && performance.now() < deadline) {
+  while (iterations < maxIterations && performance.now() < deadline) {
     simulate(root, 0)
     iterations++
   }

@@ -1,6 +1,6 @@
 import { settleFrame, type GameState, type Point, type Seat } from '../game'
-import { sampleIndex } from '../eval'
-import { expand, joint, MAX_DEPTH, MAX_ITERATIONS, type Core } from './core'
+import { joint, sampleIndex } from '../eval'
+import { expand, MAX_DEPTH, MAX_ITERATIONS, type Core, type SearchOptions } from './core'
 
 // 第五层：遗憾匹配（RM），把每个节点当重复矩阵博弈求解，双方平均策略收敛混合纳什。
 interface RmNode extends Core {
@@ -32,9 +32,10 @@ export function rmSearch(
   seat: Seat,
   candidates: number,
   budget: number,
+  opts?: SearchOptions,
 ): Point | null {
   function makeNode(s: GameState): RmNode {
-    const core = expand(s, seat, candidates)
+    const core = expand(s, seat, candidates, opts)
     const n = core.aiMoves.length
     const m = core.oppMoves.length
     const size = core.expandable ? n * m : 0
@@ -106,9 +107,10 @@ export function rmSearch(
   if (!root.expandable) return root.aiMoves[0] ?? null
   if (root.aiMoves.length === 1) return root.aiMoves[0]
 
+  const maxIterations = opts?.maxIterations ?? MAX_ITERATIONS
   const deadline = performance.now() + budget
   let iterations = 0
-  while (iterations < MAX_ITERATIONS && performance.now() < deadline) {
+  while (iterations < maxIterations && performance.now() < deadline) {
     simulate(root, 0)
     iterations++
   }

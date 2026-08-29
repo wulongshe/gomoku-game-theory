@@ -5,12 +5,14 @@ import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====
 const MODE: GameMode = 'forbidden' // 撞子规则：forbidden 禁点 / race 竞速 / minus 负子
-const ROUNDS = 20
+const ROUNDS = 8
 const PARALLEL_ROUNDS = 4 // 并行对局数，每局占 2 个线程；8 核可开到 4
-const MAX_FRAMES = 300 // 单局帧数上限，超限判平（防异常对局死循环）
-// 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
-const BLACK: SideConfig = { policy: 'rm', candidates: 7, budgetMs: 1200 }
-const WHITE: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 800 }
+const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）
+// 每方独立指定核心搜索算法（绕过难度预设）：让两边各自工作在最佳时间段、充分发挥性能——
+// 旧算法（静态叶子）UCB 收敛后基本到顶、再久只是徒增内存，给 1500ms（近饱和）；
+// 新算法（静止搜索）随时间持续变强，给 6000ms 逼近 30s 帧的可用思考时间。
+const BLACK: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 6000, quiescence: { candidates: 3, maxDepth: 1 } }
+const WHITE: SideConfig = { policy: 'duct', candidates: 7, explore: 0, budgetMs: 1500 }
 // ==========================
 
 interface MatchConfig {
@@ -149,8 +151,9 @@ function formatMove(point: Point | null): string {
 }
 
 function formatSide(side: SideConfig): string {
-  if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms)`
-  return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
+  const q = side.quiescence ? `·静${side.quiescence.candidates}×${side.quiescence.maxDepth}` : ''
+  if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms${q})`
+  return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms${q})`
 }
 
 function formatSummaryLine(summary: MatchSummary, config: MatchConfig): string {
