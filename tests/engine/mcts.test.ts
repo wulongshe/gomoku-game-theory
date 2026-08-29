@@ -103,10 +103,10 @@ describe('searchBestMove', () => {
     expect(shot).toBeLessThan(4)
   })
 
-  // 活四两端皆胜点，对手每帧至多撞一个，撞不全 —— 即便面对稳堵也该出手兑现。
-  it('master cashes an open four even against a reliable blocker', () => {
+  // 活四两端皆胜点：面对不常封堵的对手兑现其一（同时落子下第二胜点只是后续帧后备，不提升单手命中率）。
+  it('master cashes an open four against a non-blocking opponent', () => {
     const game = withStones({ white: row(7, [4, 5, 6, 7]) })
-    const move = searchBestMove(game, 'white', 'master', 120, 0.95)
+    const move = searchBestMove(game, 'white', 'master', 120, 0.1)
     expect([
       { x: 3, y: 7 },
       { x: 8, y: 7 },

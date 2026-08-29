@@ -1,6 +1,7 @@
 // 由 Node 原生运行 TypeScript（Node ≥ 23.6，--import 加载 loader.ts 为相对导入补 .ts）：pnpm ai:battle
 import { Worker } from 'node:worker_threads'
 import { createGame, settleFrame, type GameMode, type GameState, type Point, type Seat } from '../../src/engine/game'
+import { DEFAULT_BLOCK_RATE, observeBlock } from '../../src/engine/opponent'
 import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====
@@ -33,7 +34,12 @@ type MatchOutcome = 'black' | 'white' | 'draw'
 // 每帧结算后的进度回调（frame 为本局已结算的帧号），展示由调用方负责，playSingleGame 保持纯函数。
 type FrameObserver = (frame: number, black: Point | null, white: Point | null) => void
 
-type SearchFn = (state: GameState, seat: Seat, side: SideConfig) => Promise<Point | null>
+type SearchFn = (
+  state: GameState,
+  seat: Seat,
+  side: SideConfig,
+  blockRate: number,
+) => Promise<Point | null>
 
 interface WorkerPool {
   search: SearchFn
@@ -63,11 +69,11 @@ function createWorkerPool(workerFile: URL, size: number, handler: { module: stri
     })
   }
   return {
-    search(state, seat, side) {
+    search(state, seat, side, blockRate) {
       return new Promise((resolve) => {
         const id = nextId++
         pending.set(id, resolve)
-        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side] })
+        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side, blockRate] })
       })
     },
     close() {
@@ -124,13 +130,18 @@ async function playSingleGame(
   onFrame?: FrameObserver,
 ): Promise<MatchOutcome> {
   let state = createGame(config.mode)
+  // 每个 rm 方在线学习「对手对我的立即胜点的封堵率」，与人机对局同款观测，让机会性终结在自对弈里真正生效。
+  let blackBlock = DEFAULT_BLOCK_RATE
+  let whiteBlock = DEFAULT_BLOCK_RATE
   while (state.phase === 'playing' && state.frame <= config.maxFrames) {
     const view = snapshotState(state)
     const [black, white] = await Promise.all([
-      search(view, 'black', config.black),
-      search(view, 'white', config.white),
+      search(view, 'black', config.black, blackBlock),
+      search(view, 'white', config.white, whiteBlock),
     ])
     if (!black && !white) return 'draw' // 双方都无合法手，判平
+    if (config.black.policy === 'rm' && white) blackBlock = observeBlock(blackBlock, view, white, 'black')
+    if (config.white.policy === 'rm' && black) whiteBlock = observeBlock(whiteBlock, view, black, 'white')
     const frame = state.frame
     state = settleFrame(state, frameChoices(config.mode, black, white))
     onFrame?.(frame, black, white)
