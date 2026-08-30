@@ -43,8 +43,13 @@ interface MatchSummary {
 
 type MatchOutcome = 'black' | 'white' | 'draw'
 
-// 每帧结算后的进度回调（frame 为本局已结算的帧号），展示由调用方负责，playSingleGame 保持纯函数。
-type FrameObserver = (frame: number, black: Point | null, white: Point | null) => void
+// 每帧结算后的进度回调（frame 为本局已结算的帧号，next 为结算后的对局状态），展示由调用方负责。
+type FrameObserver = (
+  frame: number,
+  black: Point | null,
+  white: Point | null,
+  next: GameState,
+) => void
 
 type SearchFn = (
   state: GameState,
@@ -169,7 +174,7 @@ async function playSingleGame(
     if (!black && !white) return 'draw' // 双方都无合法手，判平
     const frame = state.frame
     state = settleFrame(state, frameChoices(config.mode, black, white))
-    onFrame?.(frame, black, white)
+    onFrame?.(frame, black, white, state)
   }
   return outcomeFromPhase(state.phase) // 帧数超限仍未分胜负 → draw
 }
@@ -182,6 +187,14 @@ function formatOutcome(outcome: MatchOutcome): string {
 
 function formatMove(point: Point | null): string {
   return point ? `(${point.x},${point.y})` : '—'
+}
+
+// 同五两消：本帧黑白各自成五，双方连线一起清除、对局继续。引擎在 settleFrame 里把两个清除组的
+// origin 记为各自的落点（见 game.ts），据此识别（与撞子互斥）。
+function isMutualFive(black: Point | null, white: Point | null, next: GameState): boolean {
+  if (!black || !white || next.phase !== 'playing') return false
+  const clearedAt = (p: Point) => next.cleared.some((g) => g.origin.x === p.x && g.origin.y === p.y)
+  return clearedAt(black) && clearedAt(white)
 }
 
 function formatSide(side: SideConfig): string {
@@ -203,10 +216,11 @@ async function runSeries(config: MatchConfig, search: SearchFn): Promise<MatchSu
     const prefix = `[${i}/${config.rounds}] `
     const startedAt = performance.now()
     process.stdout.write(`${prefix}开局：黑 ${formatSide(config.black)} vs 白 ${formatSide(config.white)}（模式 ${config.mode}）\n`)
-    const outcome = await playSingleGame(config, search, (frame, black, white) => {
+    const outcome = await playSingleGame(config, search, (frame, black, white, next) => {
       const collided = black !== null && white !== null && black.x === white.x && black.y === white.y
+      const tag = collided ? '  ⚡撞子' : isMutualFive(black, white, next) ? '  💥同5相消' : ''
       process.stdout.write(
-        `${prefix}帧 ${String(frame).padStart(3, ' ')}：黑 ${formatMove(black)}，白 ${formatMove(white)}${collided ? '  ⚡撞子' : ''}\n`,
+        `${prefix}帧 ${String(frame).padStart(3, ' ')}：黑 ${formatMove(black)}，白 ${formatMove(white)}${tag}\n`,
       )
     })
     const seconds = ((performance.now() - startedAt) / 1000).toFixed(1)
