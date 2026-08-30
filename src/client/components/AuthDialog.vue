@@ -101,7 +101,6 @@ async function handleLogout() {
   <AppDialog :title="loggedIn ? '我的账号' : '登录 / 注册'" @close="emit('close')">
     <template v-if="loggedIn">
       <p class="text-sm text-stone-600 dark:text-stone-300">{{ email }}</p>
-      <DialogButton variant="danger" @click="handleLogout">退出登录</DialogButton>
     </template>
 
     <template v-else>
@@ -169,8 +168,11 @@ async function handleLogout() {
       </template>
 
       <p v-if="error" class="text-xs text-red-500 dark:text-red-400">{{ error }}</p>
+    </template>
 
-      <DialogButton @click="submit">
+    <template #footer>
+      <DialogButton v-if="loggedIn" variant="danger" @click="handleLogout">退出登录</DialogButton>
+      <DialogButton v-else @click="submit">
         <IconSpinner v-if="busy" class="size-4" />
         {{ tab === 'login' ? '登录' : sent ? '注册并登录' : '发送验证码' }}
       </DialogButton>

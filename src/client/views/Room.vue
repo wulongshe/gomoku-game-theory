@@ -662,30 +662,36 @@ function exitRoom() {
             : '退出后房间将关闭。'
         }}
       </p>
-      <div class="flex gap-2">
-        <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
-        <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
-      </div>
+      <template #footer>
+        <div class="flex gap-2">
+          <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
+          <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
+        </div>
+      </template>
     </AppDialog>
 
     <AppDialog v-if="showConcede" title="认输/求和" @close="showConcede = false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         认输将判对方获胜；求和需对方同意，同意后本局记为平局。
       </p>
-      <div class="flex gap-2">
-        <DialogButton variant="secondary" @click="offerDraw">求和</DialogButton>
-        <DialogButton variant="danger" @click="resign">认输</DialogButton>
-      </div>
+      <template #footer>
+        <div class="flex gap-2">
+          <DialogButton variant="secondary" @click="offerDraw">求和</DialogButton>
+          <DialogButton variant="danger" @click="resign">认输</DialogButton>
+        </div>
+      </template>
     </AppDialog>
 
     <AppDialog v-if="drawInvite" title="对方求和" :closable="false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         对方提议和棋，同意后本局记为平局。{{ drawInviteSeconds }} 秒后自动拒绝。
       </p>
-      <div class="flex gap-2">
-        <DialogButton variant="secondary" @click="respondDraw(false)">拒绝</DialogButton>
-        <DialogButton @click="respondDraw(true)">同意</DialogButton>
-      </div>
+      <template #footer>
+        <div class="flex gap-2">
+          <DialogButton variant="secondary" @click="respondDraw(false)">拒绝</DialogButton>
+          <DialogButton @click="respondDraw(true)">同意</DialogButton>
+        </div>
+      </template>
     </AppDialog>
 
     <AppDialog v-if="showSettings" title="对局设置" @close="showSettings = false">

@@ -18,9 +18,11 @@ const emit = defineEmits<{ accept: []; decline: [] }>()
       <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">{{ MODE_LABELS[proposal.mode] }}模式</span>
     </p>
     <p class="text-sm text-stone-500 dark:text-stone-400">{{ secondsLeft }} 秒后自动关闭</p>
-    <div class="flex gap-2">
-      <DialogButton variant="secondary" @click="emit('decline')">拒绝</DialogButton>
-      <DialogButton @click="emit('accept')">接受</DialogButton>
-    </div>
+    <template #footer>
+      <div class="flex gap-2">
+        <DialogButton variant="secondary" @click="emit('decline')">拒绝</DialogButton>
+        <DialogButton @click="emit('accept')">接受</DialogButton>
+      </div>
+    </template>
   </AppDialog>
 </template>

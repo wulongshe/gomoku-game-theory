@@ -80,12 +80,16 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
         <RangeSlider v-model="difficultyLevel" :min="0.05" :max="0.95" :step="0.05" :fill="fillColor" />
       </div>
     </div>
-    <p v-if="hint" class="text-center text-xs text-stone-400 dark:text-stone-500">{{ hint }}</p>
-    <div class="flex">
-      <DialogButton @click="emit('confirm')">
-        <IconSpinner v-if="loading" class="size-4" />
-        {{ confirmText }}
-      </DialogButton>
-    </div>
+    <template #footer>
+      <div class="flex flex-col gap-4">
+        <p v-if="hint" class="text-center text-xs text-stone-400 dark:text-stone-500">{{ hint }}</p>
+        <div class="flex">
+          <DialogButton @click="emit('confirm')">
+            <IconSpinner v-if="loading" class="size-4" />
+            {{ confirmText }}
+          </DialogButton>
+        </div>
+      </div>
+    </template>
   </AppDialog>
 </template>

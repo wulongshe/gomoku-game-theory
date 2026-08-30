@@ -317,10 +317,12 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
     <AppDialog v-if="confirmingExit" title="退出人机对战？" :closable="false">
       <p class="text-sm text-stone-500 dark:text-stone-400">退出后本局将清空，无法继续。</p>
-      <div class="flex gap-2">
-        <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
-        <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
-      </div>
+      <template #footer>
+        <div class="flex gap-2">
+          <DialogButton variant="secondary" @click="confirmingExit = false">取消</DialogButton>
+          <DialogButton variant="danger" @click="exitRoom">退出</DialogButton>
+        </div>
+      </template>
     </AppDialog>
   </main>
 </template>
