@@ -100,7 +100,14 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       if (!parseMatchOptions(url.searchParams)) {
         return new Response('Invalid options', { status: 400 })
       }
-      return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request)
+      // 匹配分只认服务端解析出的账号评分，忽略客户端自带值。
+      const auth = url.searchParams.get('auth')
+      url.searchParams.delete('rating')
+      if (auth) {
+        const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+        url.searchParams.set('rating', String(await accounts.matchRating(auth)))
+      }
+      return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(new Request(url, request))
     }
     const roomMatch = url.pathname.match(/^\/api\/rooms\/(\d{4,8})(\/ws)?$/)
     if (roomMatch && request.method === 'GET') {

@@ -1,4 +1,4 @@
-import { env, SELF } from 'cloudflare:test'
+import { env, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 
 const BASE = 'https://example.com/api/auth'
@@ -152,5 +152,62 @@ describe('login and sessions', () => {
     await post('logout', {}, token)
     const me = await SELF.fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${token}` } })
     expect(me.status).toBe(401)
+  })
+})
+
+describe('ELO rating', () => {
+  async function register(email: string): Promise<void> {
+    const code = await registerAndGetCode(email)
+    await post('verify', { email, code, password: 'secret123' })
+  }
+
+  function ratingOf(email: string): Promise<number> {
+    return runInDurableObject(accountsStub(), async (_, state) => {
+      const stats = await state.storage.get<{ rating?: number }>(`stats:${email}`)
+      return stats?.rating ?? 1200
+    })
+  }
+
+  it('shifts both ratings symmetrically after a decisive game', async () => {
+    await register('elo-w@example.com')
+    await register('elo-l@example.com')
+    await accountsStub().recordResult([
+      { email: 'elo-w@example.com', outcome: 'win' },
+      { email: 'elo-l@example.com', outcome: 'loss' },
+    ])
+    expect(await ratingOf('elo-w@example.com')).toBe(1220)
+    expect(await ratingOf('elo-l@example.com')).toBe(1180)
+  })
+
+  it('leaves ratings untouched on a draw between equals', async () => {
+    await register('elo-d1@example.com')
+    await register('elo-d2@example.com')
+    await accountsStub().recordResult([
+      { email: 'elo-d1@example.com', outcome: 'draw' },
+      { email: 'elo-d2@example.com', outcome: 'draw' },
+    ])
+    expect(await ratingOf('elo-d1@example.com')).toBe(1200)
+    expect(await ratingOf('elo-d2@example.com')).toBe(1200)
+  })
+
+  it('does not rate a game against a guest opponent', async () => {
+    await register('elo-solo@example.com')
+    await accountsStub().recordResult([{ email: 'elo-solo@example.com', outcome: 'win' }])
+    expect(await ratingOf('elo-solo@example.com')).toBe(1200)
+  })
+
+  it('resolves a match rating from the session, defaulting for unknown tokens', async () => {
+    await register('elo-rate@example.com')
+    await register('elo-rate-opp@example.com')
+    const login = await post('login', { email: 'elo-rate@example.com', password: 'secret123' })
+    const { token } = await login.json<{ token: string }>()
+
+    expect(await accountsStub().matchRating('bogus-token')).toBe(1200)
+    expect(await accountsStub().matchRating(token)).toBe(1200)
+    await accountsStub().recordResult([
+      { email: 'elo-rate@example.com', outcome: 'win' },
+      { email: 'elo-rate-opp@example.com', outcome: 'loss' },
+    ])
+    expect(await accountsStub().matchRating(token)).toBe(1220)
   })
 })

@@ -1,12 +1,23 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { GameMode } from '@/engine/game'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
+import { RATING_DEFAULT } from './accounts'
 import { allocateRoom } from './roomCode'
 
 export interface MatchOptions {
   frames: number[]
   modes: GameMode[]
+  rating: number
 }
+
+interface Waiter extends MatchOptions {
+  joinedAt: number
+}
+
+// 允许的初始分差，等待越久放得越宽，直到能与任何人成局。
+const BASE_TOLERANCE = 120
+const WIDEN_PER_SEC = 40
+const RECHECK_MS = 3000
 
 export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
   const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]
@@ -14,11 +25,9 @@ export function parseMatchOptions(params: URLSearchParams): MatchOptions | null 
   const modes = list('modes') as GameMode[]
   if (!frames.length || frames.some((f) => !FRAME_OPTIONS.includes(f))) return null
   if (!modes.length || modes.some((m) => !MODE_OPTIONS.includes(m))) return null
-  return { frames, modes }
-}
-
-function sample<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)]
+  const raw = params.get('rating')
+  const rating = raw !== null && Number.isFinite(Number(raw)) ? Number(raw) : RATING_DEFAULT
+  return { frames, modes, rating }
 }
 
 const UNTIMED_RACE_WEIGHT = 2
@@ -39,6 +48,16 @@ export function pickSettings(
   return combos[combos.length - 1]
 }
 
+export function tolerance(waitedMs: number): number {
+  return BASE_TOLERANCE + (waitedMs / 1000) * WIDEN_PER_SEC
+}
+
+function optionOverlap(a: MatchOptions, b: MatchOptions): { frames: number[]; modes: GameMode[] } | null {
+  const frames = a.frames.filter((f) => b.frames.includes(f))
+  const modes = a.modes.filter((m) => b.modes.includes(m))
+  return frames.length && modes.length ? { frames, modes } : null
+}
+
 export class Lobby extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -50,22 +69,58 @@ export class Lobby extends DurableObject<Env> {
     }
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
-    pair[1].serializeAttachment(options)
+    pair[1].serializeAttachment({ ...options, joinedAt: Date.now() } satisfies Waiter)
+    await this.matchWaiting()
+    return new Response(null, { status: 101, webSocket: pair[0] })
+  }
 
-    const candidates = this.ctx.getWebSockets().flatMap((ws) => {
-      if (ws === pair[1]) return []
-      const other = ws.deserializeAttachment() as MatchOptions
-      const frames = other.frames.filter((f) => options.frames.includes(f))
-      const modes = other.modes.filter((m) => options.modes.includes(m))
-      return frames.length && modes.length ? [{ ws, frames, modes }] : []
-    })
-    if (candidates.length) {
-      const overlap = Math.min(...candidates.map((c) => c.frames.length * c.modes.length))
-      const picked = sample(candidates.filter((c) => c.frames.length * c.modes.length === overlap))
-      const { frame, mode } = pickSettings(picked.frames, picked.modes)
+  async alarm(): Promise<void> {
+    await this.matchWaiting()
+  }
+
+  private async matchWaiting(): Promise<void> {
+    const now = Date.now()
+    const waiting = this.ctx.getWebSockets().map((ws) => ({
+      ws,
+      opts: ws.deserializeAttachment() as Waiter,
+    }))
+
+    // 只有选项能撮合的两人才可能成局；分差合规的记为 inBand，可立即成局。
+    const pairs: Array<{
+      i: number
+      j: number
+      frames: number[]
+      modes: GameMode[]
+      gap: number
+      inBand: boolean
+    }> = []
+    for (let i = 0; i < waiting.length; i++) {
+      for (let j = i + 1; j < waiting.length; j++) {
+        const overlap = optionOverlap(waiting[i].opts, waiting[j].opts)
+        if (!overlap) continue
+        const gap = Math.abs(waiting[i].opts.rating - waiting[j].opts.rating)
+        const reach = Math.max(
+          tolerance(now - waiting[i].opts.joinedAt),
+          tolerance(now - waiting[j].opts.joinedAt),
+        )
+        pairs.push({ i, j, ...overlap, gap, inBand: gap <= reach })
+      }
+    }
+
+    const used = new Set<WebSocket>()
+    const matchable = pairs
+      .filter((p) => p.inBand)
+      .sort(
+        (a, b) => a.gap - b.gap || a.frames.length * a.modes.length - b.frames.length * b.modes.length,
+      )
+    for (const { i, j, frames, modes } of matchable) {
+      if (used.has(waiting[i].ws) || used.has(waiting[j].ws)) continue
+      used.add(waiting[i].ws)
+      used.add(waiting[j].ws)
+      const { frame, mode } = pickSettings(frames, modes)
       const code = await allocateRoom(this.env, frame, mode)
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
-      for (const ws of [picked.ws, pair[1]]) {
+      for (const ws of [waiting[i].ws, waiting[j].ws]) {
         try {
           ws.send(matched)
           ws.close(1000, 'matched')
@@ -73,6 +128,14 @@ export class Lobby extends DurableObject<Env> {
       }
     }
 
-    return new Response(null, { status: 101, webSocket: pair[0] })
+    // 仍有选项相容却暂时分差过大的组合时，定时放宽后重试。
+    const widenable = pairs.some(
+      (p) => !used.has(waiting[p.i].ws) && !used.has(waiting[p.j].ws),
+    )
+    if (widenable) {
+      await this.ctx.storage.setAlarm(now + RECHECK_MS)
+    } else {
+      await this.ctx.storage.deleteAlarm()
+    }
   }
 }

@@ -22,8 +22,9 @@ export function roomWsUrl(code: string, token: string, auth?: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}${auth ? `&auth=${auth}` : ''}`
 }
 
-export function matchWsUrl(frames: number[], modes: GameMode[]): string {
-  return `${wsProto()}://${location.host}/api/match/ws?frames=${frames.join(',')}&modes=${modes.join(',')}`
+export function matchWsUrl(frames: number[], modes: GameMode[], auth?: string): string {
+  const query = `frames=${frames.join(',')}&modes=${modes.join(',')}${auth ? `&auth=${auth}` : ''}`
+  return `${wsProto()}://${location.host}/api/match/ws?${query}`
 }
 
 function wsProto(): string {

@@ -1,7 +1,7 @@
-import { env, runInDurableObject, SELF } from 'cloudflare:test'
+import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it, vi } from 'vitest'
 import { ROOM_CODE_PATTERN, type LobbyServerMessage } from '@/shared/protocol'
-import { pickSettings } from '@/worker/lobby'
+import { pickSettings, tolerance } from '@/worker/lobby'
 
 interface Client {
   ws: WebSocket
@@ -127,5 +127,64 @@ describe('Lobby', () => {
     const b = await joinLobby()
     const [msgA, msgB] = await Promise.all([a.matched(), b.matched()])
     expect(msgA).toEqual(msgB)
+  })
+})
+
+describe('rating bands', () => {
+  async function joinRated(rating: number, options = 'frames=30&modes=forbidden'): Promise<Client> {
+    const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'))
+    const res = await stub.fetch(`https://lobby/api/match/ws?${options}&rating=${rating}`, {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(res.status).toBe(101)
+    const ws = res.webSocket!
+    ws.accept()
+    const first = new Promise<LobbyServerMessage>((resolve) => {
+      ws.addEventListener(
+        'message',
+        (event) => resolve(JSON.parse(event.data as string) as LobbyServerMessage),
+        { once: true },
+      )
+    })
+    return { ws, matched: () => first }
+  }
+
+  it('widens the acceptable gap the longer a player waits', () => {
+    expect(tolerance(0)).toBe(120)
+    expect(tolerance(10_000)).toBe(520)
+    expect(tolerance(30_000)).toBe(1320)
+  })
+
+  it('matches players whose ratings are within tolerance', async () => {
+    const a = await joinRated(1200)
+    const b = await joinRated(1260)
+    const [msgA, msgB] = await Promise.all([a.matched(), b.matched()])
+    expect(msgA.type).toBe('matched')
+    expect(msgB).toEqual(msgA)
+  })
+
+  it('holds distant ratings apart, then matches once the gap widens', async () => {
+    const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'))
+    const a = await joinRated(1200)
+    const b = await joinRated(1800)
+
+    const settled = await Promise.race([
+      a.matched().then(() => 'matched' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 60)),
+    ])
+    expect(settled).toBe('pending')
+
+    // 模拟久候：前移入队时间，容差随之放宽到足以成局，再触发定时重试。
+    await runInDurableObject(stub, (_, state) => {
+      for (const ws of state.getWebSockets()) {
+        const opts = ws.deserializeAttachment() as { joinedAt: number }
+        ws.serializeAttachment({ ...opts, joinedAt: Date.now() - 30_000 })
+      }
+    })
+    await runDurableObjectAlarm(stub)
+
+    const [msgA, msgB] = await Promise.all([a.matched(), b.matched()])
+    expect(msgA.type).toBe('matched')
+    expect(msgB).toEqual(msgA)
   })
 })

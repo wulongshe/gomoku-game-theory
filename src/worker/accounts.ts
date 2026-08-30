@@ -6,6 +6,11 @@ const SEND_COOLDOWN = 60_000
 const SESSION_TTL = 30 * 24 * 3600_000
 const MAX_CODE_ATTEMPTS = 5
 
+export const RATING_DEFAULT = 1200
+const PROVISIONAL_GAMES = 10
+const K_PROVISIONAL = 40
+const K_ESTABLISHED = 20
+
 export type RegisterResult =
   | { ok: true; code: string }
   | { ok: false; error: 'email_taken' | 'cooldown' }
@@ -49,6 +54,7 @@ interface StatsRecord {
   wins: number
   losses: number
   draws: number
+  rating: number
 }
 
 function randomCode(): string {
@@ -77,6 +83,18 @@ async function hashPassword(password: string, salt: Uint8Array): Promise<string>
     256,
   )
   return toHex(new Uint8Array(bits))
+}
+
+function totalGames(stats: StatsRecord): number {
+  return stats.wins + stats.losses + stats.draws
+}
+
+function outcomeScore(outcome: GameOutcome): number {
+  return outcome === 'win' ? 1 : outcome === 'draw' ? 0.5 : 0
+}
+
+function kFactor(games: number): number {
+  return games < PROVISIONAL_GAMES ? K_PROVISIONAL : K_ESTABLISHED
 }
 
 export class Accounts extends DurableObject<Env> {
@@ -175,17 +193,40 @@ export class Accounts extends DurableObject<Env> {
   }
 
   async recordResult(results: Array<{ email: string; outcome: GameOutcome }>): Promise<void> {
-    for (const { email, outcome } of results) {
-      const stats = (await this.ctx.storage.get<StatsRecord>(`stats:${email}`)) ?? {
-        wins: 0,
-        losses: 0,
-        draws: 0,
-      }
+    const records = await Promise.all(
+      results.map(async ({ email, outcome }) => {
+        const raw = await this.ctx.storage.get<StatsRecord>(`stats:${email}`)
+        const stats: StatsRecord = {
+          wins: raw?.wins ?? 0,
+          losses: raw?.losses ?? 0,
+          draws: raw?.draws ?? 0,
+          rating: raw?.rating ?? RATING_DEFAULT,
+        }
+        return { email, outcome, stats }
+      }),
+    )
+    // 只有双方均为注册账号时才结算 ELO，用赛前局数决定 K 值。
+    if (records.length === 2) {
+      const [a, b] = records
+      const expectedA = 1 / (1 + 10 ** ((b.stats.rating - a.stats.rating) / 400))
+      const deltaA = kFactor(totalGames(a.stats)) * (outcomeScore(a.outcome) - expectedA)
+      const deltaB = kFactor(totalGames(b.stats)) * (outcomeScore(b.outcome) - (1 - expectedA))
+      a.stats.rating = Math.round(a.stats.rating + deltaA)
+      b.stats.rating = Math.round(b.stats.rating + deltaB)
+    }
+    for (const { email, outcome, stats } of records) {
       if (outcome === 'win') stats.wins += 1
       else if (outcome === 'loss') stats.losses += 1
       else stats.draws += 1
       await this.ctx.storage.put(`stats:${email}`, stats)
     }
+  }
+
+  async matchRating(token: string): Promise<number> {
+    const session = await this.ctx.storage.get<SessionRecord>(`session:${token}`)
+    if (!session || Date.now() > session.expires) return RATING_DEFAULT
+    const stats = await this.ctx.storage.get<StatsRecord>(`stats:${session.email}`)
+    return stats?.rating ?? RATING_DEFAULT
   }
 
   async leaderboard(): Promise<LeaderboardEntry[]> {
@@ -194,12 +235,12 @@ export class Accounts extends DurableObject<Env> {
     return [...users.entries()]
       .map(([key, user]) => {
         const email = key.slice('user:'.length)
+        const record = stats.get(`stats:${email}`)
         return {
           email: user.emailVisibility?.leaderboard ? email : maskEmail(email),
-          wins: 0,
-          losses: 0,
-          draws: 0,
-          ...stats.get(`stats:${email}`),
+          wins: record?.wins ?? 0,
+          losses: record?.losses ?? 0,
+          draws: record?.draws ?? 0,
         }
       })
       .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))

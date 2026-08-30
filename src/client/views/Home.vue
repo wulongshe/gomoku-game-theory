@@ -36,7 +36,7 @@ const showAuth = ref(false)
 const showLeaderboard = ref(false)
 const showAi = ref(false)
 
-const { email: authEmail, loggedIn, refresh } = useAuth()
+const { token: authToken, email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
 const authLabel = computed(() => (loggedIn.value ? authEmail.value.split('@')[0] : '登录/注册'))
 let matched = false
@@ -84,7 +84,7 @@ async function create() {
 }
 
 const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameChoices.value, modeChoices.value)),
+  computed(() => matchWsUrl(frameChoices.value, modeChoices.value, authToken.value || undefined)),
   {
     immediate: false,
     autoConnect: false,
