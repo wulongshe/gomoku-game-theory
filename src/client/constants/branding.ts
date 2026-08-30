@@ -37,7 +37,7 @@ export const RULES = [
   {
     icon: '⚡',
     title: '同时落子，没有先手',
-    text: '每回合限时可选，双方同时出手',
+    text: '每回合限时选点，双方同时出手',
   },
   {
     icon: '🧠',
