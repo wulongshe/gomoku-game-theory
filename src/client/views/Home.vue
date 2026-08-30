@@ -11,9 +11,11 @@ import IconBilibili from '~/components/icons/IconBilibili.vue'
 import IconChevronRight from '~/components/icons/IconChevronRight.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
+import IconShare from '~/components/icons/IconShare.vue'
 import IconUser from '~/components/icons/IconUser.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
+import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { DIFFICULTY_OPTIONS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
@@ -52,6 +54,9 @@ const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
 const modeChoices = useStorage<GameMode[]>('mode-choices', [...MODE_OPTIONS])
 modeChoices.value = modeChoices.value.filter((m) => MODE_OPTIONS.includes(m))
 if (!modeChoices.value.length) modeChoices.value = [...MODE_OPTIONS]
+
+const sitePoster = ref<InstanceType<typeof SharePoster> | null>(null)
+const siteUrl = `${location.origin}/`
 
 const joinCode = ref('')
 const joinCodeValid = computed(() => ROOM_CODE_PATTERN.test(joinCode.value))
@@ -256,9 +261,19 @@ function closeMatchDialog() {
         >
           <IconGithub class="size-5" />
         </a>
+        <button
+          type="button"
+          aria-label="分享海报"
+          class="cursor-pointer p-2 text-stone-500 transition-opacity hover:opacity-80 active:opacity-80 dark:text-stone-400"
+          @click="sitePoster?.share()"
+        >
+          <IconShare class="size-5" />
+        </button>
       </div>
       <p class="text-xs text-stone-400 dark:text-stone-500">免下载 · 免注册，10 秒开局</p>
     </div>
+
+    <div class="hidden"><SharePoster ref="sitePoster" :url="siteUrl" /></div>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
 

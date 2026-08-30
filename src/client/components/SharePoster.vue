@@ -5,13 +5,32 @@ import IconStones from '~/components/icons/IconStones.vue'
 import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import type { GameMode } from '@/engine/game'
 
-const props = defineProps<{ url: string; code: string; frameSeconds: number; mode: GameMode }>()
+const props = defineProps<{
+  url: string
+  code?: string
+  frameSeconds?: number
+  mode?: GameMode
+}>()
 
 const W = 640
 const H = 950
 const QR_SIZE = 210
 const QR_X = (W - QR_SIZE) / 2
-const QR_Y = 610
+const CARD_TOP = 556
+
+// 竖向流式排布：卡片高度随实际内容（是否有房间号 / 对局信息）自动收缩。
+const card = computed(() => {
+  const hasSub = props.code !== undefined && props.frameSeconds !== undefined && props.mode
+  let y = CARD_TOP + 36
+  const labelY = props.code !== undefined ? y : 0
+  if (props.code !== undefined) y += 18
+  const qrY = y
+  y += QR_SIZE
+  const subY = hasSub ? y + 26 : 0
+  y += hasSub ? 58 : 44
+  const ctaY = y
+  return { labelY, qrY, subY, ctaY, height: ctaY + 22 - CARD_TOP }
+})
 
 const qr = computed(() => encode(props.url, { border: 0 }))
 const qrScale = computed(() => QR_SIZE / qr.value.size)
@@ -52,7 +71,8 @@ async function toPngBlob(): Promise<Blob> {
 
 async function share() {
   const blob = await toPngBlob()
-  const file = new File([blob], `博弈五子棋-${props.code}.png`, { type: 'image/png' })
+  const name = props.code ? `博弈五子棋-${props.code}` : '博弈五子棋'
+  const file = new File([blob], `${name}.png`, { type: 'image/png' })
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] })
@@ -117,18 +137,26 @@ defineExpose({ share })
       <text x="150" :y="341 + i * 88" font-size="16" fill="#78716c">{{ rule.text }}</text>
     </g>
 
-    <rect x="170" y="556" width="300" height="344" rx="24" fill="#ffffff" fill-opacity="0.8" />
-    <text x="320" y="592" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
+    <rect :x="170" :y="CARD_TOP" width="300" :height="card.height" rx="24" fill="#ffffff" fill-opacity="0.8" />
+    <text v-if="code" x="320" :y="card.labelY" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
       房间 {{ code }}
     </text>
-    <g :transform="`translate(${QR_X} ${QR_Y}) scale(${qrScale})`">
+    <g :transform="`translate(${QR_X} ${card.qrY}) scale(${qrScale})`">
       <path :d="qrPath" fill="#292524" />
     </g>
-    <text x="320" y="846" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
+    <text
+      v-if="code && frameSeconds !== undefined && mode"
+      x="320"
+      :y="card.subY"
+      text-anchor="middle"
+      font-size="18"
+      letter-spacing="3"
+      fill="#78716c"
+    >
       每回合 {{ frameLabel(frameSeconds) }} · {{ MODE_LABELS[mode] }}模式
     </text>
-    <text x="320" y="878" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
-      扫码进房，来一局
+    <text x="320" :y="card.ctaY" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
+      {{ code ? '扫码进房，来一局' : '扫码即玩，来一局' }}
     </text>
 
     <text x="320" y="932" text-anchor="middle" font-size="16" fill="#a8a29e">
