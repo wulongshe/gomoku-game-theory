@@ -166,17 +166,19 @@ describe('Room', () => {
     await b.next('start')
   })
 
-  it('keeps a ready flag across a pre-game reconnect', async () => {
+  it('clears a ready flag when a player leaves before the game', async () => {
     await createRoom('1019')
     const a = await connect('1019', 'token-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     a.ready()
     a.ws.close()
+    await waitForEmpty(env.ROOM.get(env.ROOM.idFromName('1019')))
     const a2 = await connect('1019', 'token-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     const b = await connect('1019', 'token-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
-    expect(await b.next('lobby')).toMatchObject({ ready: { black: true, white: false } })
+    expect(await b.next('lobby')).toMatchObject({ ready: { black: false, white: false } })
+    a2.ready()
     b.ready()
     await a2.next('start')
     await b.next('start')

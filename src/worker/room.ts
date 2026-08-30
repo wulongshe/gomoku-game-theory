@@ -417,6 +417,14 @@ export class Room extends DurableObject<Env> {
       this.send(other, { type: 'opponent_left' })
     }
     const game = await this.ctx.storage.get<GameState>('game')
+    if (!game) {
+      // 离开准备页即清除该席位的准备状态，回来后需重新准备。
+      const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+      if (ready[attachment.seat]) {
+        delete ready[attachment.seat]
+        await this.ctx.storage.put('ready', ready)
+      }
+    }
     if (remaining.length === 0) {
       if (game && game.phase !== 'playing') await this.close()
       else if (game) await this.ctx.storage.put('emptySince', Date.now())
