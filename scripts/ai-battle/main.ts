@@ -7,7 +7,7 @@ import { type SideConfig } from './search'
 const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / race 竞速 / minus 负子
 const ROUNDS = Number(process.env.ROUNDS ?? 20)
 const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 4) // 并行对局数，每局占 2 个线程；8 核可开到 4
-const MAX_FRAMES = 300 // 单局帧数上限，超限判平（防异常对局死循环）
+const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）
 // 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
 // 黑方盲搜进攻，白方 respond 每帧先看黑方本帧手再应（root 按 read 置信度押注对手真实点）。
 const BLACK: SideConfig = {
