@@ -69,7 +69,7 @@ onMounted(async () => {
           class="relative flex items-center gap-2 rounded-xl px-3 py-3"
           :class="
             isMine(entry)
-              ? 'sticky top-0 bottom-0 z-10 bg-amber-100 ring-1 ring-wood/60 dark:bg-stone-600'
+              ? 'sticky top-0 bottom-0 z-10 bg-amber-100 ring-1 ring-inset ring-wood/60 dark:bg-stone-600'
               : 'bg-stone-100 dark:bg-stone-700/50'
           "
         >

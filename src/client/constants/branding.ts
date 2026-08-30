@@ -24,6 +24,15 @@ export function frameLabel(seconds: number): string {
   return seconds ? `${seconds}s` : '不限时'
 }
 
+export const TOURNAMENT_TITLE = '每日大赛'
+export const TOURNAMENT_DESC = '每日 20:00 开赛 · 瑞士轮积分'
+
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, totalSeconds)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
+}
+
 export const RULES = [
   {
     icon: '⚡',

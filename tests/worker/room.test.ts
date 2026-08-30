@@ -2,6 +2,7 @@ import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare
 import { describe, expect, it, vi } from 'vitest'
 import { cellAt, type Point } from '@/engine/game'
 import type { ServerMessage } from '@/shared/protocol'
+import { allocateRoom } from '@/worker/roomCode'
 
 interface Client {
   ws: WebSocket
@@ -593,6 +594,65 @@ describe('account seat recovery', () => {
     if (!verified.ok) throw new Error(verified.error)
     return verified.token
   }
+
+  it('reports a tournament result by the room winner and skips normal stats', async () => {
+    const xEmail = 'tourn-x@example.com'
+    const yEmail = 'tourn-y@example.com'
+    const x = await sessionFor(xEmail)
+    const y = await sessionFor(yEmail)
+    const code = await allocateRoom(env, 15, 'forbidden', { round: 1, players: [xEmail, yEmail] })
+
+    const tstub = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
+    await runInDurableObject(tstub, (_i, state) =>
+      state.storage.put('t', {
+        state: 'active',
+        round: 1,
+        totalRounds: 2,
+        roundDeadline: Date.now() + 600_000,
+        registrations: [],
+        players: {
+          [xEmail]: { score: 0, opponents: [yEmail], byes: 0 },
+          [yEmail]: { score: 0, opponents: [xEmail], byes: 0 },
+        },
+        pairings: [{ code, players: [xEmail, yEmail], checkedIn: [], result: null }],
+        lastStandings: [],
+      }),
+    )
+
+    // 非参赛账号无法占座（防串场/抢座）。
+    const z = await sessionFor('tourn-z@example.com')
+    const stranger = await SELF.fetch(
+      `https://example.com/api/rooms/${code}/ws?token=tok-z&auth=${z}`,
+      { headers: { Upgrade: 'websocket' } },
+    )
+    expect(stranger.status).toBe(403)
+
+    // 让大赛 players[0]=X 后连接：房间黑座落到 Y、白座落到 X（座位颜色与大赛无关）。
+    const b = await connect(code, 'tok-y', y)
+    expect(await b.next('joined')).toMatchObject({ seat: 'black', tournament: true })
+    const a = await connect(code, 'tok-x', x)
+    expect(await a.next('joined')).toMatchObject({ seat: 'white', tournament: true })
+    b.ready()
+    a.ready()
+    await b.next('start')
+    await a.next('start')
+    const settled = await playToBlackWin(b, a)
+    expect(settled.state.phase).toBe('black_won')
+
+    // 分记给房间赢家 Y（players[1]），而非大赛 players[0]=X。
+    await vi.waitFor(async () => {
+      const s = (await runInDurableObject(tstub, (_i, st) => st.storage.get('t'))) as {
+        players: Record<string, { score: number }>
+      }
+      expect(s.players[yEmail].score).toBe(1)
+      expect(s.players[xEmail].score).toBe(0)
+    })
+
+    // 大赛对局不计入普通战绩/ELO。
+    const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    expect(await runInDurableObject(accounts, (_i, st) => st.storage.get(`stats:${xEmail}`))).toBeUndefined()
+    expect(await runInDurableObject(accounts, (_i, st) => st.storage.get(`stats:${yEmail}`))).toBeUndefined()
+  })
 
   it('reclaims the seat from a new device via the login session', async () => {
     await createRoom('2001')

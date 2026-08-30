@@ -7,6 +7,7 @@ import { allocateRoom } from './roomCode'
 export { Room } from './room'
 export { Lobby } from './lobby'
 export { Accounts } from './accounts'
+export { Tournament } from './tournament'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
 
@@ -86,6 +87,22 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     if (request.method === 'GET' && url.pathname === '/api/leaderboard') {
       const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
       return Response.json(await accounts.leaderboard())
+    }
+    if (url.pathname.startsWith('/api/tournament')) {
+      const tournament = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
+      const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
+      if (request.method === 'GET' && url.pathname === '/api/tournament') {
+        return Response.json(await tournament.getInfo(token))
+      }
+      if (request.method === 'POST' && url.pathname === '/api/tournament/register') {
+        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
+        return Response.json(await tournament.register(token))
+      }
+      if (request.method === 'POST' && url.pathname === '/api/tournament/withdraw') {
+        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
+        return Response.json(await tournament.withdraw(token))
+      }
+      return new Response('Not Found', { status: 404 })
     }
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)

@@ -34,7 +34,7 @@ export type ClientMessage =
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
-  | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode }
+  | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode; tournament?: true }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | { type: 'players'; accounts: Record<Seat, string | null> }
   | {
@@ -58,6 +58,34 @@ export type ServerMessage =
   | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
+
+export interface Standing {
+  email: string
+  score: number
+  played: number
+}
+
+export interface Match {
+  a: string
+  b: string | null // null = 轮空
+  status: 'pending' | 'playing' | 'done'
+  result: 'a' | 'b' | 'draw' | 'void' | 'bye' | null
+}
+
+export interface TournamentInfo {
+  state: 'idle' | 'active'
+  now: number
+  startsAt: number
+  round: number
+  totalRounds: number
+  playerCount: number
+  registered: boolean // 已报名下一场
+  participating: boolean // 当前正在进行的这场的参赛者
+  myGame: { code: string } | null
+  roundDeadline: number | null
+  standings: Standing[]
+  rounds: Match[][] // 各轮对阵（仅参赛者/赛后可见）
+}
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown

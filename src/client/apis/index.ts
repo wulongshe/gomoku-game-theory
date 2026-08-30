@@ -1,4 +1,5 @@
 import type { GameMode } from '@/engine/game'
+import type { TournamentInfo } from '@/shared/protocol'
 
 export async function createRoom(frameSeconds: number, mode: GameMode): Promise<string> {
   const res = await fetch(`/api/rooms?frame=${frameSeconds}&mode=${mode}`, { method: 'POST' })
@@ -115,4 +116,28 @@ export async function authLogout(token: string): Promise<void> {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   })
+}
+
+export async function fetchTournament(auth?: string): Promise<TournamentInfo> {
+  const res = await fetch('/api/tournament', auth ? { headers: { Authorization: `Bearer ${auth}` } } : undefined)
+  if (!res.ok) throw new Error(`fetchTournament failed: ${res.status}`)
+  return (await res.json()) as TournamentInfo
+}
+
+export async function registerTournament(token: string): Promise<TournamentInfo> {
+  const res = await fetch('/api/tournament/register', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`registerTournament failed: ${res.status}`)
+  return (await res.json()) as TournamentInfo
+}
+
+export async function withdrawTournament(token: string): Promise<TournamentInfo> {
+  const res = await fetch('/api/tournament/withdraw', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`withdrawTournament failed: ${res.status}`)
+  return (await res.json()) as TournamentInfo
 }

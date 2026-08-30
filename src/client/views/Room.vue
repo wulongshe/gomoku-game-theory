@@ -80,6 +80,7 @@ const showPlayers = ref(false)
 const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null })
 const frameSeconds = ref(FRAME_SECONDS)
 const mode = ref<GameMode>('forbidden')
+const tournament = ref(false)
 const autoSubmit = useStorage('auto-submit', false)
 const showConcede = ref(false)
 const drawInvite = ref(false)
@@ -172,6 +173,7 @@ function handleMessage(msg: ServerMessage) {
       seat.value = msg.seat
       frameSeconds.value = msg.frameSeconds
       mode.value = msg.mode
+      tournament.value = msg.tournament === true
       rematchAsked.value = false
       rematchConfig.value = false
       rematchInvite.value = false
@@ -421,6 +423,20 @@ watch(homeSecondsLeft, (s) => {
   if (s === 0) location.assign('/')
 })
 
+// 大赛对局结束后自动回到大赛等候大厅，继续下一轮。
+const tournamentReturn = ref<number | null>(null)
+const tournamentReturnLeft = useCountdown(tournamentReturn, 5)
+
+watch(tournamentReturnLeft, (s) => {
+  if (s === 0) location.assign('/tournament')
+})
+
+watch(stage, (s) => {
+  if (s === 'over' && tournament.value && tournamentReturn.value === null) {
+    tournamentReturn.value = Date.now() + 5000
+  }
+})
+
 const errorInfo = computed(() => {
   if (notFound.value)
     return { title: '房间不存在或已关闭', desc: '链接可能已失效，房主离开后房间会自动关闭' }
@@ -459,7 +475,7 @@ function exitRoom() {
     </template>
 
     <RoomWaiting
-      v-else-if="stage === 'waiting'"
+      v-else-if="stage === 'waiting' && !tournament"
       :code="props.code"
       :url="roomUrl"
       :frame-seconds="frameSeconds"
@@ -467,7 +483,7 @@ function exitRoom() {
     />
 
     <RoomReady
-      v-else-if="stage === 'ready'"
+      v-else-if="stage === 'ready' || (stage === 'waiting' && tournament)"
       :code="props.code"
       :frame-seconds="frameSeconds"
       :mode="mode"
@@ -590,6 +606,14 @@ function exitRoom() {
               认输/求和
             </button>
           </div>
+        </template>
+
+        <template v-else-if="tournament">
+          <a class="w-full" href="/tournament">
+            <AppButton class="w-full">
+              返回每日大赛<template v-if="tournamentReturnLeft !== null">（{{ tournamentReturnLeft }}s）</template>
+            </AppButton>
+          </a>
         </template>
 
         <template v-else>

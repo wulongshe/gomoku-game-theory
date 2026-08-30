@@ -32,6 +32,12 @@ interface RematchProposal {
 
 type RematchProposals = Partial<Record<Seat, RematchProposal>>
 
+interface TournamentTag {
+  round: number
+  code: string
+  players: [string, string]
+}
+
 export class Room extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -47,7 +53,15 @@ export class Room extends DurableObject<Env> {
       }
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
-      await this.ctx.storage.put({ created: true, frameSeconds, mode })
+      const entries: Record<string, unknown> = { created: true, frameSeconds, mode }
+      if (url.searchParams.get('tournament') === '1') {
+        entries.tournament = {
+          round: Number(url.searchParams.get('round')),
+          code: url.searchParams.get('code') ?? '',
+          players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
+        } satisfies TournamentTag
+      }
+      await this.ctx.storage.put(entries)
       await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       return new Response(null, { status: 204 })
     }
@@ -79,6 +93,10 @@ export class Room extends DurableObject<Env> {
     const players = (await this.ctx.storage.get<Players>('players')) ?? {}
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const email = await this.accountEmail(url.searchParams.get('auth'))
+    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
+    if (tournament && (email === null || !tournament.players.includes(email))) {
+      return new Response('Not a tournament participant', { status: 403 })
+    }
     let seat: Seat
     if (players.black === token) seat = 'black'
     else if (players.white === token) seat = 'white'
@@ -95,6 +113,14 @@ export class Room extends DurableObject<Env> {
     if (email !== null && accounts[seat] !== email) {
       accounts[seat] = email
       await this.ctx.storage.put('accounts', accounts)
+    }
+    if (tournament && email !== null) {
+      try {
+        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).checkIn({
+          code: tournament.code,
+          email,
+        })
+      } catch {}
     }
 
     for (const other of this.ctx.getWebSockets()) {
@@ -113,6 +139,7 @@ export class Room extends DurableObject<Env> {
       seat,
       frameSeconds: await this.frameSeconds(),
       mode: await this.mode(),
+      ...(tournament && { tournament: true as const }),
     })
     this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
 
@@ -468,6 +495,27 @@ export class Room extends DurableObject<Env> {
 
   private async recordResult(phase: GameState['phase']): Promise<void> {
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
+    if (tournament) {
+      // 赢家按座位→email 实表算、按房号上报（座位颜色由连接顺序定，与大赛无关）；
+      // 大赛对局独立结算，不计入普通战绩/ELO。
+      const winnerEmail =
+        phase === 'black_won'
+          ? (accounts.black ?? null)
+          : phase === 'white_won'
+            ? (accounts.white ?? null)
+            : null
+      const game = await this.ctx.storage.get<GameState>('game')
+      try {
+        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).reportResult({
+          code: tournament.code,
+          round: tournament.round,
+          winnerEmail,
+          moves: game?.frame ?? 0,
+        })
+      } catch {}
+      return
+    }
     const results = (['black', 'white'] as const).flatMap((seat) => {
       const email = accounts[seat]
       if (!email) return []

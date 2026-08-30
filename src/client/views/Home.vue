@@ -5,6 +5,7 @@ import AppButton from '~/components/AppButton.vue'
 import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import LeaderboardDialog from '~/components/LeaderboardDialog.vue'
+import TournamentDialog from '~/components/TournamentDialog.vue'
 import RulesDialog from '~/components/RulesDialog.vue'
 import IconBilibili from '~/components/icons/IconBilibili.vue'
 import IconChevronRight from '~/components/icons/IconChevronRight.vue'
@@ -34,7 +35,13 @@ const showInvite = ref(false)
 const showMatch = ref(false)
 const showAuth = ref(false)
 const showLeaderboard = ref(false)
+const showTournament = ref(false)
 const showAi = ref(false)
+
+function loginFromTournament() {
+  showTournament.value = false
+  showAuth.value = true
+}
 
 const { token: authToken, email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
@@ -178,6 +185,19 @@ function closeMatchDialog() {
         </div>
         <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
       </button>
+      <button
+        class="flex cursor-pointer items-center gap-4 rounded-xl bg-white/80 px-5 py-3.5 text-left shadow-sm backdrop-blur transition-colors hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-800"
+        @click="showTournament = true"
+      >
+        <span
+          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-wood/30 text-base leading-none"
+        ><span class="block -translate-y-px">🏅</span></span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">每日大赛</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">每日 20:00 · 瑞士轮积分</p>
+        </div>
+        <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
+      </button>
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
@@ -245,6 +265,12 @@ function closeMatchDialog() {
     <AuthDialog v-if="showAuth" @close="showAuth = false" />
 
     <LeaderboardDialog v-if="showLeaderboard" @close="showLeaderboard = false" />
+
+    <TournamentDialog
+      v-if="showTournament"
+      @close="showTournament = false"
+      @login="loginFromTournament"
+    />
 
     <GameConfigDialog
       v-if="showAi"
