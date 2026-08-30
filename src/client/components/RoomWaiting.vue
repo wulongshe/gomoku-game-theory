@@ -12,9 +12,9 @@ const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true
 </script>
 
 <template>
-  <div class="flex flex-1 flex-col items-center justify-center gap-5">
+  <div class="flex w-full flex-1 flex-col items-center justify-center gap-5">
     <div
-      class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
+      class="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
     >
       <p class="text-sm text-stone-500 dark:text-stone-400">房间号</p>
       <p class="text-4xl font-bold tracking-[0.3em] text-stone-800 dark:text-stone-100">{{ code }}</p>

@@ -124,11 +124,11 @@ defineExpose({ share })
     <g :transform="`translate(${QR_X} ${QR_Y}) scale(${qrScale})`">
       <path :d="qrPath" fill="#292524" />
     </g>
-    <text x="320" y="848" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
-      扫码进房，来一局
+    <text x="320" y="846" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
+      每回合 {{ frameLabel(frameSeconds) }} · {{ MODE_LABELS[mode] }}模式
     </text>
-    <text x="320" y="876" text-anchor="middle" font-size="18" letter-spacing="3" fill="#78716c">
-      {{ frameLabel(frameSeconds) }} · {{ MODE_LABELS[mode] }}模式
+    <text x="320" y="878" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
+      扫码进房，来一局
     </text>
 
     <text x="320" y="932" text-anchor="middle" font-size="16" fill="#a8a29e">

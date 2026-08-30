@@ -39,12 +39,26 @@ const players = computed(() => [
 </script>
 
 <template>
-  <div class="flex flex-1 flex-col items-center justify-center gap-5">
+  <div class="flex w-full flex-1 flex-col items-center justify-center">
     <div
-      class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
+      class="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 shadow-sm backdrop-blur dark:bg-stone-800/80"
     >
       <p class="text-sm text-stone-500 dark:text-stone-400">房间号</p>
       <p class="text-4xl font-bold tracking-[0.3em] text-stone-800 dark:text-stone-100">{{ code }}</p>
+      <div class="grid">
+        <p
+          v-for="text in HINTS"
+          :key="text"
+          class="col-start-1 row-start-1 flex items-center justify-center gap-2 text-sm text-stone-500 transition-opacity dark:text-stone-400"
+          :class="text !== hint && 'opacity-0'"
+        >
+          <span
+            class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full"
+            :class="oppLeft ? 'bg-red-500' : 'bg-amber-400'"
+          />
+          {{ text }}
+        </p>
+      </div>
       <div class="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
         <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">每回合 {{ frameLabel(frameSeconds) }}</span>
         <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">{{ MODE_LABELS[mode] }}模式</span>
@@ -71,20 +85,6 @@ const players = computed(() => [
       <AppButton class="w-full" :disabled="myReady" @click="emit('ready')">
         {{ myReady ? '已准备，等待对方…' : '准备' }}
       </AppButton>
-    </div>
-    <div class="grid">
-      <p
-        v-for="text in HINTS"
-        :key="text"
-        class="col-start-1 row-start-1 flex items-center justify-center gap-2 text-sm text-stone-500 transition-opacity dark:text-stone-400"
-        :class="text !== hint && 'opacity-0'"
-      >
-        <span
-          class="size-2 animate-[breathe_1.2s_ease-in-out_infinite] rounded-full"
-          :class="oppLeft ? 'bg-red-500' : 'bg-amber-400'"
-        />
-        {{ text }}
-      </p>
     </div>
   </div>
 </template>
