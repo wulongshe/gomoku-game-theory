@@ -9,7 +9,7 @@ const ROUNDS = Number(process.env.ROUNDS ?? 20)
 const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 4) // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 300 // 单局帧数上限，超限判平（防异常对局死循环）
 // 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
-// 黑方盲搜进攻，白方 respond 每帧先看黑方本帧手再应（根固定对手手）。
+// 黑方盲搜进攻，白方 respond 每帧先看黑方本帧手再应（root 按 read 置信度押注对手真实点）。
 const BLACK: SideConfig = {
   policy: 'duct',
   candidates:  Number(process.env.CAND_BLACK ?? 7),
@@ -21,8 +21,8 @@ const WHITE: SideConfig = {
   candidates:  Number(process.env.CAND_WHITE ?? 6),
   explore: Number(process.env.EXPLORE_WHITE ?? 0.22),
   budgetMs: Number(process.env.BUDGET_WHITE ?? 450),
-  // 地狱方每帧放水（改盲搜）的概率
-  slip: Number(process.env.HELL_SLIP ?? 0.25)
+  // 地狱方读心置信度：root 押注对手真实点的概率（越高越强，1=满血读心）
+  read: Number(process.env.HELL_READ ?? 0.75)
 }
 // ==========================
 
@@ -187,7 +187,7 @@ function formatMove(point: Point | null): string {
 function formatSide(side: SideConfig): string {
   if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms)`
   if (side.policy === 'respond')
-    return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms${side.slip ? `·slip${side.slip}` : ''})`
+    return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms${side.read !== undefined ? `·read${side.read}` : ''})`
   return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
 }
 

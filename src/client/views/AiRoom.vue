@@ -38,12 +38,12 @@ const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbid
 const frameSeconds = 0
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
-// slip 只对地狱难度生效，取 URL 参数，非法则回落到难度默认；滑条范围 0.05~0.95、步长 0.05。
-function clampSlip(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return DIFFICULTY_SETTINGS.hell.slip ?? 0.5
+// read（读心置信度）只对地狱难度生效，取 URL 参数，非法则回落到难度默认；滑条范围 0.05~0.95、步长 0.05。
+function clampRead(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return DIFFICULTY_SETTINGS.hell.read ?? 0.5
   return Math.min(0.95, Math.max(0.05, Math.round(raw * 20) / 20))
 }
-const slip = ref(clampSlip(Number(params.get('slip'))))
+const read = ref(clampRead(Number(params.get('read'))))
 
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
@@ -82,11 +82,10 @@ let responseTimer: ReturnType<typeof setTimeout> | undefined
 const showConfig = ref(false)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
-const configSlip = ref(slip.value)
+const configRead = ref(read.value)
 
 const responds = computed(() => difficulty.value === 'hell')
-const difficultyPercent = computed(() => Math.round((1 - slip.value) * 100))
-let slipFrame = false
+const difficultyPercent = computed(() => Math.round(read.value * 100))
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
@@ -117,8 +116,8 @@ function beginFrame(startAt: number = Date.now()) {
   pendingResponse = null
   responseFor = null
   if (responds.value) {
-    slipFrame = Math.random() < slip.value
-    pendingAiMove = slipFrame ? ai.request(game.value, 'white', difficulty.value, null, true) : null
+    // 读心档：本帧手依赖人类落点，等 draft 后由 scheduleResponse 后台预算；无 draft 时结算兜底盲搜。
+    pendingAiMove = null
     showThinking.value = true
     thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
   } else {
@@ -138,7 +137,7 @@ async function resolveFrame() {
       ? pendingResponse
       : null
   const aiMove =
-    responds.value && !slipFrame && draft
+    responds.value && draft
       ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft))
       : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const next = settleFrame(game.value, {
@@ -158,7 +157,7 @@ async function resolveFrame() {
 function select(point: Point) {
   if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
   selected.value = point
-  if (responds.value && !slipFrame) scheduleResponse(point)
+  if (responds.value) scheduleResponse(point)
 }
 
 // 选点稳定后即在后台预算，提交时多半已就绪、零等待；改点则重排（旧结果作废）。
@@ -199,7 +198,7 @@ function exitRoom() {
 function openConfig() {
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
-  configSlip.value = slip.value
+  configRead.value = read.value
   showConfig.value = true
 }
 
@@ -207,8 +206,8 @@ function confirmConfig() {
   showConfig.value = false
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  slip.value = configSlip.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&slip=${slip.value}`)
+  read.value = configRead.value
+  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&read=${read.value}`)
   restart()
 }
 
@@ -303,7 +302,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       v-if="showConfig"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
-      v-model:slip="configSlip"
+      v-model:read="configRead"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

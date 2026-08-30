@@ -31,15 +31,11 @@ const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
 const frames = defineModel<number[]>('frames', { default: () => [] })
 const modes = defineModel<GameMode[]>('modes', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
-const slip = defineModel<number>('slip', { default: 0.5 })
+// read：地狱难度的读心置信度，直接作为「难度值」滑条（越往右读心越强、AI 越强）。
+const read = defineModel<number>('read', { default: 0.5 })
 
-// 展示为「难度值」：难度 + slip（放水概率）= 1，故越往右放水越少、AI 越强。
-const difficultyLevel = computed({
-  get: () => Math.round((1 - slip.value) * 20) / 20,
-  set: (level) => (slip.value = Math.round((1 - level) * 20) / 20),
-})
 // 低难度偏绿、高难度偏红。
-const fillColor = computed(() => `hsl(${(1 - difficultyLevel.value) * 130}deg 68% 45%)`)
+const fillColor = computed(() => `hsl(${(1 - read.value) * 130}deg 68% 45%)`)
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
 const modeLabel = (option: GameMode) => MODE_LABELS[option]
@@ -76,8 +72,8 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
         <SegmentedControl v-model="difficulty" :options="difficulties" :label="difficultyLabel" />
       </div>
       <div v-if="difficulties && difficulty === 'hell'" class="flex flex-col gap-2">
-        <span class="text-center text-stone-500 dark:text-stone-400">难度值 {{ Math.round(difficultyLevel * 100) }}%</span>
-        <RangeSlider v-model="difficultyLevel" :min="0.05" :max="0.95" :step="0.05" :fill="fillColor" />
+        <span class="text-center text-stone-500 dark:text-stone-400">难度值 {{ Math.round(read * 100) }}%</span>
+        <RangeSlider v-model="read" :min="0.05" :max="0.95" :step="0.05" :fill="fillColor" />
       </div>
     </div>
     <template #footer>

@@ -65,8 +65,9 @@ describe('searchBestMove', () => {
     expect(performance.now() - start).toBeLessThan(600)
   })
 
-  // 把对手落点固定到搜索根后，应手是确定的最优回应，故这些断言是精确的（不再是概率阈值）。
-  // 对手手固定为其唯一胜点 (8,7)，白必撞点封杀，每次都对。
+  // 读心档在 root 以 read 置信押注对手真实点、其余对抗性探索；下面的局面是战术强制的
+  // （被押注手与对抗最优手一致），故无论 read 取值应手都是确定的最优回应，断言精确。
+  // 对手手为其唯一胜点 (8,7)，白必撞点封杀，每次都对。
   it('best-responds to a fixed opponent move by contesting its winning point', () => {
     const game = withStones({ black: row(7, [4, 5, 6, 7]), white: [{ x: 3, y: 7 }] })
     const move = searchBestMove(game, 'white', 'hell', 150, { x: 8, y: 7 })
