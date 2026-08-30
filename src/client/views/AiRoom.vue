@@ -38,6 +38,13 @@ const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbid
 const frameSeconds = 0
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
+// slip 只对地狱难度生效，取 URL 参数，非法则回落到难度默认；滑条范围 0.05~0.95、步长 0.05。
+function clampSlip(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return DIFFICULTY_SETTINGS.hell.slip ?? 0.5
+  return Math.min(0.95, Math.max(0.05, Math.round(raw * 20) / 20))
+}
+const slip = ref(clampSlip(Number(params.get('slip'))))
+
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
   try {
@@ -75,9 +82,10 @@ let responseTimer: ReturnType<typeof setTimeout> | undefined
 const showConfig = ref(false)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
+const configSlip = ref(slip.value)
 
 const responds = computed(() => difficulty.value === 'hell')
-const slipChance = computed(() => DIFFICULTY_SETTINGS[difficulty.value].slip ?? 0)
+const difficultyPercent = computed(() => Math.round((1 - slip.value) * 100))
 let slipFrame = false
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
@@ -109,7 +117,7 @@ function beginFrame(startAt: number = Date.now()) {
   pendingResponse = null
   responseFor = null
   if (responds.value) {
-    slipFrame = Math.random() < slipChance.value
+    slipFrame = Math.random() < slip.value
     pendingAiMove = slipFrame ? ai.request(game.value, 'white', difficulty.value, null, true) : null
     showThinking.value = true
     thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
@@ -191,6 +199,7 @@ function exitRoom() {
 function openConfig() {
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
+  configSlip.value = slip.value
   showConfig.value = true
 }
 
@@ -198,7 +207,8 @@ function confirmConfig() {
   showConfig.value = false
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}`)
+  slip.value = configSlip.value
+  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&slip=${slip.value}`)
   restart()
 }
 
@@ -228,7 +238,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </span>
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
-          AI · {{ DIFFICULTY_LABELS[difficulty] }}
+          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ difficultyPercent }}%</template>
           <button
             class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
             aria-label="退出对局"
@@ -293,6 +303,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       v-if="showConfig"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
+      v-model:slip="configSlip"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

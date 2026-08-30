@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import IconCheck from '~/components/icons/IconCheck.vue'
@@ -29,6 +30,21 @@ const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
 const frames = defineModel<number[]>('frames', { default: () => [] })
 const modes = defineModel<GameMode[]>('modes', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
+const slip = defineModel<number>('slip', { default: 0.5 })
+// 展示为「难度」：难度 + slip（放水概率）= 1，故越往右放水越少、AI 越强。
+// 滑条视觉范围 0~1，但 0/1 不可选，拖到端点时夹回 0.05/0.95。
+const difficultyLevel = computed(() => Math.round((1 - slip.value) * 20) / 20)
+
+// 已选比例决定填充长度与色相：低难度偏绿、高难度偏红。
+const sliderStyle = computed(() => ({
+  '--pct': `${((difficultyLevel.value - 0.05) / 0.9) * 100}%`,
+  '--fill': `hsl(${(1 - difficultyLevel.value) * 130}deg 68% 45%)`,
+}))
+
+function onSlide(event: Event) {
+  const level = (event.target as HTMLInputElement).valueAsNumber
+  slip.value = Math.round((1 - level) * 20) / 20
+}
 
 function toggled<T>(current: T[], options: T[], option: T): T[] {
   const next = current.includes(option)
@@ -135,6 +151,19 @@ function frameLabel(option: number) {
           </button>
         </div>
       </div>
+      <div v-if="difficulties && difficulty === 'hell'" class="flex flex-col gap-2">
+        <span class="text-center text-stone-500 dark:text-stone-400">难度值 {{ Math.round(difficultyLevel * 100) }}%</span>
+        <input
+          type="range"
+          min="0.05"
+          max="0.95"
+          step="0.05"
+          :value="difficultyLevel"
+          :style="sliderStyle"
+          class="level-range w-full cursor-pointer"
+          @input="onSlide"
+        />
+      </div>
     </div>
     <p v-if="hint" class="text-center text-xs text-stone-400 dark:text-stone-500">{{ hint }}</p>
     <div class="flex">
@@ -145,3 +174,43 @@ function frameLabel(option: number) {
     </div>
   </AppDialog>
 </template>
+
+<style scoped>
+.level-range {
+  --track: #e7e5e4;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--fill) var(--pct), var(--track) var(--pct));
+}
+.level-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.15rem;
+  width: 1.15rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid var(--fill);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  transition: border-color 0.15s;
+}
+.level-range::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: transparent;
+}
+.level-range::-moz-range-thumb {
+  height: 1.15rem;
+  width: 1.15rem;
+  border: 3px solid var(--fill);
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+@media (prefers-color-scheme: dark) {
+  .level-range {
+    --track: #57534e;
+  }
+}
+</style>

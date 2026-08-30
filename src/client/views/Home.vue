@@ -25,7 +25,7 @@ import {
   type LobbyServerMessage,
 } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
-import type { Difficulty } from '@/engine/ai'
+import { DIFFICULTY_SETTINGS, type Difficulty } from '@/engine/ai'
 
 const creating = ref(false)
 const matching = ref(false)
@@ -64,12 +64,13 @@ if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
+const aiSlip = useStorage('ai-slip', DIFFICULTY_SETTINGS.hell.slip ?? 0.5)
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 // 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}&slip=${aiSlip.value}`)
 }
 
 async function create() {
@@ -249,6 +250,7 @@ function closeMatchDialog() {
       v-if="showAi"
       v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
+      v-model:slip="aiSlip"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
