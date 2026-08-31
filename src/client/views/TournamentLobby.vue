@@ -8,6 +8,7 @@ import { fetchTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
+import { backOrReplace } from '~/utils/navigation'
 import { maskEmail, type TournamentInfo } from '@/shared/protocol'
 
 const { email, loggedIn } = useAuth()
@@ -60,7 +61,7 @@ function isMine(rowEmail: string): boolean {
         class="flex flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 text-center shadow-sm dark:bg-stone-800/80"
       >
         <p class="text-sm text-stone-500 dark:text-stone-400">仅注册用户可参加每日大赛</p>
-        <a href="/"><AppButton>返回首页</AppButton></a>
+        <AppButton @click="backOrReplace()">返回首页</AppButton>
       </div>
 
       <template v-else-if="info">
@@ -128,12 +129,13 @@ function isMine(rowEmail: string): boolean {
           </div>
         </div>
 
-        <a
-          href="/"
-          class="text-xs text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+        <button
+          type="button"
+          class="cursor-pointer text-xs text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+          @click="backOrReplace()"
         >
           返回首页
-        </a>
+        </button>
       </template>
     </div>
   </main>

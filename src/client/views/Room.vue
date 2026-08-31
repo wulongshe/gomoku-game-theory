@@ -30,6 +30,7 @@ import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { MODE_LABELS } from '@gomoku/branding'
 import { ROOM_KEY_PREFIX } from '~/constants/storage'
+import { backOrReplace } from '~/utils/navigation'
 import {
   FRAME_SECONDS,
   isLegalChoice,
@@ -420,7 +421,7 @@ const homeDeadline = ref<number | null>(null)
 const homeSecondsLeft = useCountdown(homeDeadline, 5)
 
 watch(homeSecondsLeft, (s) => {
-  if (s === 0) location.assign('/')
+  if (s === 0) backOrReplace()
 })
 
 // 大赛对局结束后自动回到大赛等候大厅，继续下一轮。
@@ -428,7 +429,7 @@ const tournamentReturn = ref<number | null>(null)
 const tournamentReturnLeft = useCountdown(tournamentReturn, 5)
 
 watch(tournamentReturnLeft, (s) => {
-  if (s === 0) location.assign('/tournament')
+  if (s === 0) backOrReplace('/tournament')
 })
 
 watch(stage, (s) => {
@@ -451,7 +452,7 @@ function reload() {
 function exitRoom() {
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
   forgetKey()
-  setTimeout(() => location.assign('/'), 150)
+  setTimeout(() => backOrReplace(), 150)
 }
 </script>
 
@@ -650,11 +651,9 @@ function exitRoom() {
             <p class="rounded-full bg-stone-100 px-4 py-1 text-sm tracking-[0.2em] text-stone-400 dark:bg-stone-700/60 dark:text-stone-500">
               {{ props.code }}
             </p>
-            <a class="w-full" href="/">
-              <AppButton class="w-full">
-                返回首页<template v-if="homeSecondsLeft !== null">（{{ homeSecondsLeft }}s）</template>
-              </AppButton>
-            </a>
+            <AppButton class="w-full" @click="backOrReplace()">
+              返回首页<template v-if="homeSecondsLeft !== null">（{{ homeSecondsLeft }}s）</template>
+            </AppButton>
           </div>
         </template>
       </div>

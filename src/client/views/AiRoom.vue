@@ -27,6 +27,7 @@ import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '@gomoku/branding'
 import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
+import { backOrReplace } from '~/utils/navigation'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
@@ -193,7 +194,7 @@ function restart() {
 function exitRoom() {
   localStorage.removeItem(AI_GAME_KEY)
   localStorage.removeItem(AI_FRAME_START_KEY)
-  location.assign('/')
+  backOrReplace()
 }
 
 function openConfig() {

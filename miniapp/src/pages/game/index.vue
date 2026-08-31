@@ -141,6 +141,12 @@ function applyConfig(config: GameConfig): void {
   saveConfig(config)
   restart()
 }
+
+// 退出优先按页面栈回退；分享直达时栈里只有本页，改用 redirect 回首页，不再堆栈。
+function exitGame(): void {
+  if (Taro.getCurrentPages().length > 1) Taro.navigateBack()
+  else Taro.redirectTo({ url: '/pages/index/index' })
+}
 </script>
 
 <template>
@@ -186,6 +192,7 @@ function applyConfig(config: GameConfig): void {
     <view v-else class="actions">
       <text class="result">{{ result }}</text>
       <view class="btn btn-primary" @tap="showConfig = true">再来一局</view>
+      <text class="exit" @tap="exitGame">返回首页</text>
     </view>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
@@ -305,5 +312,10 @@ function applyConfig(config: GameConfig): void {
   font-size: 32rpx;
   font-weight: 700;
   color: #292524;
+}
+.exit {
+  font-size: 26rpx;
+  color: #78716c;
+  padding: 8rpx 24rpx;
 }
 </style>
