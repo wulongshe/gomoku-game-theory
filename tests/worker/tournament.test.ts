@@ -299,12 +299,13 @@ describe('active-state registration and spectating', () => {
     expect(Object.keys(s.players).sort()).toEqual(['a@x', 'b@x'])
   })
 
-  it('hides live standings and pairings from non-participants', async () => {
+  it('shows live standings but hides pairings from non-participants', async () => {
     const outsider = await sessionFor('outsider@example.com')
     await seedActive(['a@x', 'b@x'])
     const info = await stub().getInfo(outsider)
     expect(info.participating).toBe(false)
-    expect(info.standings).toEqual([])
+    expect(info.standings.length).toBe(2)
+    expect(info.rounds).toEqual([])
     expect(info.myGame).toBeNull()
   })
 

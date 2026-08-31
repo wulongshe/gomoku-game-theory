@@ -348,8 +348,8 @@ export class Tournament extends DurableObject<Env> {
           null)
       : null
     const liveRounds = s.state === 'active' ? [...s.past, s.pairings] : s.past
-    // 进行中仅参赛者可见实时榜与配对；非参赛者不开放观战（防多号作弊）。
-    const standings = s.state === 'idle' ? s.lastStandings : participating ? this.standings(s) : []
+    // 实时榜全员可见；进行中的逐轮配对仅参赛者可见（防多号观战对方局面）。
+    const standings = s.state === 'idle' ? s.lastStandings : this.standings(s)
     const rounds = showLive ? liveRounds.map((r) => r.map((p) => this.toMatch(p))) : []
     const names = await this.displayNames([
       ...new Set([

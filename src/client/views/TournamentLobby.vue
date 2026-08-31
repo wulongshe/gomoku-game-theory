@@ -54,7 +54,7 @@ useIntervalFn(load, 3000)
       </div>
 
       <div
-        v-else-if="!loggedIn"
+        v-else-if="!loggedIn && !info"
         class="flex flex-col items-center gap-4 rounded-2xl bg-white/80 p-8 text-center shadow-sm dark:bg-stone-800/80"
       >
         <p class="text-sm text-stone-500 dark:text-stone-400">仅注册用户可参加每日大赛</p>
@@ -65,7 +65,16 @@ useIntervalFn(load, 3000)
         <div
           class="w-full rounded-2xl bg-white/80 p-6 text-center shadow-sm backdrop-blur dark:bg-stone-800/80"
         >
-          <template v-if="info.myGame">
+          <template v-if="!loggedIn">
+            <p class="text-sm text-stone-500 dark:text-stone-400">
+              {{ info.state === 'active' ? '大赛进行中' : '仅注册用户可参加每日大赛' }}
+            </p>
+            <p class="mt-1 text-lg font-semibold text-stone-800 dark:text-stone-100">
+              {{ info.state === 'active' ? '仅注册用户可参加' : '登录后即可报名' }}
+            </p>
+            <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">可在首页登录后报名参赛</p>
+          </template>
+          <template v-else-if="info.myGame">
             <p class="text-sm text-stone-500 dark:text-stone-400">第 {{ info.round }} 轮 · 已为你配对</p>
             <p class="mt-1 text-lg font-semibold text-stone-800 dark:text-stone-100">准备好了就进入对局</p>
             <a :href="`/room/${info.myGame.code}`" class="mt-3 inline-block">
@@ -102,8 +111,8 @@ useIntervalFn(load, 3000)
         </div>
 
         <div v-if="info.standings.length" class="flex min-h-0 w-full flex-col gap-1.5">
-          <p class="px-1 text-xs text-stone-400 dark:text-stone-500">
-            {{ info.state === 'active' ? '实时积分' : '昨日排名' }}
+          <p v-if="info.state !== 'active'" class="px-1 text-xs text-stone-400 dark:text-stone-500">
+            昨日排名
           </p>
           <TournamentStandings
             :standings="info.standings"
