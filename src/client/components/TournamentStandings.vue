@@ -46,16 +46,15 @@ const hasStatus = computed(() => props.standings.some((row) => row.status))
           v-if="i === me"
           class="absolute right-0 top-0 rounded-bl-lg rounded-tr-xl bg-wood-deep px-1.5 py-0.5 text-[10px] leading-none text-white"
         >我</span>
-        <span class="min-w-5 text-center font-semibold text-stone-400 dark:text-stone-500">
+        <span
+          class="min-w-5 text-center font-semibold"
+          :class="row.status ? STATUS_META[row.status].text : 'text-stone-400 dark:text-stone-500'"
+        >
           {{ i + 1 }}
         </span>
         <span
           class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-stone-700 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:text-stone-200"
         >{{ row.email }}</span>
-        <span
-          class="text-xs"
-          :class="row.status ? STATUS_META[row.status].text : 'text-stone-400 dark:text-stone-500'"
-        >{{ row.played }} 局</span>
         <span class="min-w-8 text-center font-semibold text-stone-800 tabular-nums dark:text-stone-100">
           {{ row.score }}
         </span>
