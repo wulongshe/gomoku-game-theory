@@ -1,6 +1,6 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
-import { nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
+import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
 
 const NEUTRAL = () => 0.5
 
@@ -171,6 +171,11 @@ describe('Tournament DO', () => {
     expect(s.state).toBe('idle')
     expect(s.lastStandings).toHaveLength(4)
     expect(s.lastStandings[0].score).toBeGreaterThanOrEqual(s.lastStandings[3].score)
+    // 终榜按北京时间日期永久归档。
+    const archived = await runInDurableObject(stub(), (_i, st) =>
+      st.storage.get(`standings:${beijingDate(Date.now())}`),
+    )
+    expect(archived).toEqual(s.lastStandings)
   })
 
   it('does not start with fewer than two players', async () => {

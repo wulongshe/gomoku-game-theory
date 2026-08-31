@@ -65,6 +65,11 @@ function defaultState(): TournamentState {
   }
 }
 
+// 归档 key 用北京时间日期：20:00 开赛的「那一天」。
+export function beijingDate(now: number): string {
+  return new Date(now + 8 * 3600_000).toISOString().slice(0, 10)
+}
+
 export function nextDailyStart(now: number, hour = DAILY_HOUR_UTC): number {
   const d = new Date(now)
   const target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, 0, 0, 0)
@@ -286,6 +291,8 @@ export class Tournament extends DurableObject<Env> {
       await this.pairAndAlloc(s)
     } else {
       s.lastStandings = this.standings(s)
+      // 每天的终榜按日期永久归档（原始邮箱，展示时再按开关脱敏）；lastStandings 仅是最近一届的展示缓存。
+      await this.ctx.storage.put(`standings:${beijingDate(Date.now())}`, s.lastStandings)
       s.state = 'idle'
       s.round = 0
       s.totalRounds = 0
