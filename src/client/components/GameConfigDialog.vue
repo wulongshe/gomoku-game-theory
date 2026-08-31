@@ -31,11 +31,11 @@ const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
 const frames = defineModel<number[]>('frames', { default: () => [] })
 const modes = defineModel<GameMode[]>('modes', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
-// read：地狱难度的读心置信度，直接作为「难度值」滑条（越往右读心越强、AI 越强）。
-const read = defineModel<number>('read', { default: 0.5 })
+// strength：地狱难度的「难度值」滑条（越往右 AI 越强）；引擎读心置信度 = strength - 0.05，在 AiRoom 换算。
+const strength = defineModel<number>('strength', { default: 0.05 })
 
 // 低难度偏绿、高难度偏红。
-const fillColor = computed(() => `hsl(${(1 - read.value) * 130}deg 68% 45%)`)
+const fillColor = computed(() => `hsl(${(1 - strength.value) * 130}deg 68% 45%)`)
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
 const modeLabel = (option: GameMode) => MODE_LABELS[option]
@@ -72,8 +72,8 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
         <SegmentedControl v-model="difficulty" :options="difficulties" :label="difficultyLabel" />
       </div>
       <div v-if="difficulties && difficulty === 'hell'" class="flex flex-col gap-2">
-        <span class="text-center text-stone-500 dark:text-stone-400">难度值 {{ Math.round(read * 100) }}%</span>
-        <RangeSlider v-model="read" :min="0.05" :max="0.95" :step="0.05" :fill="fillColor" />
+        <span class="text-center text-stone-500 dark:text-stone-400">{{ Math.round(strength * 100) }}% 加成</span>
+        <RangeSlider v-model="strength" :min="0.05" :max="1" :step="0.05" :fill="fillColor" />
       </div>
     </div>
     <template #footer>

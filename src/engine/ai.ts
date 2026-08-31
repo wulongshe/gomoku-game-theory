@@ -3,16 +3,16 @@ import { analyzeBoard, evaluateState, sampleIndex } from './eval'
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'hell'
 
-// explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）；
-// read：地狱难度的读心置信度——搜索中假设人类走出其真实落点的概率（1=必读最强、0=盲搜），越高越强。
+// explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
+// 读心置信度不在此预设：引擎对难度不可知，read 由调用方逐局提供（见 searchBestMove / AiRoom）。
 export const DIFFICULTY_SETTINGS: Record<
   Difficulty,
-  { candidates: number; explore: number; budgetMs: number; read?: number }
+  { candidates: number; explore: number; budgetMs: number }
 > = {
   easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
   normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
   hard: { candidates: 7, explore: 0, budgetMs: 800 },
-  hell: { candidates: 8, explore: 0, budgetMs: 850, read: 0.5 },
+  hell: { candidates: 8, explore: 0, budgetMs: 850 },
 }
 
 const FICTITIOUS_ITERATIONS = 300

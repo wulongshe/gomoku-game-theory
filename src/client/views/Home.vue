@@ -18,7 +18,7 @@ import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
-import { DIFFICULTY_OPTIONS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { DEFAULT_HELL_STRENGTH, DIFFICULTY_OPTIONS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
 import {
   AI_MODE_OPTIONS,
   FRAME_OPTIONS,
@@ -28,7 +28,7 @@ import {
   type LobbyServerMessage,
 } from '@/shared/protocol'
 import type { GameMode } from '@/engine/game'
-import { DIFFICULTY_SETTINGS, type Difficulty } from '@/engine/ai'
+import { type Difficulty } from '@/engine/ai'
 
 const creating = ref(false)
 const matching = ref(false)
@@ -76,13 +76,13 @@ if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
-const aiRead = useStorage('ai-read', DIFFICULTY_SETTINGS.hell.read ?? 0.5)
+const aiStrength = useStorage('ai-strength', DEFAULT_HELL_STRENGTH)
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 // 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}&read=${aiRead.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}&strength=${aiStrength.value}`)
 }
 
 async function create() {
@@ -291,7 +291,7 @@ function closeMatchDialog() {
       v-if="showAi"
       v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
-      v-model:read="aiRead"
+      v-model:strength="aiStrength"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

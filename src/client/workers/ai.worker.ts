@@ -8,6 +8,7 @@ interface AiRequest {
   seat: Seat
   difficulty: Difficulty
   oppMove: Point | null
+  read?: number
 }
 
 interface AiResponse {
@@ -21,6 +22,6 @@ const ctx = self as unknown as {
 }
 
 ctx.onmessage = ({ data }) => {
-  const move = searchBestMove(data.state, data.seat, data.difficulty, undefined, data.oppMove)
+  const move = searchBestMove(data.state, data.seat, data.difficulty, undefined, data.oppMove, data.read)
   ctx.postMessage({ id: data.id, move })
 }

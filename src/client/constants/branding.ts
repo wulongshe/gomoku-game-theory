@@ -20,6 +20,9 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   hell: '地狱',
 }
 
+// 地狱难度「加成」滑条默认值（5%~100%）；引擎读心置信度 = 加成 - 0.05。
+export const DEFAULT_HELL_STRENGTH = 0.05
+
 export function frameLabel(seconds: number): string {
   return seconds ? `${seconds}s` : '不限时'
 }

@@ -12,7 +12,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { DIFFICULTY_SETTINGS, type Difficulty } from '@/engine/ai'
+import { type Difficulty } from '@/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -25,7 +25,7 @@ import {
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
-import { DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
+import { DEFAULT_HELL_STRENGTH, DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
 import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
 import { AI_MODE_OPTIONS } from '@/shared/protocol'
 
@@ -38,12 +38,14 @@ const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbid
 const frameSeconds = 0
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
-// read（读心置信度）只对地狱难度生效，取 URL 参数，非法则回落到难度默认；滑条范围 0.05~0.95、步长 0.05。
-function clampRead(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return DIFFICULTY_SETTINGS.hell.read ?? 0.5
-  return Math.min(0.95, Math.max(0.05, Math.round(raw * 20) / 20))
+// strength 是「加成」滑条（只对地狱难度生效），取 URL 参数，非法则回落到默认；范围 0.05~1、步长 0.05。
+// 引擎读心置信度 read = strength - 0.05：滑条 5%~100% → 置信 0~0.95（AI 本就有自然命中率，0 即纯盲搜、不再额外削弱）。
+function clampStrength(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_HELL_STRENGTH
+  return Math.min(1, Math.max(0.05, Math.round(raw * 20) / 20))
 }
-const read = ref(clampRead(Number(params.get('read'))))
+const strength = ref(clampStrength(Number(params.get('strength'))))
+const engineRead = computed(() => Math.max(0, strength.value - 0.05))
 
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
@@ -82,10 +84,10 @@ let responseTimer: ReturnType<typeof setTimeout> | undefined
 const showConfig = ref(false)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
-const configRead = ref(read.value)
+const configStrength = ref(strength.value)
 
 const responds = computed(() => difficulty.value === 'hell')
-const difficultyPercent = computed(() => Math.round(read.value * 100))
+const difficultyPercent = computed(() => Math.round(strength.value * 100))
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
@@ -138,7 +140,7 @@ async function resolveFrame() {
       : null
   const aiMove =
     responds.value && draft
-      ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft))
+      ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft, false, engineRead.value))
       : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const next = settleFrame(game.value, {
     black: selected.value,
@@ -168,7 +170,7 @@ function scheduleResponse(point: Point) {
   clearTimeout(responseTimer)
   const target = point
   responseTimer = setTimeout(() => {
-    pendingResponse = ai.request(game.value, 'white', difficulty.value, target, true)
+    pendingResponse = ai.request(game.value, 'white', difficulty.value, target, true, engineRead.value)
   }, 200)
 }
 
@@ -198,7 +200,7 @@ function exitRoom() {
 function openConfig() {
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
-  configRead.value = read.value
+  configStrength.value = strength.value
   showConfig.value = true
 }
 
@@ -206,8 +208,8 @@ function confirmConfig() {
   showConfig.value = false
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  read.value = configRead.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&read=${read.value}`)
+  strength.value = configStrength.value
+  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&strength=${strength.value}`)
   restart()
 }
 
@@ -302,7 +304,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       v-if="showConfig"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
-      v-model:read="configRead"
+      v-model:strength="configStrength"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
