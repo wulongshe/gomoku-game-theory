@@ -231,6 +231,30 @@ describe('Tournament DO', () => {
     expect(s.players[p0.players[1]!].score).toBe(0)
   })
 
+  it('forfeits no-shows three minutes into a round while games in progress continue', async () => {
+    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
+    await fireStart()
+    const [p0, p1] = (await read()).pairings
+    // p0 两人都已进场（对局中），p1 只有一人进场。
+    await stub().checkIn({ code: p0.code!, email: p0.players[0]! })
+    await stub().checkIn({ code: p0.code!, email: p0.players[1]! })
+    await stub().checkIn({ code: p1.code!, email: p1.players[0]! })
+    // 把时间拨到弃权检查点之后、本轮截止之前。
+    await runInDurableObject(stub(), async (_i, state) => {
+      const t = (await state.storage.get<TState>('t'))!
+      t.roundDeadline = Date.now() + 60_000
+      await state.storage.put('t', t)
+      await state.storage.setAlarm(Date.now() - 1)
+    })
+    await runDurableObjectAlarm(stub())
+    const s = await read()
+    expect(s.round).toBe(1) // 还有对局在进行，不收轮
+    expect(s.pairings.find((p) => p.code === p0.code)?.result).toBeNull()
+    expect(s.pairings.find((p) => p.code === p1.code)?.result).toBe('a')
+    expect(s.players[p1.players[0]!].score).toBe(1)
+    expect(s.players[p1.players[1]!].score).toBe(0)
+  })
+
   it('no-ops a superseded round alarm instead of voiding the new round', async () => {
     await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
     await fireStart()

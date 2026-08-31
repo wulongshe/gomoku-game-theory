@@ -101,6 +101,9 @@ const buttonVariant = computed(() =>
           <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
             {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 20:00 · 已报名 ${info.playerCount} 人` }}
           </p>
+          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+            每轮开始后 3 分钟未准备视为弃权
+          </p>
         </template>
       </div>
 

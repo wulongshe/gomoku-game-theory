@@ -10,6 +10,7 @@ import { allocateRoom } from './roomCode'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ROUND_MS = 10 * 60_000
+const FORFEIT_MS = 3 * 60_000 // 每轮开始后未进场判弃权的时限
 const TFRAME = 15
 const TMODE = 'forbidden'
 const MIN_DRAW_MOVES = 30 // 和棋计分所需最少步数（game.frame）
@@ -241,8 +242,12 @@ export class Tournament extends DurableObject<Env> {
   async alarm(): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
-      if (s.state === 'active') await this.closeRound(s)
-      else await this.start(s)
+      if (s.state !== 'active') await this.start(s)
+      else if (s.roundDeadline !== null && Date.now() < s.roundDeadline - SKEW_MS) {
+        await this.forfeitCheckpoint(s)
+      } else {
+        await this.closeRound(s)
+      }
       await this.save(s)
       await this.broadcast(s)
     })
@@ -264,14 +269,25 @@ export class Tournament extends DurableObject<Env> {
     await this.pairAndAlloc(s)
   }
 
-  private async closeRound(s: TournamentState): Promise<void> {
-    if (s.state !== 'active') return
-    const now = Date.now()
-    if (s.roundDeadline !== null && now < s.roundDeadline - SKEW_MS) {
-      // 被 advance 抢先续了下一轮的 deadline，本次 alarm 已过期，重挂即可。
-      await this.ctx.storage.setAlarm(s.roundDeadline)
+  // 开轮 3 分钟检查点：没进场的判弃权（对手在场即轮空胜、双方都缺席作废），已开打的照常。
+  private async forfeitCheckpoint(s: TournamentState): Promise<void> {
+    const forfeitAt = s.roundDeadline! - ROUND_MS + FORFEIT_MS
+    if (Date.now() < forfeitAt - SKEW_MS) {
+      // 被 advance 抢先换了新一轮，本次 alarm 已过期，重挂即可。
+      await this.ctx.storage.setAlarm(Math.min(forfeitAt, s.roundDeadline!))
       return
     }
+    for (const p of s.pairings) {
+      if (p.result !== null || p.checkedIn.length >= 2) continue
+      p.result = p.checkedIn.length === 0 ? 'void' : p.checkedIn[0] === p.players[0] ? 'a' : 'b'
+      this.applyResult(s, p)
+    }
+    if (s.pairings.every((p) => p.result !== null)) await this.advance(s)
+    else await this.ctx.storage.setAlarm(s.roundDeadline!)
+  }
+
+  private async closeRound(s: TournamentState): Promise<void> {
+    if (s.state !== 'active') return
     for (const p of s.pairings) {
       if (p.result !== null) continue
       const present = (p.players.filter((e) => e !== null) as string[]).filter((e) =>
@@ -325,7 +341,8 @@ export class Tournament extends DurableObject<Env> {
     }
     s.pairings = pairings
     s.roundDeadline = Date.now() + ROUND_MS
-    await this.ctx.storage.setAlarm(s.roundDeadline)
+    // 先在弃权检查点醒来，届时再把闹钟拨到本轮截止。
+    await this.ctx.storage.setAlarm(s.roundDeadline - ROUND_MS + FORFEIT_MS)
   }
 
   private applyResult(s: TournamentState, p: Pairing): void {
