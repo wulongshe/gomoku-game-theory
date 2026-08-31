@@ -107,6 +107,7 @@ useIntervalFn(load, 3000)
           </p>
           <TournamentStandings
             :standings="info.standings"
+            :me="info.me"
             row-class="bg-white dark:bg-stone-800"
             class="max-h-96"
           />

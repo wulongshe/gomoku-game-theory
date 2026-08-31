@@ -718,7 +718,7 @@ describe('account seat recovery', () => {
     const emails = ['wi***@example.com', 'lo***@example.com']
     await vi.waitFor(async () => {
       const board = await stub.leaderboard()
-      expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
+      expect(board.entries.filter((entry) => emails.includes(entry.email))).toEqual([
         { email: 'wi***@example.com', wins: 1, losses: 0, draws: 0 },
         { email: 'lo***@example.com', wins: 0, losses: 1, draws: 0 },
       ])
@@ -743,7 +743,7 @@ describe('account seat recovery', () => {
     const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
     await vi.waitFor(async () => {
       const board = await stub.leaderboard()
-      expect(board.find((entry) => entry.email === 'qu***@example.com')).toEqual({
+      expect(board.entries.find((entry) => entry.email === 'qu***@example.com')).toEqual({
         email: 'qu***@example.com',
         wins: 0,
         losses: 1,

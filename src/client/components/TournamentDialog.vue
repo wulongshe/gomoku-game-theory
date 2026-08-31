@@ -98,7 +98,7 @@ const buttonVariant = computed(() =>
         <p class="text-xs text-stone-400 dark:text-stone-500">
           {{ info.state === 'active' ? '实时积分' : '昨日排名' }}
         </p>
-        <TournamentStandings :standings="info.standings" class="max-h-64" />
+        <TournamentStandings :standings="info.standings" :me="info.me" class="max-h-64" />
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
         瑞士轮积分赛 · 报名后到点自动配对开赛

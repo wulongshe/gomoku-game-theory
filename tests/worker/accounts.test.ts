@@ -104,13 +104,14 @@ describe('login and sessions', () => {
     ])
 
     const res = await SELF.fetch('https://example.com/api/leaderboard')
-    const board = await res.json<Array<{ email: string }>>()
+    const board = await res.json<{ entries: Array<{ email: string }>; me: number | null }>()
     const emails = ['h***@example.com', 'i***@example.com', 'j***@example.com']
-    expect(board.filter((entry) => emails.includes(entry.email))).toEqual([
+    expect(board.entries.filter((entry) => emails.includes(entry.email))).toEqual([
       { email: 'i***@example.com', wins: 1, losses: 0, draws: 1 },
       { email: 'j***@example.com', wins: 0, losses: 0, draws: 0 },
       { email: 'h***@example.com', wins: 0, losses: 1, draws: 1 },
     ])
+    expect(board.me).toBeNull()
   })
 
   it('reveals the leaderboard email once the owner opts in', async () => {
@@ -119,16 +120,20 @@ describe('login and sessions', () => {
     const { token } = await login.json<{ token: string }>()
 
     const board = await SELF.fetch('https://example.com/api/leaderboard')
-    const masked = await board.json<Array<{ email: string }>>()
-    expect(masked.some((entry) => entry.email === 're***@example.com')).toBe(true)
+    const masked = await board.json<{ entries: Array<{ email: string }> }>()
+    expect(masked.entries.some((entry) => entry.email === 're***@example.com')).toBe(true)
 
     const set = await post('visibility', { visible: true }, token)
     expect(set.status).toBe(204)
     const me = await SELF.fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${token}` } })
     expect(await me.json()).toEqual({ email: 'reveal@example.com', emailVisible: true })
-    const revealed = await SELF.fetch('https://example.com/api/leaderboard')
-    const entries = await revealed.json<Array<{ email: string }>>()
-    expect(entries.some((entry) => entry.email === 'reveal@example.com')).toBe(true)
+    // 带登录态请求时，服务端应给出我在榜中的下标（按脱敏前邮箱定位）。
+    const revealed = await SELF.fetch('https://example.com/api/leaderboard', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const mine = await revealed.json<{ entries: Array<{ email: string }>; me: number | null }>()
+    expect(mine.me).not.toBeNull()
+    expect(mine.entries[mine.me!].email).toBe('reveal@example.com')
 
     const anonymous = await post('visibility', { visible: true })
     expect(anonymous.status).toBe(401)

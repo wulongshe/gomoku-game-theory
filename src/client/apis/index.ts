@@ -52,10 +52,15 @@ export interface LeaderboardEntry {
   draws: number
 }
 
-export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  const res = await fetch('/api/leaderboard')
+export interface Leaderboard {
+  entries: LeaderboardEntry[]
+  me: number | null // 我在榜中的下标，由服务端在脱敏前定位
+}
+
+export async function fetchLeaderboard(): Promise<Leaderboard> {
+  const res = await fetch('/api/leaderboard', { headers: bearer() })
   if (!res.ok) throw new Error(`fetchLeaderboard failed: ${res.status}`)
-  return (await res.json()) as LeaderboardEntry[]
+  return (await res.json()) as Leaderboard
 }
 
 export class AuthError extends Error {

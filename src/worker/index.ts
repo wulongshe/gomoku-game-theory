@@ -78,7 +78,8 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname.startsWith('/api/')) {
     if (request.method === 'GET' && url.pathname === '/api/leaderboard') {
       const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
-      return Response.json(await accounts.leaderboard())
+      const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
+      return Response.json(await accounts.leaderboard(token))
     }
     if (url.pathname.startsWith('/api/tournament')) {
       const tournament = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))

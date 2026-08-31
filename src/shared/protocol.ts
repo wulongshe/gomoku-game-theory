@@ -80,6 +80,7 @@ export interface TournamentInfo {
   myGame: { code: string } | null
   roundDeadline: number | null
   standings: Standing[]
+  me: number | null // 我在 standings 中的下标（脱敏前定位）
   rounds: Match[][] // 各轮对阵（仅参赛者/赛后可见）
 }
 

@@ -214,21 +214,37 @@ export class Accounts extends DurableObject<Env> {
     return stats?.rating ?? RATING_DEFAULT
   }
 
-  async leaderboard(): Promise<LeaderboardEntry[]> {
+  // me 为请求者在榜中的下标（未登录/未上榜为 null）：脱敏后的邮箱可能撞车，只有服务端能可靠定位「我」。
+  async leaderboard(token: string | null = null): Promise<{
+    entries: LeaderboardEntry[]
+    me: number | null
+  }> {
+    const myEmail = token ? ((await this.me(token))?.email ?? null) : null
     const users = await this.ctx.storage.list<UserRecord>({ prefix: 'user:' })
     const stats = await this.ctx.storage.list<StatsRecord>({ prefix: 'stats:' })
-    return [...users.entries()]
+    const rows = [...users.entries()]
       .map(([key, user]) => {
         const email = key.slice('user:'.length)
         const record = stats.get(`stats:${email}`)
         return {
-          email: user.emailVisible ? email : maskEmail(email),
+          email,
+          visible: user.emailVisible ?? false,
           wins: record?.wins ?? 0,
           losses: record?.losses ?? 0,
           draws: record?.draws ?? 0,
         }
       })
       .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))
+    const index = myEmail === null ? -1 : rows.findIndex((row) => row.email === myEmail)
+    return {
+      entries: rows.map(({ email, visible, wins, losses, draws }) => ({
+        email: visible ? email : maskEmail(email),
+        wins,
+        losses,
+        draws,
+      })),
+      me: index < 0 ? null : index,
+    }
   }
 
   private async createSession(email: string): Promise<string> {

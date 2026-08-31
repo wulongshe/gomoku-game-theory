@@ -3,8 +3,6 @@ import { onMounted, ref } from 'vue'
 import AppDialog from '~/components/AppDialog.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { fetchLeaderboard, type LeaderboardEntry } from '~/apis'
-import { useAuth } from '~/composables/useAuth'
-import { maskEmail } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -15,18 +13,17 @@ const LEGEND = [
   { label: '平', dot: 'bg-stone-400' },
 ]
 
-const { email: myEmail } = useAuth()
 const entries = ref<LeaderboardEntry[]>([])
+// 我在榜中的下标由服务端在脱敏前定位（脱敏邮箱撞车时客户端匹配不可靠）。
+const me = ref<number | null>(null)
 const loading = ref(true)
 const failed = ref(false)
 
-function isMine(entry: LeaderboardEntry): boolean {
-  return !!myEmail.value && (entry.email === myEmail.value || entry.email === maskEmail(myEmail.value))
-}
-
 onMounted(async () => {
   try {
-    entries.value = await fetchLeaderboard()
+    const board = await fetchLeaderboard()
+    entries.value = board.entries
+    me.value = board.me
   } catch {
     failed.value = true
   } finally {
@@ -56,16 +53,16 @@ onMounted(async () => {
       <div class="flex max-h-80 flex-col gap-2 overflow-y-auto">
         <div
           v-for="(entry, index) in entries"
-          :key="entry.email"
+          :key="index"
           class="relative flex items-center gap-2 rounded-xl px-3 py-3"
           :class="
-            isMine(entry)
+            index === me
               ? 'sticky top-0 bottom-0 z-10 bg-amber-100 ring-1 ring-inset ring-wood/60 dark:bg-stone-600'
               : 'bg-stone-100 dark:bg-stone-700/50'
           "
         >
           <span
-            v-if="isMine(entry)"
+            v-if="index === me"
             class="absolute right-0 top-0 rounded-bl-lg rounded-tr-xl bg-wood-deep px-1.5 py-0.5 text-[10px] leading-none text-white"
           >我</span>
           <span class="min-w-5 shrink-0 text-center">

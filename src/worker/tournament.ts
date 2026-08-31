@@ -329,6 +329,8 @@ export class Tournament extends DurableObject<Env> {
       ]),
     ])
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
+    // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
+    const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
     return {
       state: s.state,
       now,
@@ -341,6 +343,7 @@ export class Tournament extends DurableObject<Env> {
       myGame: myGame ? { code: myGame } : null,
       roundDeadline: s.roundDeadline,
       standings: standings.map((row) => ({ ...row, email: shown(row.email) })),
+      me: meIndex < 0 ? null : meIndex,
       rounds: rounds.map((r) => r.map((m) => ({ ...m, a: shown(m.a), b: m.b && shown(m.b) }))),
     }
   }
