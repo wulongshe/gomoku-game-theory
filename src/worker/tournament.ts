@@ -468,6 +468,22 @@ export class Tournament extends DurableObject<Env> {
     }
   }
 
+  // 本地开发数据注入（路由仅 localhost 暴露，见 index.ts）：覆写状态、重挂闹钟并广播。
+  async devSeed(input: Partial<TournamentState>): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const s = { ...(await this.load()), ...input }
+      if (s.state === 'active') {
+        s.roundDeadline = Date.now() + ROUND_MS
+        await this.ctx.storage.setAlarm(Date.now() + FORFEIT_MS)
+      } else {
+        s.roundDeadline = null
+        await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+      }
+      await this.save(s)
+      await this.broadcast(s)
+    })
+  }
+
   private async armIfNeeded(s: TournamentState): Promise<void> {
     if (s.state === 'idle' && (await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))

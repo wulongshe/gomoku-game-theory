@@ -11,6 +11,9 @@ export { Tournament } from './tournament'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
 
+// vite dev 下为 true；wrangler 直编与 vitest 里 import.meta.env 不存在，恒为 false。
+const DEV = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
+
 function authError(error: string, status: number): Response {
   return Response.json({ error }, { status })
 }
@@ -89,6 +92,11 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
       if (request.method === 'GET' && url.pathname === '/api/tournament') {
         return Response.json(await tournament.getInfo(token))
+      }
+      // 本地造数据入口（数据在 scripts/seed-tournament.ts）：仅 vite dev 存在，生产构建与测试中为死代码。
+      if (DEV && request.method === 'POST' && url.pathname === '/api/tournament/seed') {
+        await tournament.devSeed(await request.json())
+        return new Response(null, { status: 204 })
       }
       if (request.method === 'POST' && url.pathname === '/api/tournament/register') {
         if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
