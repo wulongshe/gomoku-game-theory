@@ -88,13 +88,13 @@ useWebSocket(tournamentWsUrl(), {
           </template>
           <template v-else-if="info.participating">
             <p class="text-sm text-stone-500 dark:text-stone-400">
-              第 {{ info.round }} / {{ info.totalRounds }} 轮
+              第 {{ info.round }} / {{ info.totalRounds }} 轮 · 本轮剩余
             </p>
-            <p class="mt-1 text-lg font-semibold text-stone-800 dark:text-stone-100">
-              等待其他对局结束…
+            <p class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100">
+              {{ formatCountdown(roundLeft ?? 0) }}
             </p>
-            <p v-if="roundLeft !== null" class="mt-1 text-xs text-stone-400 tabular-nums dark:text-stone-500">
-              本轮剩余 {{ formatCountdown(roundLeft) }}
+            <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+              等待其他对局结束 · {{ info.playerCount }} 人参赛
             </p>
           </template>
           <template v-else-if="info.state === 'active'">

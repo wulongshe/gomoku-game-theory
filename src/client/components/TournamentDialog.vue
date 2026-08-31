@@ -21,10 +21,14 @@ const loading = ref(true)
 // 服务端时钟偏移校正后再倒计时。
 const startDeadline = ref<number | null>(null)
 const startLeft = useCountdown(startDeadline)
+const roundDeadline = ref<number | null>(null)
+const roundLeft = useCountdown(roundDeadline)
 
 function apply(data: TournamentInfo) {
   info.value = data
   startDeadline.value = Date.now() + (data.startsAt - data.now)
+  roundDeadline.value =
+    data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
   loading.value = false
 }
 
@@ -80,11 +84,12 @@ const buttonVariant = computed(() =>
       <div class="rounded-xl bg-stone-100 px-4 py-3 text-center dark:bg-stone-700/50">
         <template v-if="info.participating">
           <p class="text-sm text-stone-500 dark:text-stone-400">
-            第 {{ info.round }} / {{ info.totalRounds }} 轮进行中
+            第 {{ info.round }} / {{ info.totalRounds }} 轮 · 本轮剩余
           </p>
           <p class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100">
-            {{ info.playerCount }} 人参赛
+            {{ formatCountdown(roundLeft ?? 0) }}
           </p>
+          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">{{ info.playerCount }} 人参赛</p>
         </template>
         <template v-else>
           <p class="text-sm text-stone-500 dark:text-stone-400">
