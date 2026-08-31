@@ -69,13 +69,13 @@ export class Room extends DurableObject<Env> {
     if (!url.pathname.endsWith('/ws')) {
       const players = (await this.ctx.storage.get<Players>('players')) ?? {}
       const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-      const token = url.searchParams.get('token')
-      const email = await this.accountEmail(url.searchParams.get('auth'))
+      const key = url.searchParams.get('key')
+      const email = await this.accountEmail(url.searchParams.get('token'))
       const hasSeat =
         !players.black ||
         !players.white ||
-        token === players.black ||
-        token === players.white ||
+        key === players.black ||
+        key === players.white ||
         (email !== null && (accounts.black === email || accounts.white === email))
       return Response.json({ exists: created, full: !hasSeat })
     }
@@ -85,29 +85,29 @@ export class Room extends DurableObject<Env> {
     if (!created) {
       return new Response('Room not found', { status: 404 })
     }
-    const token = url.searchParams.get('token')
-    if (!token) {
-      return new Response('Missing token', { status: 400 })
+    const key = url.searchParams.get('key')
+    if (!key) {
+      return new Response('Missing key', { status: 400 })
     }
 
     const players = (await this.ctx.storage.get<Players>('players')) ?? {}
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-    const email = await this.accountEmail(url.searchParams.get('auth'))
+    const email = await this.accountEmail(url.searchParams.get('token'))
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament && (email === null || !tournament.players.includes(email))) {
       return new Response('Not a tournament participant', { status: 403 })
     }
     let seat: Seat
-    if (players.black === token) seat = 'black'
-    else if (players.white === token) seat = 'white'
+    if (players.black === key) seat = 'black'
+    else if (players.white === key) seat = 'white'
     else if (email !== null && accounts.black === email) seat = 'black'
     else if (email !== null && accounts.white === email) seat = 'white'
     else if (!players.black) seat = 'black'
     else if (!players.white) seat = 'white'
     else return new Response('Room is full', { status: 409 })
 
-    if (players[seat] !== token) {
-      players[seat] = token
+    if (players[seat] !== key) {
+      players[seat] = key
       await this.ctx.storage.put('players', players)
     }
     if (email !== null && accounts[seat] !== email) {

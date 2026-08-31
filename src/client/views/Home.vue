@@ -45,7 +45,7 @@ function loginFromTournament() {
   showAuth.value = true
 }
 
-const { token: authToken, email: authEmail, loggedIn, refresh } = useAuth()
+const { email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
 const authLabel = computed(() => (loggedIn.value ? authEmail.value.split('@')[0] : '登录/注册'))
 let matched = false
@@ -96,7 +96,7 @@ async function create() {
 }
 
 const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameChoices.value, modeChoices.value, authToken.value || undefined)),
+  computed(() => matchWsUrl(frameChoices.value, modeChoices.value)),
   {
     immediate: false,
     autoConnect: false,

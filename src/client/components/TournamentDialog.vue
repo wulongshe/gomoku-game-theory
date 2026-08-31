@@ -12,7 +12,7 @@ import type { TournamentInfo } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: []; login: [] }>()
 
-const { token, loggedIn } = useAuth()
+const { loggedIn } = useAuth()
 const info = ref<TournamentInfo | null>(null)
 const busy = ref(false)
 const loading = ref(true)
@@ -23,7 +23,7 @@ const startLeft = useCountdown(startDeadline)
 
 async function load() {
   try {
-    const data = await fetchTournament(token.value || undefined)
+    const data = await fetchTournament()
     info.value = data
     startDeadline.value = Date.now() + (data.startsAt - data.now)
   } catch {
@@ -43,9 +43,7 @@ async function act() {
   if (i.participating) return location.assign('/tournament') // 参赛者点击后才进入大厅
   busy.value = true
   try {
-    info.value = i.registered
-      ? await withdrawTournament(token.value)
-      : await registerTournament(token.value)
+    info.value = i.registered ? await withdrawTournament() : await registerTournament()
   } catch {
     // ignore
   } finally {

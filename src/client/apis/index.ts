@@ -1,5 +1,8 @@
 import type { GameMode } from '@/engine/game'
 import type { TournamentInfo } from '@/shared/protocol'
+import { useAuthToken } from '~/composables/useAuthToken'
+
+const authToken = useAuthToken()
 
 export async function createRoom(frameSeconds: number, mode: GameMode): Promise<string> {
   const res = await fetch(`/api/rooms?frame=${frameSeconds}&mode=${mode}`, { method: 'POST' })
@@ -13,23 +16,33 @@ export interface RoomStatus {
   full: boolean
 }
 
-export async function roomStatus(code: string, token: string, auth?: string): Promise<RoomStatus> {
-  const res = await fetch(`/api/rooms/${code}?token=${token}${auth ? `&auth=${auth}` : ''}`)
+// key 为房间席位钥匙（每房独立），账号鉴权由 authQuery 从存储补上。
+export async function roomStatus(code: string, key: string): Promise<RoomStatus> {
+  const res = await fetch(`/api/rooms/${code}?key=${key}${authQuery()}`)
   if (!res.ok) throw new Error(`roomStatus failed: ${res.status}`)
   return (await res.json()) as RoomStatus
 }
 
-export function roomWsUrl(code: string, token: string, auth?: string): string {
-  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?token=${token}${auth ? `&auth=${auth}` : ''}`
+export function roomWsUrl(code: string, key: string): string {
+  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?key=${key}${authQuery()}`
 }
 
-export function matchWsUrl(frames: number[], modes: GameMode[], auth?: string): string {
-  const query = `frames=${frames.join(',')}&modes=${modes.join(',')}${auth ? `&auth=${auth}` : ''}`
+export function matchWsUrl(frames: number[], modes: GameMode[]): string {
+  const query = `frames=${frames.join(',')}&modes=${modes.join(',')}${authQuery()}`
   return `${wsProto()}://${location.host}/api/match/ws?${query}`
 }
 
 function wsProto(): string {
   return location.protocol === 'https:' ? 'wss' : 'ws'
+}
+
+// 账号鉴权统一从持久化 token 读取（游客为空则省略），无需业务侧传入。
+function authQuery(): string {
+  return authToken.value ? `&token=${authToken.value}` : ''
+}
+
+function bearer(): Record<string, string> {
+  return authToken.value ? { Authorization: `Bearer ${authToken.value}` } : {}
 }
 
 export interface LeaderboardEntry {
@@ -91,53 +104,45 @@ export interface AuthProfile {
   emailVisibility: EmailVisibility
 }
 
-export async function authMe(token: string): Promise<AuthProfile | null> {
-  const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+export async function authMe(): Promise<AuthProfile | null> {
+  const res = await fetch('/api/auth/me', { headers: bearer() })
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`authMe failed: ${res.status}`)
   return (await res.json()) as AuthProfile
 }
 
 export async function authSetEmailVisible(
-  token: string,
   scope: keyof EmailVisibility,
   visible: boolean,
 ): Promise<void> {
   const res = await fetch('/api/auth/visibility', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', ...bearer() },
     body: JSON.stringify({ scope, visible }),
   })
   if (!res.ok) throw new Error(`authSetEmailVisible failed: ${res.status}`)
 }
 
-export async function authLogout(token: string): Promise<void> {
-  await fetch('/api/auth/logout', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function authLogout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST', headers: bearer() })
 }
 
-export async function fetchTournament(auth?: string): Promise<TournamentInfo> {
-  const res = await fetch('/api/tournament', auth ? { headers: { Authorization: `Bearer ${auth}` } } : undefined)
+export async function fetchTournament(): Promise<TournamentInfo> {
+  const res = await fetch('/api/tournament', { headers: bearer() })
   if (!res.ok) throw new Error(`fetchTournament failed: ${res.status}`)
   return (await res.json()) as TournamentInfo
 }
 
-export async function registerTournament(token: string): Promise<TournamentInfo> {
-  const res = await fetch('/api/tournament/register', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`registerTournament failed: ${res.status}`)
+async function tournamentAction(action: 'register' | 'withdraw'): Promise<TournamentInfo> {
+  const res = await fetch(`/api/tournament/${action}`, { method: 'POST', headers: bearer() })
+  if (!res.ok) throw new Error(`${action}Tournament failed: ${res.status}`)
   return (await res.json()) as TournamentInfo
 }
 
-export async function withdrawTournament(token: string): Promise<TournamentInfo> {
-  const res = await fetch('/api/tournament/withdraw', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`withdrawTournament failed: ${res.status}`)
-  return (await res.json()) as TournamentInfo
+export function registerTournament(): Promise<TournamentInfo> {
+  return tournamentAction('register')
+}
+
+export function withdrawTournament(): Promise<TournamentInfo> {
+  return tournamentAction('withdraw')
 }

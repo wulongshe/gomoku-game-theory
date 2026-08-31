@@ -21,9 +21,9 @@ async function createRoom(code: string, frame?: number, mode?: string): Promise<
   })
 }
 
-async function connect(code: string, token: string, auth?: string): Promise<Client> {
+async function connect(code: string, key: string, auth?: string): Promise<Client> {
   const res = await SELF.fetch(
-    `https://example.com/api/rooms/${code}/ws?token=${token}${auth ? `&auth=${auth}` : ''}`,
+    `https://example.com/api/rooms/${code}/ws?key=${key}${auth ? `&token=${auth}` : ''}`,
     { headers: { Upgrade: 'websocket' } },
   )
   expect(res.status).toBe(101)
@@ -61,8 +61,8 @@ async function connect(code: string, token: string, auth?: string): Promise<Clie
 
 async function startGame(code: string): Promise<[Client, Client]> {
   await createRoom(code)
-  const a = await connect(code, 'token-a')
-  const b = await connect(code, 'token-b')
+  const a = await connect(code, 'key-a')
+  const b = await connect(code, 'key-b')
   expect(await a.next('joined')).toMatchObject({ seat: 'black' })
   expect(await b.next('joined')).toMatchObject({ seat: 'white' })
   a.ready()
@@ -107,7 +107,7 @@ async function playToBlackWin(a: Client, b: Client) {
 
 describe('Room', () => {
   it('rejects joining a room that was never created', async () => {
-    const res = await SELF.fetch('https://example.com/api/rooms/9099/ws?token=token-a', {
+    const res = await SELF.fetch('https://example.com/api/rooms/9099/ws?key=key-a', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(404)
@@ -124,19 +124,19 @@ describe('Room', () => {
 
   it('keeps a waiting room alive while its creator reconnects', async () => {
     await createRoom('1018')
-    const a = await connect('1018', 'token-a')
+    const a = await connect('1018', 'key-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     a.ws.close()
-    const a2 = await connect('1018', 'token-a')
+    const a2 = await connect('1018', 'key-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
   })
 
   it('seats two players and starts once both are ready', async () => {
     await createRoom('1001')
-    const a = await connect('1001', 'token-a')
+    const a = await connect('1001', 'key-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     expect(await a.next('lobby')).toMatchObject({ present: { black: true, white: false } })
-    const b = await connect('1001', 'token-b')
+    const b = await connect('1001', 'key-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
     expect(await b.next('lobby')).toMatchObject({
       present: { black: true, white: true },
@@ -156,8 +156,8 @@ describe('Room', () => {
 
   it('runs frames at the configured duration', async () => {
     await createRoom('1020', 60)
-    const a = await connect('1020', 'token-a')
-    const b = await connect('1020', 'token-b')
+    const a = await connect('1020', 'key-a')
+    const b = await connect('1020', 'key-b')
     a.ready()
     b.ready()
     const start = await a.next('start')
@@ -169,14 +169,14 @@ describe('Room', () => {
 
   it('clears a ready flag when a player leaves before the game', async () => {
     await createRoom('1019')
-    const a = await connect('1019', 'token-a')
+    const a = await connect('1019', 'key-a')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
     a.ready()
     a.ws.close()
     await waitForEmpty(env.ROOM.get(env.ROOM.idFromName('1019')))
-    const a2 = await connect('1019', 'token-a')
+    const a2 = await connect('1019', 'key-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
-    const b = await connect('1019', 'token-b')
+    const b = await connect('1019', 'key-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
     expect(await b.next('lobby')).toMatchObject({ ready: { black: false, white: false } })
     a2.ready()
@@ -187,7 +187,7 @@ describe('Room', () => {
 
   it('rejects a third player', async () => {
     await startGame('1002')
-    const res = await SELF.fetch('https://example.com/api/rooms/1002/ws?token=token-c', {
+    const res = await SELF.fetch('https://example.com/api/rooms/1002/ws?key=key-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(409)
@@ -195,9 +195,9 @@ describe('Room', () => {
 
   it('reports a full room, except to already seated tokens', async () => {
     await startGame('1021')
-    const stranger = await SELF.fetch('https://example.com/api/rooms/1021?token=token-x')
+    const stranger = await SELF.fetch('https://example.com/api/rooms/1021?key=key-x')
     expect(await stranger.json()).toEqual({ exists: true, full: true })
-    const seated = await SELF.fetch('https://example.com/api/rooms/1021?token=token-a')
+    const seated = await SELF.fetch('https://example.com/api/rooms/1021?key=key-a')
     expect(await seated.json()).toEqual({ exists: true, full: false })
   })
 
@@ -286,8 +286,8 @@ describe('Room', () => {
 
   it('starts an untimed game with no deadline and never auto-settles', async () => {
     await createRoom('1025', 0)
-    const a = await connect('1025', 'token-a')
-    const b = await connect('1025', 'token-b')
+    const a = await connect('1025', 'key-a')
+    const b = await connect('1025', 'key-b')
     await a.next('joined')
     expect(await b.next('joined')).toMatchObject({ frameSeconds: 0 })
     a.ready()
@@ -311,8 +311,8 @@ describe('Room', () => {
 
   it('awards a race-mode collision to the earlier final submission', async () => {
     await createRoom('1026', 30, 'race')
-    const a = await connect('1026', 'token-a')
-    const b = await connect('1026', 'token-b')
+    const a = await connect('1026', 'key-a')
+    const b = await connect('1026', 'key-b')
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -428,7 +428,7 @@ describe('Room', () => {
       const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
       expect(entries.size).toBe(0)
     })
-    const res = await SELF.fetch('https://example.com/api/rooms/1016/ws?token=token-c', {
+    const res = await SELF.fetch('https://example.com/api/rooms/1016/ws?key=key-c', {
       headers: { Upgrade: 'websocket' },
     })
     expect(res.status).toBe(404)
@@ -458,7 +458,7 @@ describe('Room', () => {
     a.ws.close()
     await b.next('opponent_left')
 
-    const a2 = await connect('1009', 'token-a')
+    const a2 = await connect('1009', 'key-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     const start = await a2.next('start')
     expect(start).toMatchObject({
@@ -477,7 +477,7 @@ describe('Room', () => {
   it('replaces the old socket on reconnect without notifying the opponent', async () => {
     const [a, b] = await startGame('1010')
     const closed = new Promise<void>((resolve) => a.ws.addEventListener('close', () => resolve()))
-    const a2 = await connect('1010', 'token-a')
+    const a2 = await connect('1010', 'key-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     await a2.next('start')
     await closed
@@ -496,10 +496,10 @@ describe('Room', () => {
     await waitForEmpty(stub)
     expect(await runDurableObjectAlarm(stub)).toBe(true)
 
-    const res = await SELF.fetch('https://example.com/api/rooms/1011?token=token-a')
+    const res = await SELF.fetch('https://example.com/api/rooms/1011?key=key-a')
     expect(await res.json()).toEqual({ exists: true, full: false })
 
-    const a2 = await connect('1011', 'token-a')
+    const a2 = await connect('1011', 'key-a')
     expect(await a2.next('joined')).toMatchObject({ seat: 'black' })
     expect(await a2.next('start')).toMatchObject({ state: { frame: 1, phase: 'playing' } })
   })
@@ -529,7 +529,7 @@ describe('Room', () => {
       state.storage.put('deadline', Date.now() - 5000),
     )
 
-    const a2 = await connect('1029', 'token-a')
+    const a2 = await connect('1029', 'key-a')
     await a2.next('joined')
     const start = await a2.next('start')
     if (start.type !== 'start') throw new Error('unreachable')
@@ -539,7 +539,7 @@ describe('Room', () => {
 
   it('answers a ping frame with pong without touching the message handler', async () => {
     await createRoom('1030')
-    const res = await SELF.fetch('https://example.com/api/rooms/1030/ws?token=token-a', {
+    const res = await SELF.fetch('https://example.com/api/rooms/1030/ws?key=key-a', {
       headers: { Upgrade: 'websocket' },
     })
     const ws = res.webSocket!
@@ -622,7 +622,7 @@ describe('account seat recovery', () => {
     // 非参赛账号无法占座（防串场/抢座）。
     const z = await sessionFor('tourn-z@example.com')
     const stranger = await SELF.fetch(
-      `https://example.com/api/rooms/${code}/ws?token=tok-z&auth=${z}`,
+      `https://example.com/api/rooms/${code}/ws?key=tok-z&token=${z}`,
       { headers: { Upgrade: 'websocket' } },
     )
     expect(stranger.status).toBe(403)
@@ -659,7 +659,7 @@ describe('account seat recovery', () => {
     const session = await sessionFor('seat@example.com')
     const a = await connect('2001', 'device-1', session)
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
-    const b = await connect('2001', 'token-b')
+    const b = await connect('2001', 'key-b')
     expect(await b.next('joined')).toMatchObject({ seat: 'white' })
 
     const closed = new Promise<{ reason: string }>((resolve) =>
@@ -674,26 +674,26 @@ describe('account seat recovery', () => {
     await createRoom('2002')
     const session = await sessionFor('seat2@example.com')
     ;(await connect('2002', 'device-1', session)).ready()
-    ;(await connect('2002', 'token-b')).ready()
+    ;(await connect('2002', 'key-b')).ready()
 
-    const stranger = await SELF.fetch('https://example.com/api/rooms/2002/ws?token=stranger', {
+    const stranger = await SELF.fetch('https://example.com/api/rooms/2002/ws?key=stranger', {
       headers: { Upgrade: 'websocket' },
     })
     expect(stranger.status).toBe(409)
 
-    const guest = await SELF.fetch('https://example.com/api/rooms/2002?token=stranger')
+    const guest = await SELF.fetch('https://example.com/api/rooms/2002?key=stranger')
     expect(await guest.json()).toEqual({ exists: true, full: true })
     const owner = await SELF.fetch(
-      `https://example.com/api/rooms/2002?token=device-2&auth=${session}`,
+      `https://example.com/api/rooms/2002?key=device-2&token=${session}`,
     )
     expect(await owner.json()).toEqual({ exists: true, full: false })
   })
 
   it('ignores an invalid auth token and falls back to guest behavior', async () => {
     await createRoom('2003')
-    const a = await connect('2003', 'token-a', 'bogus-session')
+    const a = await connect('2003', 'key-a', 'bogus-session')
     expect(await a.next('joined')).toMatchObject({ seat: 'black' })
-    const again = await connect('2003', 'token-a', 'bogus-session')
+    const again = await connect('2003', 'key-a', 'bogus-session')
     expect(await again.next('joined')).toMatchObject({ seat: 'black' })
   })
 
@@ -701,8 +701,8 @@ describe('account seat recovery', () => {
     await createRoom('2005')
     const winner = await sessionFor('winner@example.com')
     const loser = await sessionFor('loser@example.com')
-    const a = await connect('2005', 'token-a', winner)
-    const b = await connect('2005', 'token-b', loser)
+    const a = await connect('2005', 'key-a', winner)
+    const b = await connect('2005', 'key-b', loser)
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -726,8 +726,8 @@ describe('account seat recovery', () => {
   it('records a resignation as a loss, skipping guest opponents', async () => {
     await createRoom('2006')
     const session = await sessionFor('quitter@example.com')
-    const a = await connect('2006', 'token-a', session)
-    const b = await connect('2006', 'token-b')
+    const a = await connect('2006', 'key-a', session)
+    const b = await connect('2006', 'key-b')
     await a.next('joined')
     await b.next('joined')
     a.ready()
@@ -758,7 +758,7 @@ describe('account seat recovery', () => {
       type: 'players',
       accounts: { black: 'in***@example.com', white: null },
     })
-    const b = await connect('2004', 'token-b')
+    const b = await connect('2004', 'key-b')
     expect(await b.next('players')).toEqual({
       type: 'players',
       accounts: { black: 'in***@example.com', white: null },

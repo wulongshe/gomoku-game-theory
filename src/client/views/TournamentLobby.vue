@@ -10,7 +10,7 @@ import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/constants/branding'
 import { maskEmail, type TournamentInfo } from '@/shared/protocol'
 
-const { token, email, loggedIn } = useAuth()
+const { email, loggedIn } = useAuth()
 const info = ref<TournamentInfo | null>(null)
 const loading = ref(true)
 
@@ -21,7 +21,7 @@ const roundLeft = useCountdown(roundDeadline)
 
 async function load() {
   try {
-    const data = await fetchTournament(token.value || undefined)
+    const data = await fetchTournament()
     info.value = data
     startDeadline.value = Date.now() + (data.startsAt - data.now)
     roundDeadline.value =

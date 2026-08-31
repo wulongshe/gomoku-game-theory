@@ -7,9 +7,10 @@ import {
   type AuthSession,
   type EmailVisibility,
 } from '~/apis'
-import { ROOM_TOKEN_PREFIX } from '~/constants/storage'
+import { useAuthToken } from '~/composables/useAuthToken'
+import { ROOM_KEY_PREFIX } from '~/constants/storage'
 
-const token = useStorage('auth-token', '')
+const token = useAuthToken()
 const email = useStorage('auth-email', '')
 const emailVisibility = ref<EmailVisibility>({ leaderboard: false, game: false })
 
@@ -25,7 +26,7 @@ export function useAuth() {
   async function refresh() {
     if (!token.value) return
     try {
-      const profile = await authMe(token.value)
+      const profile = await authMe()
       if (profile === null) {
         token.value = ''
         email.value = ''
@@ -39,19 +40,19 @@ export function useAuth() {
   async function setEmailVisible(scope: keyof EmailVisibility, visible: boolean) {
     emailVisibility.value = { ...emailVisibility.value, [scope]: visible }
     try {
-      await authSetEmailVisible(token.value, scope, visible)
+      await authSetEmailVisible(scope, visible)
     } catch {
       emailVisibility.value = { ...emailVisibility.value, [scope]: !visible }
     }
   }
 
   async function logout() {
-    if (token.value) await authLogout(token.value).catch(() => {})
+    if (token.value) await authLogout().catch(() => {})
     token.value = ''
     email.value = ''
     emailVisibility.value = { leaderboard: false, game: false }
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith(ROOM_TOKEN_PREFIX)) localStorage.removeItem(key)
+      if (key.startsWith(ROOM_KEY_PREFIX)) localStorage.removeItem(key)
     }
   }
 

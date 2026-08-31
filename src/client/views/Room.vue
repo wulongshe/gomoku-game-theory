@@ -29,7 +29,7 @@ import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
 import { MODE_LABELS } from '~/constants/branding'
-import { ROOM_TOKEN_PREFIX } from '~/constants/storage'
+import { ROOM_KEY_PREFIX } from '~/constants/storage'
 import {
   FRAME_SECONDS,
   isLegalChoice,
@@ -94,12 +94,12 @@ function showToast(message: string) {
   toastTimer = setTimeout(() => (toast.value = ''), 3000)
 }
 
-const token = useStorage(`${ROOM_TOKEN_PREFIX}${props.code}`, nanoid())
-const { token: authToken, refresh: refreshAuth } = useAuth()
+const key = useStorage(`${ROOM_KEY_PREFIX}${props.code}`, nanoid())
+const { refresh: refreshAuth } = useAuth()
 refreshAuth()
 
-function forgetToken() {
-  localStorage.removeItem(`${ROOM_TOKEN_PREFIX}${props.code}`)
+function forgetKey() {
+  localStorage.removeItem(`${ROOM_KEY_PREFIX}${props.code}`)
 }
 let replaced = false
 let everOpened = false
@@ -107,7 +107,7 @@ const {
   send,
   open,
   status: wsStatus,
-} = useWebSocket(roomWsUrl(props.code, token.value, authToken.value || undefined), {
+} = useWebSocket(roomWsUrl(props.code, key.value), {
   immediate: false,
   heartbeat: {
     message: 'ping',
@@ -129,7 +129,7 @@ const {
     if (event.reason === 'replaced by reconnect') replaced = true
     if (event.reason === 'room closed') {
       roomClosed.value = true
-      forgetToken()
+      forgetKey()
     }
     if (stage.value === 'over') return
     stage.value = replaced || roomClosed.value ? 'error' : 'connecting'
@@ -151,12 +151,12 @@ useEventListener(window, 'online', reopenIfDead)
 onMounted(async () => {
   let status = { exists: true, full: false }
   try {
-    status = await roomStatus(props.code, token.value, authToken.value || undefined)
+    status = await roomStatus(props.code, key.value)
   } catch {}
   if (!status.exists) {
     notFound.value = true
     stage.value = 'error'
-    forgetToken()
+    forgetKey()
     homeDeadline.value = Date.now() + 5000
   } else if (status.full) {
     roomFull.value = true
@@ -251,7 +251,7 @@ function handleMessage(msg: ServerMessage) {
       break
     case 'room_closed':
       roomClosed.value = true
-      forgetToken()
+      forgetKey()
       break
     case 'rematch_requested':
       rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
@@ -450,7 +450,7 @@ function reload() {
 
 function exitRoom() {
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
-  forgetToken()
+  forgetKey()
   setTimeout(() => location.assign('/'), 150)
 }
 </script>
