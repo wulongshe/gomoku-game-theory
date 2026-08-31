@@ -11,7 +11,12 @@ import {
 } from '@gomoku/engine/game'
 import { searchBestMove } from '@gomoku/engine/mcts'
 import type { Difficulty } from '@gomoku/engine/ai'
-import { maskEmail, parseClientMessage, type ServerMessage } from '@/shared/protocol'
+import {
+  maskEmail,
+  parseClientMessage,
+  tournamentFrameSeconds,
+  type ServerMessage,
+} from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -291,6 +296,10 @@ export class Room extends DurableObject<Env> {
   }
 
   private async scheduleFrame(game: GameState, frameSeconds: number): Promise<number | null> {
+    // 大赛对局逐帧变时限（10s 起步、渐宽到 30s），无视房间的固定帧长。
+    if (await this.ctx.storage.get<TournamentTag>('tournament')) {
+      frameSeconds = tournamentFrameSeconds(game.frame)
+    }
     const frameStart = Date.now()
     let deadline: number | null = null
     if (frameSeconds === 0) {

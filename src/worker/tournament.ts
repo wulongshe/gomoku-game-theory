@@ -9,10 +9,9 @@ import {
 import { allocateRoom } from './roomCode'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
-// 单轮时限按每回合时长给足约 40 帧预算（和棋门槛 30 帧须在轮内可达）。
-const ROUND_MS = 20 * 60_000
+const ROUND_MS = 10 * 60_000
 const FORFEIT_MS = 3 * 60_000 // 每轮开始后未进场判弃权的时限
-const TFRAME = 30
+const TFRAME = 15
 const TMODE = 'forbidden'
 const MIN_DRAW_MOVES = 30 // 和棋计分所需最少步数（game.frame）
 const SKEW_MS = 1000
@@ -294,7 +293,9 @@ export class Tournament extends DurableObject<Env> {
       const present = (p.players.filter((e) => e !== null) as string[]).filter((e) =>
         p.checkedIn.includes(e),
       )
-      if (present.length === 1) p.result = present[0] === p.players[0] ? 'a' : 'b'
+      // 双方都在场却没下完 → 轮时到判平；仅一方到场轮空胜；都没来作废。
+      if (present.length === 2) p.result = 'draw'
+      else if (present.length === 1) p.result = present[0] === p.players[0] ? 'a' : 'b'
       else p.result = 'void'
       this.applyResult(s, p)
     }

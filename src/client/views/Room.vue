@@ -40,7 +40,7 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import { type ClientMessage, type ServerMessage } from '@/shared/protocol'
+import { tournamentFrameSeconds, type ClientMessage, type ServerMessage } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
@@ -195,7 +195,8 @@ function handleMessage(msg: ServerMessage) {
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now() - msg.elapsed
-      frameSeconds.value = msg.frameSeconds
+      // 大赛对局逐帧变时限，进度条分母跟随当前帧（与 Room DO 的 scheduleFrame 一致）。
+      frameSeconds.value = tournament.value ? tournamentFrameSeconds(msg.state.frame) : msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
@@ -219,6 +220,7 @@ function handleMessage(msg: ServerMessage) {
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
+      if (tournament.value) frameSeconds.value = tournamentFrameSeconds(msg.state.frame)
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now()
       selected.value = null

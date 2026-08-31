@@ -636,7 +636,11 @@ describe('account seat recovery', () => {
     expect(await a.next('joined')).toMatchObject({ seat: 'white', tournament: true })
     b.ready()
     a.ready()
-    await b.next('start')
+    const start = await b.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    // 大赛对局逐帧变时限：首帧 10s，而非建房时的固定 15s。
+    expect(start.deadline).not.toBeNull()
+    expect(start.deadline! - Date.now()).toBeLessThanOrEqual(10_000)
     await a.next('start')
     const settled = await playToBlackWin(b, a)
     expect(settled.state.phase).toBe('black_won')

@@ -1,5 +1,6 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
+import { tournamentFrameSeconds } from '@/shared/protocol'
 import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
 
 const NEUTRAL = () => 0.5
@@ -142,6 +143,16 @@ describe('pairRound', () => {
   })
 })
 
+describe('tournamentFrameSeconds', () => {
+  it('starts at 10s, ramps 1s per frame after frame 5, caps at 30s', () => {
+    expect(tournamentFrameSeconds(1)).toBe(10)
+    expect(tournamentFrameSeconds(5)).toBe(10)
+    expect(tournamentFrameSeconds(6)).toBe(11)
+    expect(tournamentFrameSeconds(25)).toBe(30)
+    expect(tournamentFrameSeconds(45)).toBe(30)
+  })
+})
+
 describe('nextDailyStart', () => {
   it('targets the next 12:00 UTC (20:00 北京时间)', () => {
     expect(nextDailyStart(Date.UTC(2026, 0, 1, 10))).toBe(Date.UTC(2026, 0, 1, 12))
@@ -212,6 +223,24 @@ describe('Tournament DO', () => {
     expect(s.players[p0.players[1]!].score).toBe(0)
     expect(s.players[p1.players[0]!].score).toBe(0.5)
     expect(s.players[p1.players[1]!].score).toBe(0.5)
+  })
+
+  it('draws an unfinished game between two present players at the round deadline', async () => {
+    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
+    await fireStart()
+    const [p0] = (await read()).pairings
+    await stub().checkIn({ code: p0.code!, email: p0.players[0]! })
+    await stub().checkIn({ code: p0.code!, email: p0.players[1]! })
+    await runInDurableObject(stub(), async (_i, state) => {
+      const t = (await state.storage.get<TState>('t'))!
+      t.roundDeadline = Date.now() - 10_000
+      await state.storage.put('t', t)
+      await state.storage.setAlarm(Date.now() - 1)
+    })
+    await runDurableObjectAlarm(stub())
+    const s = await read()
+    expect(s.players[p0.players[0]!].score).toBe(0.5)
+    expect(s.players[p0.players[1]!].score).toBe(0.5)
   })
 
   it('awards a walkover to the only player who checked in', async () => {

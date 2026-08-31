@@ -11,6 +11,11 @@ export const ROOM_CODE_PATTERN = /^\d{4,8}$/
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 8
 
+// 大赛对局逐帧时限：开局快节奏，中盘逐帧放宽到 30s 封顶（前 5 帧 10s，之后每帧 +1s）。
+export function tournamentFrameSeconds(frame: number): number {
+  return Math.min(30, Math.max(10, 10 + frame - 5))
+}
+
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
   const visible = local.length > 2 ? local.slice(0, 2) : local.slice(0, 1)
