@@ -1,326 +1,154 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import Board from '@/components/Board.vue'
-import { aiMove } from '@/game/ai'
-import {
-  DEFAULT_HELL_STRENGTH,
-  DIFFICULTY_LABELS,
-  DIFFICULTY_OPTIONS,
-  MODE_LABELS,
-  MODE_OPTIONS,
-} from '@/game/constants'
-import { loadGame, saveGame } from '@/game/storage'
-import type { Difficulty } from '@gomoku/engine/ai'
-import { createGame, isLegalChoice, settleFrame, type GameMode, type Point } from '@gomoku/engine/game'
+import { ref } from 'vue'
+import Taro, { useShareAppMessage } from '@tarojs/taro'
+import ConfigDialog, { type GameConfig } from '@/components/ConfigDialog.vue'
+import RulesDialog from '@/components/RulesDialog.vue'
+import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 
-const mode = ref<GameMode>('forbidden')
-const difficulty = ref<Difficulty>('normal')
+useShareAppMessage(() => ({
+  title: `${TITLE}｜${TAGLINE}`,
+  path: '/pages/index/index',
+}))
 
-// 棋力滑条只对地狱难度生效；引擎读心置信度 read = 棋力 - 0.05（5% 即纯盲搜）。
-const strength = ref(DEFAULT_HELL_STRENGTH)
-const strengthPercent = ref(Math.round(strength.value * 100))
-const engineRead = computed(() => Math.max(0, strength.value - 0.05))
+const RULES = rules('ai')
+const showConfig = ref(false)
+const showRules = ref(false)
 
-const game = ref(loadGame(mode.value) ?? createGame(mode.value))
-const selected = ref<Point | null>(null)
-const thinking = ref(false)
-const resolving = ref(false)
-
-const playing = computed(() => game.value.phase === 'playing')
-const isHell = computed(() => difficulty.value === 'hell')
-
-const result = computed(() => {
-  switch (game.value.phase) {
-    case 'black_won':
-      return '你赢了'
-    case 'white_won':
-      return 'AI 获胜'
-    case 'draw':
-      return '和棋'
-    default:
-      return ''
-  }
-})
-
-const statusText = computed(() => {
-  if (!playing.value) return '对局结束'
-  if (resolving.value || thinking.value) return 'AI 思考中'
-  return selected.value ? '待提交' : '请落子'
-})
-const statusClass = computed(() => {
-  if (!playing.value) return 'dot-off'
-  if (resolving.value || thinking.value) return 'dot-think'
-  return 'dot-ready'
-})
-
-function onSelect(point: Point): void {
-  if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
-  selected.value = point
-}
-
-function nextTickPaint(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 24))
-}
-
-async function submit(): Promise<void> {
-  if (!playing.value || !selected.value || resolving.value) return
-  resolving.value = true
-  thinking.value = true
-  await nextTickPaint()
-  const white = aiMove(
-    game.value,
-    difficulty.value,
-    isHell.value ? selected.value : null,
-    isHell.value ? engineRead.value : 0,
-  )
-  const next = settleFrame(game.value, {
-    black: selected.value,
-    white,
-    first: Math.random() < 0.5 ? 'black' : 'white',
+function start(config: GameConfig): void {
+  showConfig.value = false
+  Taro.navigateTo({
+    url: `/pages/game/index?mode=${config.mode}&level=${config.difficulty}&strength=${config.strength}`,
   })
-  game.value = next
-  selected.value = null
-  thinking.value = false
-  resolving.value = false
-  saveGame(next)
-}
-
-function restart(): void {
-  game.value = createGame(mode.value)
-  selected.value = null
-  resolving.value = false
-  thinking.value = false
-  saveGame(game.value)
-}
-
-function pickDifficulty(d: Difficulty): void {
-  if (d === difficulty.value) return
-  difficulty.value = d
-  restart()
-}
-
-function pickMode(m: GameMode): void {
-  if (m === mode.value) return
-  mode.value = m
-  restart()
-}
-
-type SliderEvent = { detail: { value: number } }
-function onStrengthChanging(e: SliderEvent): void {
-  strengthPercent.value = e.detail.value
-}
-function onStrengthChange(e: SliderEvent): void {
-  strengthPercent.value = e.detail.value
-  strength.value = e.detail.value / 100
-  restart()
 }
 </script>
 
 <template>
   <view class="page">
-    <view class="head">
-      <view class="seat">
-        <view class="mini-stone" />
-        <text>你执黑</text>
+    <text class="rules-entry" @tap="showRules = true">? 游戏规则</text>
+
+    <view class="hero">
+      <view class="stones">
+        <view class="stone stone-black" />
+        <view class="stone stone-white" />
       </view>
-      <text class="vs">
-        AI · {{ DIFFICULTY_LABELS[difficulty]
-        }}<text v-if="isHell"> · {{ strengthPercent }}%</text>
-      </text>
-      <text class="mode">{{ MODE_LABELS[mode] }}模式</text>
+      <text class="title">{{ TITLE }}</text>
+      <text class="tagline">{{ TAGLINE }}</text>
+      <text class="subtitle">{{ SUBTITLE }}</text>
     </view>
 
-    <view class="status">
-      <text>第 {{ game.frame }} 回合</text>
-      <text class="dot" :class="statusClass">{{ statusText }}</text>
-    </view>
-
-    <Board
-      :state="game"
-      :selected="selected"
-      :last-moves="game.lastMoves"
-      :interactive="playing && !resolving"
-      @select="onSelect"
-    />
-
-    <view v-if="playing" class="actions">
-      <view
-        class="btn btn-primary"
-        :class="{ 'btn-disabled': !selected || resolving }"
-        @tap="submit"
-      >
-        {{ resolving ? 'AI 结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
-      </view>
-    </view>
-    <view v-else class="actions">
-      <text class="result">{{ result }}</text>
-      <view class="btn btn-primary" @tap="restart">再来一局</view>
-    </view>
-
-    <view class="picker">
-      <text class="picker-label">难度</text>
-      <view class="chips">
-        <view
-          v-for="d in DIFFICULTY_OPTIONS"
-          :key="d"
-          class="chip"
-          :class="{ 'chip-on': d === difficulty }"
-          @tap="pickDifficulty(d)"
-        >
-          {{ DIFFICULTY_LABELS[d] }}
+    <view class="cards">
+      <view v-for="rule in RULES" :key="rule.title" class="card">
+        <view class="card-icon">{{ rule.icon }}</view>
+        <view class="card-body">
+          <text class="card-title">{{ rule.title }}</text>
+          <text class="card-text">{{ rule.text }}</text>
         </view>
       </view>
     </view>
 
-    <view v-if="isHell" class="picker">
-      <text class="picker-label">棋力</text>
-      <slider
-        class="slider"
-        :min="5"
-        :max="100"
-        :step="5"
-        :value="strengthPercent"
-        active-color="#1c1917"
-        block-size="20"
-        @changing="onStrengthChanging"
-        @change="onStrengthChange"
-      />
-      <text class="picker-val">{{ strengthPercent }}%</text>
-    </view>
+    <view class="btn btn-primary" @tap="showConfig = true">人机对战</view>
 
-    <view class="picker">
-      <text class="picker-label">模式</text>
-      <view class="chips">
-        <view
-          v-for="m in MODE_OPTIONS"
-          :key="m"
-          class="chip"
-          :class="{ 'chip-on': m === mode }"
-          @tap="pickMode(m)"
-        >
-          {{ MODE_LABELS[m] }}
-        </view>
-      </view>
-    </view>
+    <ConfigDialog v-if="showConfig" @cancel="showConfig = false" @confirm="start" />
+
+    <RulesDialog v-if="showRules" @close="showRules = false" />
   </view>
 </template>
 
 <style>
 .page {
-  padding: 24rpx;
+  position: relative;
+  min-height: 100vh;
+  padding: 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 56rpx;
+  box-sizing: border-box;
+}
+.rules-entry {
+  position: absolute;
+  top: 24rpx;
+  right: 48rpx;
+  padding: 16rpx;
+  font-size: 26rpx;
+  color: #a8a29e;
+}
+.hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20rpx;
 }
-.head {
-  width: 690rpx;
+.stones {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 26rpx;
-  color: #57534e;
 }
-.seat {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  color: #292524;
-  font-weight: 600;
-}
-.mini-stone {
-  width: 22rpx;
-  height: 22rpx;
+.stone {
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
-  background: #1c1917;
+  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.2);
 }
-.vs {
-  background: rgba(255, 255, 255, 0.7);
-  padding: 4rpx 16rpx;
-  border-radius: 999rpx;
+.stone-black {
+  background: radial-gradient(circle at 35% 30%, #57534e, #1c1917);
 }
-.mode {
-  color: #78716c;
+.stone-white {
+  background: radial-gradient(circle at 35% 30%, #ffffff, #d6d3d1);
+  margin-left: -16rpx;
 }
-.status {
-  width: 690rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 26rpx;
+.title {
+  font-size: 52rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  color: #292524;
+}
+.tagline {
+  font-size: 30rpx;
+  font-weight: 500;
   color: #57534e;
 }
-.dot-think {
-  color: #b45309;
-}
-.dot-ready {
-  color: #047857;
-}
-.dot-off {
+.subtitle {
+  font-size: 26rpx;
   color: #78716c;
 }
-.actions {
-  width: 690rpx;
+.cards {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
-}
-.result {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #292524;
-}
-.btn {
-  width: 100%;
-  text-align: center;
-  padding: 24rpx 0;
-  border-radius: 16rpx;
-  font-size: 30rpx;
-}
-.btn-primary {
-  background: #1c1917;
-  color: #fafaf9;
-}
-.btn-disabled {
-  background: #d6d3d1;
-  color: #a8a29e;
-}
-.picker {
-  width: 690rpx;
-  display: flex;
-  align-items: center;
   gap: 16rpx;
-  font-size: 26rpx;
 }
-.picker-label {
-  color: #78716c;
-  width: 80rpx;
+.card {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  padding: 28rpx 36rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
-.slider {
-  flex: 1;
-  margin: 0;
-}
-.picker-val {
+.card-icon {
   width: 72rpx;
-  text-align: right;
+  height: 72rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(217, 180, 130, 0.3);
+  font-size: 32rpx;
+}
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.card-title {
+  font-size: 28rpx;
+  font-weight: 600;
   color: #292524;
 }
-.chips {
-  display: flex;
-  gap: 12rpx;
-  flex-wrap: wrap;
-}
-.chip {
-  padding: 10rpx 24rpx;
-  border-radius: 999rpx;
-  background: #ffffff;
-  color: #57534e;
-  border: 1px solid #e7e5e4;
-}
-.chip-on {
-  background: #1c1917;
-  color: #fafaf9;
-  border-color: #1c1917;
+.card-text {
+  font-size: 24rpx;
+  color: #78716c;
 }
 </style>

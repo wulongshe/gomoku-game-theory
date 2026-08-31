@@ -1,5 +1,5 @@
 export default defineAppConfig({
-  pages: ['pages/index/index'],
+  pages: ['pages/index/index', 'pages/game/index'],
   window: {
     navigationBarTitleText: '博弈五子棋',
     navigationBarBackgroundColor: '#f5f5f4',
