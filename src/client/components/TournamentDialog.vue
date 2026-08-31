@@ -101,9 +101,6 @@ const buttonVariant = computed(() =>
           <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
             {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 20:00 · 已报名 ${info.playerCount} 人` }}
           </p>
-          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-            每轮开始后 3 分钟未准备视为弃权
-          </p>
         </template>
       </div>
 
@@ -115,6 +112,10 @@ const buttonVariant = computed(() =>
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
         瑞士轮积分赛 · 报名后到点自动配对开赛
+      </p>
+
+      <p v-if="info.registered" class="text-center text-xs text-stone-400 dark:text-stone-500">
+        每轮开始后 3 分钟未准备视为弃权
       </p>
 
       <p v-if="!loggedIn" class="text-center text-xs text-amber-600 dark:text-amber-400">
