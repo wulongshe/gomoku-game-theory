@@ -9,9 +9,10 @@ import {
 import { allocateRoom } from './roomCode'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
-const ROUND_MS = 10 * 60_000
+// 单轮时限按每回合时长给足约 40 帧预算（和棋门槛 30 帧须在轮内可达）。
+const ROUND_MS = 20 * 60_000
 const FORFEIT_MS = 3 * 60_000 // 每轮开始后未进场判弃权的时限
-const TFRAME = 15
+const TFRAME = 30
 const TMODE = 'forbidden'
 const MIN_DRAW_MOVES = 30 // 和棋计分所需最少步数（game.frame）
 const SKEW_MS = 1000
