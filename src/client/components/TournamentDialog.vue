@@ -110,10 +110,12 @@ const buttonVariant = computed(() =>
     </div>
 
     <template #footer>
-      <DialogButton :variant="buttonVariant" @click="act">
-        <IconSpinner v-if="busy" class="size-4" />
-        {{ buttonText }}
-      </DialogButton>
+      <div class="-mx-3 flex flex-col">
+        <DialogButton :variant="buttonVariant" @click="act">
+          <IconSpinner v-if="busy" class="size-4" />
+          {{ buttonText }}
+        </DialogButton>
+      </div>
     </template>
   </AppDialog>
 </template>

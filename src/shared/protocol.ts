@@ -59,7 +59,10 @@ export interface Standing {
   email: string
   score: number
   played: number
+  status?: PlayerStatus // 仅实时积分下发：本轮对局中/等待中/已离开
 }
+
+export type PlayerStatus = 'playing' | 'waiting' | 'left'
 
 export interface Match {
   a: string

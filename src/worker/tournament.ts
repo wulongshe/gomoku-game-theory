@@ -1,5 +1,11 @@
 import { DurableObject } from 'cloudflare:workers'
-import { maskEmail, type Match, type Standing, type TournamentInfo } from '@/shared/protocol'
+import {
+  maskEmail,
+  type Match,
+  type PlayerStatus,
+  type Standing,
+  type TournamentInfo,
+} from '@/shared/protocol'
 import { allocateRoom } from './roomCode'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
@@ -298,6 +304,29 @@ export class Tournament extends DurableObject<Env> {
       .map(({ email, score, played }) => ({ email, score, played }))
   }
 
+  // 按本轮配对推断每人状态：未出结果时到场即对局中、未到场为等待中；
+  // 已出结果时到过场的等下一轮，整轮没露面的视为已离开（轮空照常等待）。
+  private playerStatuses(s: TournamentState): Map<string, PlayerStatus> {
+    const statuses = new Map<string, PlayerStatus>()
+    for (const p of s.pairings) {
+      for (const email of p.players) {
+        if (email === null) continue
+        const arrived = p.checkedIn.includes(email)
+        statuses.set(
+          email,
+          p.result === 'bye' || (p.result !== null && arrived)
+            ? 'waiting'
+            : p.result === null
+              ? arrived
+                ? 'playing'
+                : 'waiting'
+              : 'left',
+        )
+      }
+    }
+    return statuses
+  }
+
   private async displayNames(emails: string[]): Promise<Map<string, string>> {
     try {
       const display = await this.env.ACCOUNTS.get(
@@ -331,6 +360,7 @@ export class Tournament extends DurableObject<Env> {
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
     const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
+    const statuses = s.state === 'active' ? this.playerStatuses(s) : null
     return {
       state: s.state,
       now,
@@ -342,7 +372,11 @@ export class Tournament extends DurableObject<Env> {
       participating,
       myGame: myGame ? { code: myGame } : null,
       roundDeadline: s.roundDeadline,
-      standings: standings.map((row) => ({ ...row, email: shown(row.email) })),
+      standings: standings.map((row) => ({
+        ...row,
+        email: shown(row.email),
+        ...(statuses && { status: statuses.get(row.email) ?? 'waiting' }),
+      })),
       me: meIndex < 0 ? null : meIndex,
       rounds: rounds.map((r) => r.map((m) => ({ ...m, a: shown(m.a), b: m.b && shown(m.b) }))),
     }
