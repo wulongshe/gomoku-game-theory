@@ -11,6 +11,7 @@ function player(email: string, over: Partial<SwissPlayer> = {}): SwissPlayer {
 
 interface TState {
   state: string
+  startedAt?: number
   round: number
   totalRounds: number
   roundDeadline: number | null
@@ -282,6 +283,17 @@ describe('Tournament DO', () => {
     expect(s.pairings.find((p) => p.code === p1.code)?.result).toBe('a')
     expect(s.players[p1.players[0]!].score).toBe(1)
     expect(s.players[p1.players[1]!].score).toBe(0)
+  })
+
+  it('keeps the next round on the fixed grid after an early finish', async () => {
+    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
+    await fireStart()
+    const first = await read()
+    await resolveRound(1) // 第 1 轮瞬间打完，第 2 轮立即开启
+    const s = await read()
+    expect(s.round).toBe(2)
+    // 第 2 轮的截止仍是名义网格（开赛+20min），而非提前开轮时点+10min。
+    expect(s.roundDeadline).toBe(first.startedAt! + 2 * 600_000)
   })
 
   it('no-ops a superseded round alarm instead of voiding the new round', async () => {

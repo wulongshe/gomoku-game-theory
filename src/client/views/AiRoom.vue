@@ -87,7 +87,7 @@ const configDifficulty = ref<Difficulty>(difficulty.value)
 const configStrength = ref(strength.value)
 
 const responds = computed(() => difficulty.value === 'hell')
-const difficultyPercent = computed(() => Math.round(strength.value * 100))
+const strengthPoints = computed(() => Math.round(strength.value * 100))
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
@@ -239,7 +239,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </span>
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
-          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ difficultyPercent }}%</template>
+          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ strengthPoints }}点</template>
           <button
             class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
             aria-label="退出对局"

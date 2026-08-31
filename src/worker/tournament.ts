@@ -42,6 +42,7 @@ export interface Pairing {
 
 interface TournamentState {
   state: TState
+  startedAt: number // 本届开赛时点：轮次网格锚点（第 N 轮名义起点 = startedAt + (N-1)*ROUND_MS）
   round: number
   totalRounds: number
   roundDeadline: number | null
@@ -55,6 +56,7 @@ interface TournamentState {
 function defaultState(): TournamentState {
   return {
     state: 'idle',
+    startedAt: 0,
     round: 0,
     totalRounds: 0,
     roundDeadline: null,
@@ -263,6 +265,7 @@ export class Tournament extends DurableObject<Env> {
     for (const email of s.registrations) s.players[email] = { score: 0, opponents: [], byes: 0 }
     s.registrations = []
     s.past = []
+    s.startedAt = Date.now()
     s.round = 1
     s.totalRounds = Math.max(1, Math.ceil(Math.log2(Object.keys(s.players).length)))
     s.state = 'active'
@@ -342,7 +345,9 @@ export class Tournament extends DurableObject<Env> {
       }
     }
     s.pairings = pairings
-    s.roundDeadline = Date.now() + ROUND_MS
+    // 轮次挂在固定网格上：上一轮提前收轮只是让本轮提前可下，弃权点（名义开轮+3min）
+    // 与截止（名义开轮+10min）不前移，即固定在 20:03/20:13/… 与 20:10/20:20/…。
+    s.roundDeadline = s.startedAt + s.round * ROUND_MS
     // 先在弃权检查点醒来，届时再把闹钟拨到本轮截止。
     await this.ctx.storage.setAlarm(s.roundDeadline - ROUND_MS + FORFEIT_MS)
   }
@@ -476,6 +481,7 @@ export class Tournament extends DurableObject<Env> {
       const s = { ...(await this.load()), ...input }
       if (s.state === 'active') {
         s.roundDeadline = Date.now() + ROUND_MS
+        s.startedAt = s.roundDeadline - s.round * ROUND_MS
         await this.ctx.storage.setAlarm(Date.now() + FORFEIT_MS)
       } else {
         s.roundDeadline = null
@@ -495,6 +501,8 @@ export class Tournament extends DurableObject<Env> {
   private async load(): Promise<TournamentState> {
     const s = (await this.ctx.storage.get<TournamentState>('t')) ?? defaultState()
     s.past ??= []
+    // 旧状态没有网格锚点时按当前轮的截止反推，保证进行中的一届无缝续跑。
+    s.startedAt ??= (s.roundDeadline ?? Date.now()) - s.round * ROUND_MS
     return s
   }
 

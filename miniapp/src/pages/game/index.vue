@@ -47,7 +47,7 @@ const showConfig = ref(false)
 
 const playing = computed(() => game.value.phase === 'playing')
 const isHell = computed(() => difficulty.value === 'hell')
-const strengthPercent = computed(() => Math.round(strength.value * 100))
+const strengthPoints = computed(() => Math.round(strength.value * 100))
 
 // 帧正计时（人机恒不限时，Ns/∞），随每帧重置。
 const now = ref(Date.now())
@@ -158,7 +158,7 @@ function exitGame(): void {
       </view>
       <text class="vs">
         AI · {{ DIFFICULTY_LABELS[difficulty]
-        }}<text v-if="isHell"> · {{ strengthPercent }}%</text>
+        }}<text v-if="isHell"> · {{ strengthPoints }}点</text>
       </text>
       <text class="mode" @tap="showRules = true">{{ MODE_LABELS[mode] }}模式 ?</text>
     </view>
