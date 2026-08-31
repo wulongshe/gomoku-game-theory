@@ -12,12 +12,17 @@ export interface MatchOptions {
 
 interface Waiter extends MatchOptions {
   joinedAt: number
+  aiAt: number
 }
 
 // 允许的初始分差，等待越久放得越宽，直到能与任何人成局。
 const BASE_TOLERANCE = 120
 const WIDEN_PER_SEC = 40
 const RECHECK_MS = 3000
+
+// 久等无人时悄悄换 AI 顶替，每人到点时间在区间内随机，避免固定时长露馅。
+const AI_FALLBACK_MIN_MS = 30_000
+const AI_FALLBACK_MAX_MS = 60_000
 
 export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
   const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]
@@ -69,7 +74,10 @@ export class Lobby extends DurableObject<Env> {
     }
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
-    pair[1].serializeAttachment({ ...options, joinedAt: Date.now() } satisfies Waiter)
+    const joinedAt = Date.now()
+    const aiAt =
+      joinedAt + AI_FALLBACK_MIN_MS + Math.random() * (AI_FALLBACK_MAX_MS - AI_FALLBACK_MIN_MS)
+    pair[1].serializeAttachment({ ...options, joinedAt, aiAt } satisfies Waiter)
     await this.matchWaiting()
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
@@ -128,14 +136,27 @@ export class Lobby extends DurableObject<Env> {
       }
     }
 
-    // 仍有选项相容却暂时分差过大的组合时，定时放宽后重试。
+    // 到点仍没匹配上的，分一间 AI 房顶替真人（消息与真人匹配完全一致）。
+    for (const { ws, opts } of waiting) {
+      if (used.has(ws) || now < opts.aiAt) continue
+      used.add(ws)
+      const { frame, mode } = pickSettings(opts.frames, opts.modes)
+      const code = await allocateRoom(this.env, frame, mode, { ai: true })
+      try {
+        ws.send(JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage))
+        ws.close(1000, 'matched')
+      } catch {}
+    }
+
+    // 仍有选项相容却暂时分差过大的组合时，定时放宽后重试；否则等到最早的 AI 顶替时点。
+    const remaining = waiting.filter((w) => !used.has(w.ws))
+    if (remaining.length === 0) {
+      return this.ctx.storage.deleteAlarm()
+    }
     const widenable = pairs.some(
       (p) => !used.has(waiting[p.i].ws) && !used.has(waiting[p.j].ws),
     )
-    if (widenable) {
-      await this.ctx.storage.setAlarm(now + RECHECK_MS)
-    } else {
-      await this.ctx.storage.deleteAlarm()
-    }
+    const nextAi = Math.min(...remaining.map((w) => w.opts.aiAt))
+    await this.ctx.storage.setAlarm(widenable ? Math.min(now + RECHECK_MS, nextAi) : nextAi)
   }
 }

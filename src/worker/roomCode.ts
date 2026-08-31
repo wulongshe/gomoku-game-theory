@@ -11,20 +11,21 @@ export async function allocateRoom(
   env: Env,
   frame: number,
   mode: GameMode,
-  tournament?: { round: number; players: [string, string] },
+  opts?: { tournament?: { round: number; players: [string, string] }; ai?: boolean },
 ): Promise<string> {
   for (const generate of generators) {
     for (let attempt = 0; attempt < ATTEMPTS_PER_LENGTH; attempt++) {
       const code = generate()
       const params = new URLSearchParams({ frame: String(frame), mode })
-      if (tournament) {
+      if (opts?.tournament) {
         // DO 无法从自身 id 反推房号，故把 code 与对阵双方一并写进房间。
         params.set('tournament', '1')
-        params.set('round', String(tournament.round))
+        params.set('round', String(opts.tournament.round))
         params.set('code', code)
-        params.set('p0', tournament.players[0])
-        params.set('p1', tournament.players[1])
+        params.set('p0', opts.tournament.players[0])
+        params.set('p1', opts.tournament.players[1])
       }
+      if (opts?.ai) params.set('ai', '1')
       const created = await env.ROOM.get(env.ROOM.idFromName(code)).fetch(
         `https://room/create?${params}`,
         { method: 'POST' },

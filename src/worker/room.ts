@@ -9,10 +9,21 @@ import {
   type Point,
   type Seat,
 } from '@/engine/game'
+import { searchBestMove } from '@/engine/mcts'
+import type { Difficulty } from '@/engine/ai'
 import { maskEmail, parseClientMessage, type ServerMessage } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
+
+// 匹配久等无人时顶替真人的 AI：中等棋力，行为节奏拟人（见各处随机延时）。
+const AI_DIFFICULTY: Difficulty = 'normal'
+
+// 拟人思考时长：限时局压在时限的六成与 10.5s 之内，不限时局也别让对面干等。
+function aiThinkDelay(frameSeconds: number): number {
+  const cap = frameSeconds ? Math.min(frameSeconds * 600, 9000) : 8000
+  return 1500 + Math.random() * cap
+}
 
 interface Attachment {
   seat: Seat
@@ -54,6 +65,12 @@ export class Room extends DurableObject<Env> {
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
       const entries: Record<string, unknown> = { created: true, frameSeconds, mode }
+      if (url.searchParams.get('ai') === '1') {
+        // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
+        const seat: Seat = Math.random() < 0.5 ? 'black' : 'white'
+        entries.ai = seat
+        entries.players = { [seat]: crypto.randomUUID() } satisfies Players
+      }
       if (url.searchParams.get('tournament') === '1') {
         entries.tournament = {
           round: Number(url.searchParams.get('round')),
@@ -143,6 +160,7 @@ export class Room extends DurableObject<Env> {
     })
     this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
 
+    const aiSeat = await this.aiSeat()
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
       await this.ctx.storage.delete('emptySince')
@@ -150,6 +168,15 @@ export class Room extends DurableObject<Env> {
         const stale = await this.ctx.storage.get<number>('deadline')
         if (stale !== undefined && Date.now() >= stale) {
           await this.scheduleFrame(game, await this.frameSeconds())
+        } else if (aiSeat) {
+          // 掉线期间闹钟可能被空房逻辑改走，回来后拨回 AI 行动或结算时点。
+          const targets = [
+            await this.ctx.storage.get<number>('aiActAt'),
+            await this.ctx.storage.get<number>('deadline'),
+          ].filter((t): t is number => t !== undefined)
+          await this.ctx.storage.setAlarm(
+            targets.length ? Math.min(...targets) : Date.now() + IDLE_TTL_MS,
+          )
         }
       }
       const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
@@ -170,10 +197,13 @@ export class Room extends DurableObject<Env> {
       }
     } else {
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
-      if (ready.black && ready.white && this.ctx.getWebSockets().length === 2) {
+      if (ready.black && ready.white && this.ctx.getWebSockets().length === (aiSeat ? 1 : 2)) {
         await this.startGame()
       } else {
         await this.broadcastLobby()
+        if (aiSeat && !ready[aiSeat]) {
+          await this.armAiAlarm(600 + Math.random() * 2200)
+        }
       }
     }
 
@@ -203,6 +233,18 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  private aiSeat(): Promise<Seat | undefined> {
+    return this.ctx.storage.get<Seat>('ai')
+  }
+
+  // AI 的下一次行动时点：闹钟取行动点与帧结算点的较早者，行动后各分支自会拨回。
+  private async armAiAlarm(delayMs: number): Promise<void> {
+    const at = Date.now() + delayMs
+    await this.ctx.storage.put('aiActAt', at)
+    const deadline = await this.ctx.storage.get<number>('deadline')
+    await this.ctx.storage.setAlarm(deadline !== undefined ? Math.min(at, deadline) : at)
+  }
+
   private async broadcastLobby(exclude?: WebSocket): Promise<void> {
     const sockets = this.ctx.getWebSockets().filter((ws) => ws !== exclude)
     const present = { black: false, white: false }
@@ -210,6 +252,8 @@ export class Room extends DurableObject<Env> {
       const attachment = ws.deserializeAttachment() as Attachment
       if (!attachment.replaced) present[attachment.seat] = true
     }
+    const aiSeat = await this.aiSeat()
+    if (aiSeat) present[aiSeat] = true
     const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
     const message: ServerMessage = {
       type: 'lobby',
@@ -248,15 +292,19 @@ export class Room extends DurableObject<Env> {
 
   private async scheduleFrame(game: GameState, frameSeconds: number): Promise<number | null> {
     const frameStart = Date.now()
+    let deadline: number | null = null
     if (frameSeconds === 0) {
       await this.ctx.storage.delete('deadline')
       await this.ctx.storage.put({ game, frameStart })
       await this.ctx.storage.setAlarm(frameStart + IDLE_TTL_MS)
-      return null
+    } else {
+      deadline = frameStart + frameSeconds * 1000
+      await this.ctx.storage.put({ game, frameStart, deadline })
+      await this.ctx.storage.setAlarm(deadline)
     }
-    const deadline = frameStart + frameSeconds * 1000
-    await this.ctx.storage.put({ game, frameStart, deadline })
-    await this.ctx.storage.setAlarm(deadline)
+    if (await this.aiSeat()) {
+      await this.armAiAlarm(aiThinkDelay(frameSeconds))
+    }
     return deadline
   }
 
@@ -282,7 +330,11 @@ export class Room extends DurableObject<Env> {
         ready[seat] = true
         await this.ctx.storage.put('ready', ready)
       }
-      if (ready.black && ready.white && this.ctx.getWebSockets().length === 2) {
+      if (
+        ready.black &&
+        ready.white &&
+        this.ctx.getWebSockets().length === ((await this.aiSeat()) ? 1 : 2)
+      ) {
         return this.startGame()
       }
       return this.broadcastLobby()
@@ -319,6 +371,10 @@ export class Room extends DurableObject<Env> {
       if (msg.type === 'draw_offer') {
         for (const other of this.ctx.getWebSockets()) {
           if (other !== ws) this.send(other, { type: 'draw_offered' })
+        }
+        if (await this.aiSeat()) {
+          await this.ctx.storage.put('aiDrawOffered', true)
+          await this.armAiAlarm(800 + Math.random() * 1500)
         }
         return
       }
@@ -404,8 +460,15 @@ export class Room extends DurableObject<Env> {
       for (const socket of this.ctx.getWebSockets()) {
         if (socket !== ws) this.send(socket, { type: 'rematch_requested', ...proposal })
       }
+      if (await this.aiSeat()) {
+        await this.armAiAlarm(1000 + Math.random() * 2500)
+      }
       return
     }
+    await this.applyRematch(proposal)
+  }
+
+  private async applyRematch(proposal: RematchProposal): Promise<void> {
     await this.ctx.storage.delete(['game', 'choices', 'rematch', 'ready', 'deadline', 'frameStart'])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -426,13 +489,70 @@ export class Room extends DurableObject<Env> {
           return this.ctx.storage.setAlarm(emptySince + IDLE_TTL_MS)
         }
       }
+      if (!game && (await this.ctx.storage.get<number>('aiActAt')) !== undefined) {
+        // 真人掉线时 AI 行动闹钟提前敲门，不能当空房超时关房。
+        await this.ctx.storage.delete('aiActAt')
+        return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      }
       return this.close()
+    }
+    const aiActAt = await this.ctx.storage.get<number>('aiActAt')
+    if (aiActAt !== undefined && Date.now() >= aiActAt) {
+      return this.aiAct(game)
     }
     if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
       return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
     await this.settle(game, choices)
+  }
+
+  // AI 到点行动，按房间当前阶段推断该做什么：备战点准备、对局中落子/回应求和、终局应答再来一局。
+  private async aiAct(game: GameState | undefined): Promise<void> {
+    await this.ctx.storage.delete('aiActAt')
+    const aiSeat = await this.aiSeat()
+    if (!aiSeat) {
+      return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    }
+    const humanSeat: Seat = aiSeat === 'black' ? 'white' : 'black'
+    if (!game) {
+      const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+      if (!ready[aiSeat]) {
+        ready[aiSeat] = true
+        await this.ctx.storage.put('ready', ready)
+      }
+      if (ready.black && ready.white) {
+        return this.startGame()
+      }
+      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      return this.broadcastLobby()
+    }
+    if (game.phase === 'playing') {
+      if (await this.ctx.storage.get<boolean>('aiDrawOffered')) {
+        await this.ctx.storage.delete('aiDrawOffered')
+        this.broadcast({ type: 'draw_declined' })
+        return this.armAiAlarm(1200 + Math.random() * 2500)
+      }
+      const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
+      if (!choices[aiSeat]?.final) {
+        const point = searchBestMove(game, aiSeat, AI_DIFFICULTY)
+        choices[aiSeat] = { point, final: true, finalAt: Date.now() }
+        await this.ctx.storage.put('choices', choices)
+        this.broadcast({ type: 'opponent_submitted', submitted: true })
+        if (choices[humanSeat]?.final) {
+          return this.settle(game, choices)
+        }
+      }
+      const deadline = await this.ctx.storage.get<number>('deadline')
+      return this.ctx.storage.setAlarm(deadline ?? Date.now() + IDLE_TTL_MS)
+    }
+    const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
+    const proposal = rematch[humanSeat]
+    if (proposal) {
+      await this.applyRematch(proposal)
+      return this.armAiAlarm(800 + Math.random() * 2000)
+    }
+    return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -455,7 +575,10 @@ export class Room extends DurableObject<Env> {
     if (remaining.length === 0) {
       if (game && game.phase !== 'playing') await this.close()
       else if (game) await this.ctx.storage.put('emptySince', Date.now())
-      else await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      else {
+        await this.ctx.storage.delete('aiActAt')
+        await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      }
     } else if (!game) {
       await this.broadcastLobby(ws)
     }
@@ -486,7 +609,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
-    await this.ctx.storage.delete('choices')
+    await this.ctx.storage.delete(['choices', 'aiActAt', 'aiDrawOffered'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
@@ -494,6 +617,8 @@ export class Room extends DurableObject<Env> {
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {
+    // AI 顶替局不入战绩/ELO，防止空窗期刷分。
+    if (await this.aiSeat()) return
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament) {

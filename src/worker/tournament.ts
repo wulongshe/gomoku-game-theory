@@ -250,8 +250,7 @@ export class Tournament extends DurableObject<Env> {
       } else {
         try {
           p.code = await allocateRoom(this.env, TFRAME, TMODE, {
-            round: s.round,
-            players: [p.players[0], p.players[1]!],
+            tournament: { round: s.round, players: [p.players[0], p.players[1]!] },
           })
         } catch {
           p.result = 'void' // 建房失败则该局作废

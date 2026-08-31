@@ -188,3 +188,44 @@ describe('rating bands', () => {
     expect(msgB).toEqual(msgA)
   })
 })
+
+describe('AI fallback', () => {
+  const stub = () => env.LOBBY.get(env.LOBBY.idFromName('lobby'))
+
+  // 模拟久候：把 AI 顶替时点拨到过去，再触发闹钟。
+  async function expireAiDeadline(): Promise<void> {
+    await runInDurableObject(stub(), (_, state) => {
+      for (const ws of state.getWebSockets()) {
+        const opts = ws.deserializeAttachment() as { aiAt: number }
+        ws.serializeAttachment({ ...opts, aiAt: Date.now() - 1 })
+      }
+    })
+    await runDurableObjectAlarm(stub())
+  }
+
+  it('hands a lone waiter an AI room once the deadline passes', async () => {
+    const a = await joinLobby('frames=0&modes=race')
+    await expireAiDeadline()
+    const msg = await a.matched()
+    expect(msg.type).toBe('matched')
+    expect(msg.code).toMatch(ROOM_CODE_PATTERN)
+
+    const room = env.ROOM.get(env.ROOM.idFromName(msg.code))
+    const entries = await runInDurableObject(room, (_, state) =>
+      state.storage.get(['ai', 'frameSeconds', 'mode']),
+    )
+    expect(['black', 'white']).toContain(entries.get('ai'))
+    expect(entries.get('frameSeconds')).toBe(0)
+    expect(entries.get('mode')).toBe('race')
+  })
+
+  it('keeps waiting for humans before the deadline', async () => {
+    const a = await joinLobby()
+    await runDurableObjectAlarm(stub())
+    const b = await joinLobby()
+    const [msgA, msgB] = await Promise.all([a.matched(), b.matched()])
+    expect(msgA).toEqual(msgB)
+    const room = env.ROOM.get(env.ROOM.idFromName(msgA.code))
+    expect(await runInDurableObject(room, (_, state) => state.storage.get('ai'))).toBeUndefined()
+  })
+})

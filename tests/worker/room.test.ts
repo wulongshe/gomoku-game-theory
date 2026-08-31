@@ -585,22 +585,24 @@ describe('Room', () => {
   })
 })
 
-describe('account seat recovery', () => {
-  async function sessionFor(email: string): Promise<string> {
-    const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
-    const registered = await stub.register(email)
-    if (!registered.ok) throw new Error(registered.error)
-    const verified = await stub.verify(email, registered.code, 'secret123')
-    if (!verified.ok) throw new Error(verified.error)
-    return verified.token
-  }
+async function sessionFor(email: string): Promise<string> {
+  const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+  const registered = await stub.register(email)
+  if (!registered.ok) throw new Error(registered.error)
+  const verified = await stub.verify(email, registered.code, 'secret123')
+  if (!verified.ok) throw new Error(verified.error)
+  return verified.token
+}
 
+describe('account seat recovery', () => {
   it('reports a tournament result by the room winner and skips normal stats', async () => {
     const xEmail = 'tourn-x@example.com'
     const yEmail = 'tourn-y@example.com'
     const x = await sessionFor(xEmail)
     const y = await sessionFor(yEmail)
-    const code = await allocateRoom(env, 15, 'forbidden', { round: 1, players: [xEmail, yEmail] })
+    const code = await allocateRoom(env, 15, 'forbidden', {
+      tournament: { round: 1, players: [xEmail, yEmail] },
+    })
 
     const tstub = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
     await runInDurableObject(tstub, (_i, state) =>
@@ -779,5 +781,95 @@ describe('account seat recovery', () => {
       type: 'players',
       accounts: { black: 'info@example.com', white: null },
     })
+  })
+})
+
+describe('AI stand-in room', () => {
+  const stubOf = (code: string) => env.ROOM.get(env.ROOM.idFromName(code))
+
+  async function createAiRoom(code: string, frame = 30, mode = 'forbidden'): Promise<void> {
+    await stubOf(code).fetch(`https://room/create?frame=${frame}&mode=${mode}&ai=1`, {
+      method: 'POST',
+    })
+  }
+
+  async function aiSeatOf(code: string): Promise<'black' | 'white'> {
+    const seat = await runInDurableObject(stubOf(code), (_i, state) =>
+      state.storage.get<'black' | 'white'>('ai'),
+    )
+    if (!seat) throw new Error('missing ai seat')
+    return seat
+  }
+
+  // 把 AI 的行动时点拨到过去再敲响闹钟，等价于现实中延时到点。
+  async function fireAi(code: string): Promise<void> {
+    await runInDurableObject(stubOf(code), (_i, state) =>
+      state.storage.put('aiActAt', Date.now() - 1),
+    )
+    expect(await runDurableObjectAlarm(stubOf(code))).toBe(true)
+  }
+
+  it('seats the human opposite the AI and keeps a second human out', async () => {
+    await createAiRoom('7101')
+    const aiSeat = await aiSeatOf('7101')
+    const human = await connect('7101', 'key-h')
+    expect(await human.next('joined')).toMatchObject({
+      seat: aiSeat === 'black' ? 'white' : 'black',
+    })
+    const lobby = await human.next('lobby')
+    if (lobby.type !== 'lobby') throw new Error('unreachable')
+    expect(lobby.present[aiSeat]).toBe(true)
+
+    const stranger = await SELF.fetch('https://example.com/api/rooms/7101/ws?key=key-x', {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(stranger.status).toBe(409)
+  })
+
+  it('readies up, submits a move, and settles the frame', async () => {
+    await createAiRoom('7102')
+    const human = await connect('7102', 'key-h')
+    await human.next('joined')
+    human.ready()
+    await fireAi('7102')
+    await human.next('start')
+
+    await fireAi('7102')
+    await human.next('opponent_submitted')
+    human.submit(1, { x: 6, y: 6 })
+    const settled = await human.next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(settled.state.frame).toBe(2)
+    expect(settled.state.phase).toBe('playing')
+  })
+
+  it('declines a draw offer and later accepts a rematch, all without stats', async () => {
+    await createAiRoom('7103')
+    const session = await sessionFor('stealth@example.com')
+    const human = await connect('7103', 'key-h', session)
+    const joined = await human.next('joined')
+    human.ready()
+    await fireAi('7103')
+    await human.next('start')
+
+    human.ws.send(JSON.stringify({ type: 'draw_offer' }))
+    await fireAi('7103')
+    await human.next('draw_declined')
+
+    human.ws.send(JSON.stringify({ type: 'resign' }))
+    const settled = await human.next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(settled.state.phase).toBe(`${await aiSeatOf('7103')}_won`)
+
+    // AI 顶替局不计战绩。
+    const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    expect(
+      await runInDurableObject(accounts, (_i, st) => st.storage.get('stats:stealth@example.com')),
+    ).toBeUndefined()
+
+    human.rematch()
+    await fireAi('7103')
+    expect(await human.next('joined')).toMatchObject({ seat: joined.type === 'joined' ? joined.seat : undefined })
+    await human.next('lobby')
   })
 })
