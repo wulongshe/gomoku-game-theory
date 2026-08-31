@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
+import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { fetchTournament, registerTournament, withdrawTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
@@ -95,21 +96,9 @@ const buttonVariant = computed(() =>
 
       <div v-if="info.standings.length" class="flex flex-col gap-1.5">
         <p class="text-xs text-stone-400 dark:text-stone-500">
-          {{ info.state === 'active' ? '实时积分' : '上届排名' }}
+          {{ info.state === 'active' ? '实时积分' : '昨日排名' }}
         </p>
-        <div class="flex max-h-48 flex-col gap-1 overflow-y-auto">
-          <div
-            v-for="(row, i) in info.standings"
-            :key="row.email"
-            class="flex items-center gap-2 rounded-lg bg-stone-100 px-3 py-2 text-sm dark:bg-stone-700/50"
-          >
-            <span class="min-w-5 text-center font-semibold text-stone-400 dark:text-stone-500">
-              {{ i + 1 }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-stone-700 dark:text-stone-200">{{ row.email }}</span>
-            <span class="font-semibold text-stone-800 tabular-nums dark:text-stone-100">{{ row.score }}</span>
-          </div>
-        </div>
+        <TournamentStandings :standings="info.standings" class="max-h-48" />
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
         瑞士轮积分赛 · 报名后到点自动配对开赛

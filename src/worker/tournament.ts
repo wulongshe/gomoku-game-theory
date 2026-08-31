@@ -283,22 +283,33 @@ export class Tournament extends DurableObject<Env> {
     // void → 双方 0 分
   }
 
+  // 榜内保留原始邮箱，展示时统一经 displayEmails 按账号开关打码。
   private standings(s: TournamentState): Standing[] {
     const buchholz = (p: Player) =>
       p.opponents.reduce((sum, o) => sum + (s.players[o]?.score ?? 0), 0)
     return Object.entries(s.players)
       .map(([email, p]) => ({
         email,
-        masked: maskEmail(email),
         score: p.score,
         played: p.opponents.length + p.byes,
         buchholz: buchholz(p),
       }))
       .sort((a, b) => b.score - a.score || b.buchholz - a.buchholz || a.email.localeCompare(b.email))
-      .map(({ masked, score, played }) => ({ email: masked, score, played }))
+      .map(({ email, score, played }) => ({ email, score, played }))
   }
 
-  private toInfo(s: TournamentState, email: string | null): TournamentInfo {
+  private async displayNames(emails: string[]): Promise<Map<string, string>> {
+    try {
+      const display = await this.env.ACCOUNTS.get(
+        this.env.ACCOUNTS.idFromName('accounts'),
+      ).displayEmails(emails)
+      return new Map(emails.map((email, i) => [email, display[i] ?? maskEmail(email)]))
+    } catch {
+      return new Map(emails.map((email) => [email, maskEmail(email)]))
+    }
+  }
+
+  private async toInfo(s: TournamentState, email: string | null): Promise<TournamentInfo> {
     const now = Date.now()
     const participating = s.state === 'active' && email !== null && email in s.players
     const registered = email !== null && s.registrations.includes(email)
@@ -308,6 +319,16 @@ export class Tournament extends DurableObject<Env> {
           null)
       : null
     const liveRounds = s.state === 'active' ? [...s.past, s.pairings] : s.past
+    // 进行中仅参赛者可见实时榜与配对；非参赛者不开放观战（防多号作弊）。
+    const standings = s.state === 'idle' ? s.lastStandings : participating ? this.standings(s) : []
+    const rounds = showLive ? liveRounds.map((r) => r.map((p) => this.toMatch(p))) : []
+    const names = await this.displayNames([
+      ...new Set([
+        ...standings.map((row) => row.email),
+        ...rounds.flat().flatMap((m) => (m.b ? [m.a, m.b] : [m.a])),
+      ]),
+    ])
+    const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     return {
       state: s.state,
       now,
@@ -319,16 +340,15 @@ export class Tournament extends DurableObject<Env> {
       participating,
       myGame: myGame ? { code: myGame } : null,
       roundDeadline: s.roundDeadline,
-      // 进行中仅参赛者可见实时榜与配对；非参赛者不开放观战（防多号作弊）。
-      standings: s.state === 'idle' ? s.lastStandings : participating ? this.standings(s) : [],
-      rounds: showLive ? liveRounds.map((r) => r.map((p) => this.toMatch(p))) : [],
+      standings: standings.map((row) => ({ ...row, email: shown(row.email) })),
+      rounds: rounds.map((r) => r.map((m) => ({ ...m, a: shown(m.a), b: m.b && shown(m.b) }))),
     }
   }
 
   private toMatch(p: Pairing): Match {
     return {
-      a: maskEmail(p.players[0]),
-      b: p.players[1] ? maskEmail(p.players[1]) : null,
+      a: p.players[0],
+      b: p.players[1],
       status: p.result !== null ? 'done' : p.checkedIn.length >= 2 ? 'playing' : 'pending',
       result: p.result,
     }

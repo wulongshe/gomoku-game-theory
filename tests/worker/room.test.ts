@@ -771,9 +771,10 @@ describe('account seat recovery', () => {
     })
 
     const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
-    expect(await stub.setEmailVisible(session, 'game', true)).toBe(true)
-    a.ws.send(JSON.stringify({ type: 'refresh_players' }))
-    expect(await a.next('players')).toEqual({
+    expect(await stub.setEmailVisible(session, true)).toBe(true)
+    // 开关全局生效，重进房后按新可见性广播。
+    const a2 = await connect('2004', 'device-1', session)
+    expect(await a2.next('players')).toEqual({
       type: 'players',
       accounts: { black: 'info@example.com', white: null },
     })

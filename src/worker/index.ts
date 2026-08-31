@@ -33,16 +33,8 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
   }
   if (action === 'visibility') {
     const token = request.headers.get('Authorization')?.replace(/^Bearer /, '')
-    const body = (await request.json().catch(() => null)) as {
-      scope?: string
-      visible?: boolean
-    } | null
-    if (body?.scope !== 'leaderboard' && body?.scope !== 'game') {
-      return authError('scope_invalid', 400)
-    }
-    const ok = token
-      ? await accounts.setEmailVisible(token, body.scope, body.visible === true)
-      : false
+    const body = (await request.json().catch(() => null)) as { visible?: boolean } | null
+    const ok = token ? await accounts.setEmailVisible(token, body?.visible === true) : false
     return ok ? new Response(null, { status: 204 }) : authError('unauthorized', 401)
   }
 

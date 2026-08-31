@@ -272,10 +272,6 @@ function handleMessage(msg: ServerMessage) {
   }
 }
 
-function onEmailVisibility() {
-  send(JSON.stringify({ type: 'refresh_players' } satisfies ClientMessage))
-}
-
 const { secondsLeft, remainingRatio, urgency, elapsedSeconds, overdue } = useFrameClock(
   deadline,
   frameSeconds,
@@ -726,7 +722,6 @@ function exitRoom() {
       :accounts="seatAccounts"
       :seat="seat"
       @close="showPlayers = false"
-      @visibility="onEmailVisibility"
     />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />

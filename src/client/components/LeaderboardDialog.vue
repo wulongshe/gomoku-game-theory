@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import AppDialog from '~/components/AppDialog.vue'
-import AppSwitch from '~/components/AppSwitch.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { fetchLeaderboard, type LeaderboardEntry } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
@@ -16,7 +15,7 @@ const LEGEND = [
   { label: '平', dot: 'bg-stone-400' },
 ]
 
-const { email: myEmail, loggedIn, emailVisibility, setEmailVisible } = useAuth()
+const { email: myEmail } = useAuth()
 const entries = ref<LeaderboardEntry[]>([])
 const loading = ref(true)
 const failed = ref(false)
@@ -24,14 +23,6 @@ const failed = ref(false)
 function isMine(entry: LeaderboardEntry): boolean {
   return !!myEmail.value && (entry.email === myEmail.value || entry.email === maskEmail(myEmail.value))
 }
-
-const visible = computed({
-  get: () => emailVisibility.value.leaderboard,
-  set: async (value: boolean) => {
-    await setEmailVisible('leaderboard', value)
-    entries.value = await fetchLeaderboard().catch(() => entries.value)
-  },
-})
 
 onMounted(async () => {
   try {
@@ -101,9 +92,6 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <AppSwitch v-if="loggedIn" v-model="visible" class="mx-3 mt-1">
-        允许他人查看我的完整邮箱
-      </AppSwitch>
     </div>
   </AppDialog>
 </template>

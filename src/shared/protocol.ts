@@ -23,7 +23,6 @@ export type ClientMessage =
   | { type: 'rematch'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_decline' }
   | { type: 'leave' }
-  | { type: 'refresh_players' }
   | { type: 'resign' }
   | { type: 'draw_offer' }
   | { type: 'draw_response'; accept: boolean }
@@ -101,7 +100,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }
-  if (msg.type === 'refresh_players') return { type: 'refresh_players' }
   if (msg.type === 'resign') return { type: 'resign' }
   if (msg.type === 'draw_offer') return { type: 'draw_offer' }
   if (msg.type === 'draw_response') {

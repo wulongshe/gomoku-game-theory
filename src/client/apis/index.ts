@@ -94,14 +94,9 @@ export function authLogin(email: string, password: string): Promise<AuthSession>
   return authPost('login', { email, password })
 }
 
-export interface EmailVisibility {
-  leaderboard: boolean
-  game: boolean
-}
-
 export interface AuthProfile {
   email: string
-  emailVisibility: EmailVisibility
+  emailVisible: boolean
 }
 
 export async function authMe(): Promise<AuthProfile | null> {
@@ -111,14 +106,11 @@ export async function authMe(): Promise<AuthProfile | null> {
   return (await res.json()) as AuthProfile
 }
 
-export async function authSetEmailVisible(
-  scope: keyof EmailVisibility,
-  visible: boolean,
-): Promise<void> {
+export async function authSetEmailVisible(visible: boolean): Promise<void> {
   const res = await fetch('/api/auth/visibility', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...bearer() },
-    body: JSON.stringify({ scope, visible }),
+    body: JSON.stringify({ visible }),
   })
   if (!res.ok) throw new Error(`authSetEmailVisible failed: ${res.status}`)
 }

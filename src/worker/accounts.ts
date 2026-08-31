@@ -27,16 +27,11 @@ export interface LeaderboardEntry {
   draws: number
 }
 
-export interface EmailVisibility {
-  leaderboard: boolean
-  game: boolean
-}
-
 interface UserRecord {
   hash: string
   salt: string
   createdAt: number
-  emailVisibility?: Partial<EmailVisibility>
+  emailVisible?: boolean
 }
 
 interface PendingRecord {
@@ -147,7 +142,7 @@ export class Accounts extends DurableObject<Env> {
     return { ok: true, token: await this.createSession(email) }
   }
 
-  async me(token: string): Promise<{ email: string; emailVisibility: EmailVisibility } | null> {
+  async me(token: string): Promise<{ email: string; emailVisible: boolean } | null> {
     const session = await this.ctx.storage.get<SessionRecord>(`session:${token}`)
     if (!session) return null
     if (Date.now() > session.expires) {
@@ -155,25 +150,15 @@ export class Accounts extends DurableObject<Env> {
       return null
     }
     const user = await this.ctx.storage.get<UserRecord>(`user:${session.email}`)
-    return {
-      email: session.email,
-      emailVisibility: {
-        leaderboard: user?.emailVisibility?.leaderboard ?? false,
-        game: user?.emailVisibility?.game ?? false,
-      },
-    }
+    return { email: session.email, emailVisible: user?.emailVisible ?? false }
   }
 
-  async setEmailVisible(
-    token: string,
-    scope: keyof EmailVisibility,
-    visible: boolean,
-  ): Promise<boolean> {
+  async setEmailVisible(token: string, visible: boolean): Promise<boolean> {
     const profile = await this.me(token)
     if (!profile) return false
     const user = await this.ctx.storage.get<UserRecord>(`user:${profile.email}`)
     if (!user) return false
-    user.emailVisibility = { ...user.emailVisibility, [scope]: visible }
+    user.emailVisible = visible
     await this.ctx.storage.put(`user:${profile.email}`, user)
     return true
   }
@@ -183,7 +168,7 @@ export class Accounts extends DurableObject<Env> {
       emails.map(async (email) => {
         if (!email) return null
         const user = await this.ctx.storage.get<UserRecord>(`user:${email}`)
-        return user?.emailVisibility?.game ? email : maskEmail(email)
+        return user?.emailVisible ? email : maskEmail(email)
       }),
     )
   }
@@ -237,7 +222,7 @@ export class Accounts extends DurableObject<Env> {
         const email = key.slice('user:'.length)
         const record = stats.get(`stats:${email}`)
         return {
-          email: user.emailVisibility?.leaderboard ? email : maskEmail(email),
+          email: user.emailVisible ? email : maskEmail(email),
           wins: record?.wins ?? 0,
           losses: record?.losses ?? 0,
           draws: record?.draws ?? 0,

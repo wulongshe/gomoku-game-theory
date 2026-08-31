@@ -315,10 +315,6 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
     const { seat } = ws.deserializeAttachment() as Attachment
-    if (msg.type === 'refresh_players') {
-      const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-      return this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
-    }
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(ws, seat, game)

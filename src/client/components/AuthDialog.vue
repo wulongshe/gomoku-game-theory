@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppDialog from '~/components/AppDialog.vue'
+import AppSwitch from '~/components/AppSwitch.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import DialogInput from '~/components/DialogInput.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
@@ -11,7 +12,12 @@ import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: [] }>()
 
-const { email, loggedIn, setSession, logout } = useAuth()
+const { email, loggedIn, emailVisible, setSession, setEmailVisible, logout } = useAuth()
+
+const visible = computed({
+  get: () => emailVisible.value,
+  set: (value: boolean) => setEmailVisible(value),
+})
 
 const tab = ref<'login' | 'register'>('login')
 const emailInput = ref('')
@@ -101,6 +107,10 @@ async function handleLogout() {
   <AppDialog :title="loggedIn ? '我的账号' : '登录 / 注册'" @close="emit('close')">
     <template v-if="loggedIn">
       <p class="text-sm text-stone-600 dark:text-stone-300">{{ email }}</p>
+      <div class="flex flex-col gap-1">
+        <AppSwitch v-model="visible">允许他人查看我的完整邮箱</AppSwitch>
+        <p class="text-xs text-stone-400 dark:text-stone-500">作用于对局、排行榜与每日大赛的邮箱显示</p>
+      </div>
     </template>
 
     <template v-else>

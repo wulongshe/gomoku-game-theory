@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import { fetchTournament } from '~/apis'
@@ -9,9 +10,9 @@ import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
 import { backOrReplace } from '~/utils/navigation'
-import { maskEmail, type TournamentInfo } from '@/shared/protocol'
+import type { TournamentInfo } from '@/shared/protocol'
 
-const { email, loggedIn } = useAuth()
+const { loggedIn } = useAuth()
 const info = ref<TournamentInfo | null>(null)
 const loading = ref(true)
 
@@ -36,10 +37,6 @@ async function load() {
 
 onMounted(load)
 useIntervalFn(load, 3000)
-
-function isMine(rowEmail: string): boolean {
-  return !!email.value && (rowEmail === email.value || rowEmail === maskEmail(email.value))
-}
 </script>
 
 <template>
@@ -106,27 +103,13 @@ function isMine(rowEmail: string): boolean {
 
         <div v-if="info.standings.length" class="flex min-h-0 w-full flex-col gap-1.5">
           <p class="px-1 text-xs text-stone-400 dark:text-stone-500">
-            {{ info.state === 'active' ? '实时积分' : '上届排名' }}
+            {{ info.state === 'active' ? '实时积分' : '昨日排名' }}
           </p>
-          <div class="flex max-h-96 flex-col gap-1 overflow-y-auto">
-            <div
-              v-for="(row, i) in info.standings"
-              :key="row.email"
-              class="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm"
-              :class="
-                isMine(row.email)
-                  ? 'bg-amber-100 ring-1 ring-inset ring-wood/60 dark:bg-stone-600'
-                  : 'bg-white dark:bg-stone-800'
-              "
-            >
-              <span class="min-w-5 text-center font-semibold text-stone-400 dark:text-stone-500">
-                {{ i + 1 }}
-              </span>
-              <span class="min-w-0 flex-1 truncate text-stone-700 dark:text-stone-200">{{ row.email }}</span>
-              <span class="text-xs text-stone-400 dark:text-stone-500">{{ row.played }} 局</span>
-              <span class="font-semibold text-stone-800 tabular-nums dark:text-stone-100">{{ row.score }}</span>
-            </div>
-          </div>
+          <TournamentStandings
+            :standings="info.standings"
+            row-class="bg-white dark:bg-stone-800"
+            class="max-h-96"
+          />
         </div>
 
         <button

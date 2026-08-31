@@ -1,18 +1,12 @@
 import { computed, ref } from 'vue'
 import { useStorage } from '@vueuse/core'
-import {
-  authLogout,
-  authMe,
-  authSetEmailVisible,
-  type AuthSession,
-  type EmailVisibility,
-} from '~/apis'
+import { authLogout, authMe, authSetEmailVisible, type AuthSession } from '~/apis'
 import { useAuthToken } from '~/composables/useAuthToken'
 import { ROOM_KEY_PREFIX } from '~/constants/storage'
 
 const token = useAuthToken()
 const email = useStorage('auth-email', '')
-const emailVisibility = ref<EmailVisibility>({ leaderboard: false, game: false })
+const emailVisible = ref(false)
 
 export function useAuth() {
   const loggedIn = computed(() => Boolean(token.value))
@@ -20,7 +14,7 @@ export function useAuth() {
   function setSession(session: AuthSession) {
     token.value = session.token
     email.value = session.email
-    emailVisibility.value = { leaderboard: false, game: false }
+    emailVisible.value = false
   }
 
   async function refresh() {
@@ -32,17 +26,17 @@ export function useAuth() {
         email.value = ''
       } else {
         email.value = profile.email
-        emailVisibility.value = profile.emailVisibility
+        emailVisible.value = profile.emailVisible
       }
     } catch {}
   }
 
-  async function setEmailVisible(scope: keyof EmailVisibility, visible: boolean) {
-    emailVisibility.value = { ...emailVisibility.value, [scope]: visible }
+  async function setEmailVisible(visible: boolean) {
+    emailVisible.value = visible
     try {
-      await authSetEmailVisible(scope, visible)
+      await authSetEmailVisible(visible)
     } catch {
-      emailVisibility.value = { ...emailVisibility.value, [scope]: !visible }
+      emailVisible.value = !visible
     }
   }
 
@@ -50,11 +44,11 @@ export function useAuth() {
     if (token.value) await authLogout().catch(() => {})
     token.value = ''
     email.value = ''
-    emailVisibility.value = { leaderboard: false, game: false }
+    emailVisible.value = false
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith(ROOM_KEY_PREFIX)) localStorage.removeItem(key)
     }
   }
 
-  return { token, email, emailVisibility, loggedIn, setSession, refresh, setEmailVisible, logout }
+  return { token, email, emailVisible, loggedIn, setSession, refresh, setEmailVisible, logout }
 }
