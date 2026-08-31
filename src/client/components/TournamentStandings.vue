@@ -12,7 +12,8 @@ const props = defineProps<{
 
 const STATUS_META: Record<PlayerStatus, { label: string; dot: string; text: string }> = {
   playing: { label: '对局中', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
-  waiting: { label: '等待中', dot: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400' },
+  pending: { label: '待开始', dot: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400' },
+  done: { label: '已结束', dot: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
   left: { label: '已离开', dot: 'bg-red-500', text: 'text-red-500 dark:text-red-400' },
 }
 

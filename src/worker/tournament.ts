@@ -357,8 +357,8 @@ export class Tournament extends DurableObject<Env> {
       .map(({ email, score, played }) => ({ email, score, played }))
   }
 
-  // 按本轮配对推断每人状态：未出结果时到场即对局中、未到场为等待中；
-  // 已出结果时到过场的等下一轮，整轮没露面的视为已离开（轮空照常等待）。
+  // 按本轮配对推断每人状态：未出结果时到场即对局中、未到场为待开始；
+  // 已出结果时到过场的算已结束（轮空视同），整轮没露面的视为已离开。
   private playerStatuses(s: TournamentState): Map<string, PlayerStatus> {
     const statuses = new Map<string, PlayerStatus>()
     for (const p of s.pairings) {
@@ -367,12 +367,12 @@ export class Tournament extends DurableObject<Env> {
         const arrived = p.checkedIn.includes(email)
         statuses.set(
           email,
-          p.result === 'bye' || (p.result !== null && arrived)
-            ? 'waiting'
-            : p.result === null
-              ? arrived
-                ? 'playing'
-                : 'waiting'
+          p.result === null
+            ? arrived
+              ? 'playing'
+              : 'pending'
+            : p.result === 'bye' || arrived
+              ? 'done'
               : 'left',
         )
       }
@@ -428,7 +428,7 @@ export class Tournament extends DurableObject<Env> {
       standings: standings.map((row) => ({
         ...row,
         email: shown(row.email),
-        ...(statuses && { status: statuses.get(row.email) ?? 'waiting' }),
+        ...(statuses && { status: statuses.get(row.email) ?? 'pending' }),
       })),
       me: meIndex < 0 ? null : meIndex,
       rounds: rounds.map((r) => r.map((m) => ({ ...m, a: shown(m.a), b: m.b && shown(m.b) }))),
