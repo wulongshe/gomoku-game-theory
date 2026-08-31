@@ -878,3 +878,115 @@ describe('AI stand-in room', () => {
     await human.next('lobby')
   })
 })
+
+describe('tournament spectating', () => {
+  async function seedSpectatableTournament(viewerEmail: string, done: boolean): Promise<void> {
+    const tstub = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
+    await runInDurableObject(tstub, (_i, state) =>
+      state.storage.put('t', {
+        state: 'active',
+        startedAt: Date.now(),
+        round: 1,
+        totalRounds: 1,
+        roundDeadline: Date.now() + 600_000,
+        registrations: [],
+        players: {
+          [viewerEmail]: { score: 0, opponents: ['b@x'], byes: 0 },
+          'b@x': { score: 0, opponents: [viewerEmail], byes: 0 },
+          'c@x': { score: 0, opponents: ['d@x'], byes: 0 },
+          'd@x': { score: 0, opponents: ['c@x'], byes: 0 },
+        },
+        pairings: [
+          {
+            code: '8801',
+            players: [viewerEmail, 'b@x'],
+            checkedIn: [viewerEmail, 'b@x'],
+            result: done ? 'a' : null,
+          },
+          { code: '8802', players: ['c@x', 'd@x'], checkedIn: ['c@x', 'd@x'], result: null },
+        ],
+        past: [],
+        lastStandings: [],
+      }),
+    )
+  }
+
+  async function connectSpectator(code: string, auth: string): Promise<Response> {
+    return SELF.fetch(`https://example.com/api/rooms/${code}/ws?spectate=1&token=${auth}`, {
+      headers: { Upgrade: 'websocket' },
+    })
+  }
+
+  it('lets a finished participant watch drafts, collisions, and the settled forbidden point', async () => {
+    const viewer = 'viewer@example.com'
+    const token = await sessionFor(viewer)
+    await seedSpectatableTournament(viewer, true)
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { round: 1, players: ['c@x', 'd@x'] },
+    })
+    const cToken = await sessionFor('c@x')
+    const dToken = await sessionFor('d@x')
+    const a = await connect(code, 'key-c', cToken)
+    const b = await connect(code, 'key-d', dToken)
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+
+    const res = await connectSpectator(code, token)
+    expect(res.status).toBe(101)
+    const ws = res.webSocket!
+    ws.accept()
+    const queue: ServerMessage[] = []
+    const waiters: Array<() => void> = []
+    ws.addEventListener('message', (event) => {
+      queue.push(JSON.parse(event.data as string) as ServerMessage)
+      waiters.shift()?.()
+    })
+    const next = async (type: ServerMessage['type']) => {
+      while (true) {
+        const msg = queue.shift()
+        if (msg?.type === type) return msg
+        if (!msg) await new Promise<void>((resolve) => waiters.push(resolve))
+      }
+    }
+
+    expect(await next('joined')).toMatchObject({ tournament: true, spectator: true })
+    await next('start')
+    await next('choices')
+
+    // 黑方草稿 → 观战者看到草稿点。
+    a.submit(1, { x: 6, y: 7 }, false)
+    let choices = await next('choices')
+    if (choices.type !== 'choices') throw new Error('unreachable')
+    expect(choices.black).toEqual({ point: { x: 6, y: 7 }, final: false })
+
+    // 白方提交同一点 → 观战者两边都可见（客户端渲染太极子）。
+    b.submit(1, { x: 6, y: 7 })
+    choices = await next('choices')
+    if (choices.type !== 'choices') throw new Error('unreachable')
+    expect(choices.white).toEqual({ point: { x: 6, y: 7 }, final: true })
+
+    // 黑方也提交 → 结算，撞子成禁点。
+    a.submit(1, { x: 6, y: 7 })
+    const settled = await next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('forbidden')
+  })
+
+  it('rejects spectators whose own game is unfinished and guests', async () => {
+    const viewer = 'busyviewer@example.com'
+    const token = await sessionFor(viewer)
+    await seedSpectatableTournament(viewer, false)
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { round: 1, players: ['c@x', 'd@x'] },
+    })
+    expect((await connectSpectator(code, token)).status).toBe(403)
+    const guest = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?spectate=1`, {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(guest.status).toBe(403)
+  })
+})

@@ -27,6 +27,11 @@ export function roomWsUrl(code: string, key: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?key=${key}${authQuery()}`
 }
 
+// 大赛观战连接：无席位钥匙，凭账号 token 由服务端校验资格。
+export function spectateWsUrl(code: string): string {
+  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?spectate=1${authQuery()}`
+}
+
 export function matchWsUrl(frames: number[], modes: GameMode[]): string {
   const query = `frames=${frames.join(',')}&modes=${modes.join(',')}${authQuery()}`
   return `${wsProto()}://${location.host}/api/match/ws?${query}`

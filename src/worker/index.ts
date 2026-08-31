@@ -130,6 +130,27 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       }
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(new Request(url, request))
     }
+    // 本地开发工具（vite dev 专用）：造测试账号 / 造大赛房，供演示脚本驱动真实对局。
+    if (DEV && url.pathname === '/api/dev/account') {
+      const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+      const email = url.searchParams.get('email') ?? ''
+      const reg = await accounts.register(email)
+      if (reg.ok) {
+        const verified = await accounts.verify(email, reg.code, 'test1234')
+        if (verified.ok) return Response.json({ token: verified.token })
+      }
+      const login = await accounts.login(email, 'test1234')
+      return login.ok ? Response.json({ token: login.token }) : authError('unauthorized', 401)
+    }
+    if (DEV && url.pathname === '/api/dev/tournament-room') {
+      const code = await allocateRoom(env, 15, 'forbidden', {
+        tournament: {
+          round: Number(url.searchParams.get('round') ?? 1),
+          players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
+        },
+      })
+      return Response.json({ code })
+    }
     const roomMatch = url.pathname.match(/^\/api\/rooms\/(\d{4,8})(\/ws)?$/)
     if (roomMatch && request.method === 'GET') {
       return env.ROOM.get(env.ROOM.idFromName(roomMatch[1])).fetch(request)

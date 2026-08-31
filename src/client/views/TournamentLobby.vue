@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import SegmentedControl from '~/components/SegmentedControl.vue'
@@ -44,6 +44,11 @@ const currentMatches = computed<Match[]>(() =>
     : [],
 )
 
+// 没有可观战的桌时（未打完自己的对局 / 各桌都不在对局中）退回积分视图，观战项置灰。
+watch(currentMatches, (matches) => {
+  if (!matches.length) view.value = 'standings'
+})
+
 // 服务端连上即推一帧、状态变化再推，无需轮询。
 useWebSocket(tournamentWsUrl(), {
   heartbeat: {
@@ -61,9 +66,9 @@ useWebSocket(tournamentWsUrl(), {
 
 <template>
   <main
-    class="flex min-h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
+    class="flex h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
   >
-    <div class="flex w-full max-w-md flex-1 flex-col items-center gap-5 pt-4">
+    <div class="flex min-h-0 w-full max-w-md flex-1 flex-col items-center gap-5 pt-4">
       <div class="flex flex-col items-center gap-2">
         <IconStones class="h-7 drop-shadow" />
         <h1 class="text-xl font-bold tracking-wide text-stone-800 dark:text-stone-100">每日大赛</h1>
@@ -132,16 +137,17 @@ useWebSocket(tournamentWsUrl(), {
 
         <div
           v-if="info.standings.length || currentMatches.length"
-          class="flex min-h-0 w-full flex-col gap-1.5"
+          class="flex min-h-0 w-full flex-1 flex-col gap-1.5"
         >
           <p v-if="info.state !== 'active'" class="px-1 text-xs text-stone-400 dark:text-stone-500">
             昨日排名
           </p>
           <SegmentedControl
-            v-else-if="currentMatches.length"
+            v-else
             v-model="view"
             :options="VIEWS"
             :label="(v) => VIEW_LABELS[v]"
+            :option-disabled="(v) => v === 'matches' && !currentMatches.length"
             class="text-sm"
           />
           <TournamentStandings
@@ -149,26 +155,27 @@ useWebSocket(tournamentWsUrl(), {
             :standings="info.standings"
             :me="info.me"
             row-class="bg-white dark:bg-stone-800"
-            class="max-h-96"
+            class="min-h-0 flex-1"
           />
-          <div v-else class="flex max-h-96 min-h-0 flex-col gap-1 overflow-y-auto">
-            <div
+          <div v-else class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+            <a
               v-for="(m, i) in currentMatches"
               :key="i"
-              class="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm dark:bg-stone-800"
+              :href="`/room/${m.code}?spectate=1`"
+              class="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm transition-colors hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700"
             >
               <span class="min-w-0 flex-1 truncate text-left text-stone-700 dark:text-stone-200">{{ m.a }}</span>
               <span
                 class="shrink-0 bg-gradient-to-br from-amber-500 to-red-600 bg-clip-text font-black italic tracking-tight text-transparent"
               >VS</span>
               <span class="min-w-0 flex-1 truncate text-right text-stone-700 dark:text-stone-200">{{ m.b }}</span>
-            </div>
+            </a>
           </div>
         </div>
 
         <button
           type="button"
-          class="cursor-pointer text-xs text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+          class="mt-auto shrink-0 cursor-pointer text-xs text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
           @click="backOrReplace()"
         >
           返回首页

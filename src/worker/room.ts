@@ -32,6 +32,7 @@ function aiThinkDelay(frameSeconds: number): number {
 
 interface Attachment {
   seat: Seat
+  spectator?: true
   replaced?: boolean
 }
 
@@ -106,6 +107,9 @@ export class Room extends DurableObject<Env> {
     }
     if (!created) {
       return new Response('Room not found', { status: 404 })
+    }
+    if (url.searchParams.get('spectate') === '1') {
+      return this.acceptSpectator(url)
     }
     const key = url.searchParams.get('key')
     if (!key) {
@@ -215,6 +219,68 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
 
+  // 观战连接：仅大赛房开放，且由大赛 DO 校验资格（本轮参赛且自己的对局已打完）。
+  // 观战者无席位、只收广播，另发 choices 让其看到双方的草稿/提交点。
+  private async acceptSpectator(url: URL): Promise<Response> {
+    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
+    const email = await this.accountEmail(url.searchParams.get('token'))
+    let allowed = false
+    if (tournament && email !== null) {
+      try {
+        allowed = await this.env.TOURNAMENT.get(
+          this.env.TOURNAMENT.idFromName('daily'),
+        ).canSpectate(email)
+      } catch {}
+    }
+    if (!allowed) {
+      return new Response('Not allowed to spectate', { status: 403 })
+    }
+    const pair = new WebSocketPair()
+    this.ctx.acceptWebSocket(pair[1])
+    pair[1].serializeAttachment({ seat: 'black', spectator: true } satisfies Attachment)
+    this.send(pair[1], {
+      type: 'joined',
+      seat: 'black',
+      frameSeconds: await this.frameSeconds(),
+      mode: await this.mode(),
+      tournament: true,
+      spectator: true,
+    })
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    this.send(pair[1], { type: 'players', accounts: await this.displayAccounts(accounts) })
+    const game = await this.ctx.storage.get<GameState>('game')
+    if (game) {
+      const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
+      const frameStart = await this.ctx.storage.get<number>('frameStart')
+      const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
+      this.send(pair[1], {
+        type: 'start',
+        state: game,
+        deadline: game.phase === 'playing' ? deadline : null,
+        now: Date.now(),
+        elapsed: game.phase === 'playing' && frameStart ? Date.now() - frameStart : 0,
+        frameSeconds: await this.frameSeconds(),
+        submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
+        yourChoice: null,
+      })
+      this.send(pair[1], this.choicesMessage(choices))
+    }
+    return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  private choicesMessage(choices: Choices): ServerMessage {
+    const pick = (seat: Seat) =>
+      choices[seat] ? { point: choices[seat].point, final: choices[seat].final } : null
+    return { type: 'choices', black: pick('black'), white: pick('white') }
+  }
+
+  private sendChoices(choices: Choices): void {
+    const msg = this.choicesMessage(choices)
+    for (const ws of this.ctx.getWebSockets()) {
+      if ((ws.deserializeAttachment() as Attachment).spectator) this.send(ws, msg)
+    }
+  }
+
   private async accountEmail(auth: string | null): Promise<string | null> {
     if (!auth) return null
     try {
@@ -255,7 +321,7 @@ export class Room extends DurableObject<Env> {
     const present = { black: false, white: false }
     for (const ws of sockets) {
       const attachment = ws.deserializeAttachment() as Attachment
-      if (!attachment.replaced) present[attachment.seat] = true
+      if (!attachment.replaced && !attachment.spectator) present[attachment.seat] = true
     }
     const aiSeat = await this.aiSeat()
     if (aiSeat) present[aiSeat] = true
@@ -323,7 +389,8 @@ export class Room extends DurableObject<Env> {
     if (!msg) {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
-    const { seat } = ws.deserializeAttachment() as Attachment
+    const { seat, spectator } = ws.deserializeAttachment() as Attachment
+    if (spectator) return // 观战者只读
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(ws, seat, game)
@@ -409,6 +476,7 @@ export class Room extends DurableObject<Env> {
       ...(msg.final && { finalAt: Date.now() }),
     }
     await this.ctx.storage.put('choices', choices)
+    this.sendChoices(choices)
     if (msg.final !== wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: msg.final })
@@ -562,7 +630,7 @@ export class Room extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     const attachment = ws.deserializeAttachment() as Attachment
-    if (attachment.replaced) return
+    if (attachment.replaced || attachment.spectator) return
     if (!(await this.ctx.storage.get<boolean>('created'))) return
     const remaining = this.ctx.getWebSockets().filter((other) => other !== ws)
     for (const other of remaining) {
@@ -660,6 +728,11 @@ export class Room extends DurableObject<Env> {
   }
 
   private async close(): Promise<void> {
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.close(1000, 'room closed')
+      } catch {}
+    }
     await this.ctx.storage.deleteAlarm()
     await this.ctx.storage.deleteAll()
   }

@@ -23,7 +23,8 @@ import IconLogout from '~/components/icons/IconLogout.vue'
 import IconSettings from '~/components/icons/IconSettings.vue'
 import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { roomStatus, roomWsUrl } from '~/apis'
+import IconStones from '~/components/icons/IconStones.vue'
+import { roomStatus, roomWsUrl, spectateWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
@@ -40,11 +41,19 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import { tournamentFrameSeconds, type ClientMessage, type ServerMessage } from '@/shared/protocol'
+import {
+  tournamentFrameSeconds,
+  type ClientMessage,
+  type ServerMessage,
+  type WatchChoice,
+} from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
 const roomUrl = location.href
+// 观战模式（大赛限定）：只读连接，另收 choices 展示双方草稿/提交点。
+const spectating = new URLSearchParams(location.search).get('spectate') === '1'
+const watchChoices = ref<{ black: WatchChoice; white: WatchChoice } | null>(null)
 
 type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 
@@ -108,7 +117,7 @@ const {
   send,
   open,
   status: wsStatus,
-} = useWebSocket(roomWsUrl(props.code, key.value), {
+} = useWebSocket(spectating ? spectateWsUrl(props.code) : roomWsUrl(props.code, key.value), {
   immediate: false,
   heartbeat: {
     message: 'ping',
@@ -150,6 +159,11 @@ useEventListener(document, 'visibilitychange', () => {
 useEventListener(window, 'online', reopenIfDead)
 
 onMounted(async () => {
+  if (spectating) {
+    everOpened = true
+    open()
+    return
+  }
   let status = { exists: true, full: false }
   try {
     status = await roomStatus(props.code, key.value)
@@ -211,12 +225,17 @@ function handleMessage(msg: ServerMessage) {
       showConcede.value = false
       drawInvite.value = false
       drawInviteDeadline.value = null
+      watchChoices.value = null
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
+    case 'choices':
+      watchChoices.value = { black: msg.black, white: msg.white }
+      break
     case 'frame_settled':
-      if (msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
+      if (!spectating && msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
         showToast('对方上一回合弃着')
       }
+      watchChoices.value = null
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
@@ -448,6 +467,7 @@ function reload() {
 }
 
 function exitRoom() {
+  if (spectating) return backOrReplace('/tournament')
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
   forgetKey()
   setTimeout(() => backOrReplace(), 150)
@@ -497,11 +517,14 @@ function exitRoom() {
       <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
-            <IconStone :seat="seat" class="size-3.5" />
-            {{ seatLabel }}
-            <template v-if="stage === 'over'">
-              ·
-              <span class="font-semibold" :class="resultTextCls">{{ resultChar }}</span>
+            <IconStones v-if="spectating" class="h-4" />
+            <template v-else>
+              <IconStone :seat="seat" class="size-3.5" />
+              {{ seatLabel }}
+              <template v-if="stage === 'over'">
+                ·
+                <span class="font-semibold" :class="resultTextCls">{{ resultChar }}</span>
+              </template>
             </template>
           </span>
           <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
@@ -510,7 +533,7 @@ function exitRoom() {
             <button
               class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
               aria-label="退出房间"
-              @click="confirmingExit = true"
+              @click="spectating ? exitRoom() : (confirmingExit = true)"
             >
               <IconLogout class="size-3.5" />
             </button>
@@ -526,7 +549,14 @@ function exitRoom() {
 
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game?.frame }} 回合</span>
-          <span class="flex items-center gap-1.5" :class="oppStatus.cls">
+          <span
+            v-if="spectating"
+            class="flex items-center gap-1.5 text-stone-500 dark:text-stone-400"
+          >
+            <span class="size-2 rounded-full bg-emerald-500" />
+            观战中
+          </span>
+          <span v-else class="flex items-center gap-1.5" :class="oppStatus.cls">
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
@@ -549,18 +579,19 @@ function exitRoom() {
             :submitted="submitted"
             :last-moves="lastMoves"
             :vanishing="vanishing"
-            :interactive="stage === 'playing' && (!submitted || !oppSubmitted)"
+            :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
+            :watch-choices="spectating ? watchChoices : null"
             @select="select"
           />
           <ResultOverlay
-            v-if="stage === 'over' && !overlayDismissed"
+            v-if="stage === 'over' && !overlayDismissed && !spectating"
             :char="resultChar"
             :colors="resultColors"
             @dismiss="overlayDismissed = true"
           />
         </div>
 
-        <template v-if="stage === 'playing'">
+        <template v-if="stage === 'playing' && !spectating">
           <AppButton
             v-if="!autoSubmit"
             class="w-full"
@@ -626,6 +657,16 @@ function exitRoom() {
           </AppButton>
           <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
         </template>
+
+        <div v-if="spectating" class="flex justify-center">
+          <button
+            class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+            aria-label="玩家信息"
+            @click="showPlayers = true"
+          >
+            <IconUsers class="size-5" />
+          </button>
+        </div>
       </div>
     </template>
 
@@ -723,6 +764,7 @@ function exitRoom() {
       v-if="showPlayers"
       :accounts="seatAccounts"
       :seat="seat"
+      :spectator="spectating"
       @close="showPlayers = false"
     />
 

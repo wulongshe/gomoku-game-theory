@@ -6,6 +6,8 @@ const props = defineProps<{
   label: (option: T) => string
   multi?: boolean
   disabled?: boolean
+  // 单独置灰某些选项（整体 disabled 之外的细粒度控制）。
+  optionDisabled?: (option: T) => boolean
 }>()
 
 const value = defineModel<T>()
@@ -17,7 +19,7 @@ function isActive(option: T): boolean {
 
 // 多选至少保留一项：取消最后一项时忽略；新增时按 options 顺序归并，保持展示次序稳定。
 function pick(option: T): void {
-  if (props.disabled) return
+  if (props.disabled || props.optionDisabled?.(option)) return
   if (!props.multi) {
     value.value = option
     return
@@ -38,8 +40,13 @@ function pick(option: T): void {
       v-for="option in options"
       :key="option"
       class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md pb-px font-medium leading-none transition-colors"
-      :class="isActive(option) ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'"
-      :disabled="disabled"
+      :class="[
+        isActive(option)
+          ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100'
+          : 'text-stone-500 dark:text-stone-400',
+        optionDisabled?.(option) && 'pointer-events-none opacity-40',
+      ]"
+      :disabled="disabled || optionDisabled?.(option)"
       @click="pick(option)"
     >
       <span

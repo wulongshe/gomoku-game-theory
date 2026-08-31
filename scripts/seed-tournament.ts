@@ -30,6 +30,8 @@ const LIU = 'liuyang@example.com'
 const WANG = 'wangfang@example.com'
 const CHEN = 'chenjing@example.com'
 const LINA = 'lina@example.com'
+const TEST1 = 'test1@example.com'
+const TEST2 = 'test2@example.com'
 
 function pairing(
   code: string,
@@ -41,31 +43,32 @@ function pairing(
   return { code, players: [a, b], checkedIn, result }
 }
 
-// 第 1 轮已归档；第 2 轮：一桌已出结果（已结束）、一桌对弈中、一桌没进场（待开始）、一桌缺席判负（已离开）。
+// 第 1 轮已归档；第 2 轮：outlook 已结束（可观战），test1/test2 待开始，
+// zhangwei vs gmail 对局中，liuyang 缺席判负（已离开）。
 const ACTIVE: SeedState = {
   state: 'active',
   round: 2,
   totalRounds: 3,
   players: {
-    [KOBA]: { score: 2, opponents: [LINA, OUTLOOK], byes: 0 },
-    [OUTLOOK]: { score: 1, opponents: [CHEN, KOBA], byes: 0 },
+    [OUTLOOK]: { score: 2, opponents: [TEST1, KOBA], byes: 0 },
+    [KOBA]: { score: 1, opponents: [TEST2, OUTLOOK], byes: 0 },
     [ZHANG]: { score: 1, opponents: [WANG, GMAIL], byes: 0 },
     [GMAIL]: { score: 0.5, opponents: [LIU, ZHANG], byes: 0 },
     [LIU]: { score: 0.5, opponents: [GMAIL, WANG], byes: 0 },
-    [WANG]: { score: 0, opponents: [ZHANG, LIU], byes: 0 },
-    [CHEN]: { score: 0, opponents: [OUTLOOK, LINA], byes: 0 },
-    [LINA]: { score: 1, opponents: [KOBA, CHEN], byes: 0 },
+    [WANG]: { score: 1, opponents: [ZHANG, LIU], byes: 0 },
+    [TEST1]: { score: 0, opponents: [OUTLOOK, TEST2], byes: 0 },
+    [TEST2]: { score: 0, opponents: [KOBA, TEST1], byes: 0 },
   },
   pairings: [
-    pairing('9201', KOBA, OUTLOOK, [KOBA, OUTLOOK], 'a'),
+    pairing('9201', OUTLOOK, KOBA, [OUTLOOK, KOBA], 'a'),
     pairing('9202', ZHANG, GMAIL, [ZHANG, GMAIL], null),
-    pairing('9203', LIU, WANG, [], null),
-    pairing('9204', CHEN, LINA, [LINA], 'b'),
+    pairing('9203', LIU, WANG, [WANG], 'b'),
+    pairing('9204', TEST1, TEST2, [], null),
   ],
   past: [
     [
-      pairing('9101', KOBA, LINA, [KOBA, LINA], 'a'),
-      pairing('9102', OUTLOOK, CHEN, [OUTLOOK, CHEN], 'a'),
+      pairing('9101', OUTLOOK, TEST1, [OUTLOOK, TEST1], 'a'),
+      pairing('9102', KOBA, TEST2, [KOBA, TEST2], 'a'),
       pairing('9103', ZHANG, WANG, [ZHANG, WANG], 'a'),
       pairing('9104', GMAIL, LIU, [GMAIL, LIU], 'draw'),
     ],

@@ -426,9 +426,10 @@ export class Tournament extends DurableObject<Env> {
     const now = Date.now()
     const participating = s.state === 'active' && email !== null && email in s.players
     const registered = email !== null && s.registrations.includes(email)
-    // 观战门槛：本轮自己的对局出了结果（含轮空/判负）才开放各桌对阵，未打完不能先看别人。
-    const myDone =
-      participating && s.pairings.some((p) => p.players.includes(email!) && p.result !== null)
+    const statuses = s.state === 'active' ? this.playerStatuses(s) : null
+    // 观战门槛：本轮自己的状态为「已结束」（到场打完或轮空）才开放各桌对阵；
+    // 未打完、缺席判离开的都不行。
+    const myDone = participating && statuses?.get(email!) === 'done'
     const showLive = s.state !== 'active' || myDone
     const myGame = participating
       ? (s.pairings.find((x) => x.code && x.result === null && x.players.includes(email!))?.code ??
@@ -447,7 +448,6 @@ export class Tournament extends DurableObject<Env> {
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
     const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
-    const statuses = s.state === 'active' ? this.playerStatuses(s) : null
     return {
       state: s.state,
       now,
@@ -471,11 +471,24 @@ export class Tournament extends DurableObject<Env> {
 
   private toMatch(p: Pairing): Match {
     return {
+      code: p.code,
       a: p.players[0],
       b: p.players[1],
       status: p.result !== null ? 'done' : p.checkedIn.length >= 2 ? 'playing' : 'pending',
       result: p.result,
     }
+  }
+
+  // 观战资格（Room 校验用）：本轮参赛且自己的状态为「已结束」（缺席判离开的不算）。
+  async canSpectate(email: string): Promise<boolean> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const s = await this.load()
+      return (
+        s.state === 'active' &&
+        email in s.players &&
+        this.playerStatuses(s).get(email) === 'done'
+      )
+    })
   }
 
   // 本地开发数据注入（路由仅 localhost 暴露，见 index.ts）：覆写状态、重挂闹钟并广播。

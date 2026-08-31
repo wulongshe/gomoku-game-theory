@@ -426,6 +426,32 @@ describe('active-state registration and spectating', () => {
     expect(info.rounds).toEqual([]) // 自己的对局没打完，不能观战
   })
 
+  it('hides rounds from a forfeited (left) participant', async () => {
+    const email = 'ghosted@example.com'
+    const token = await sessionFor(email)
+    await runInDurableObject(stub(), (_i, st) =>
+      st.storage.put(
+        't',
+        full({
+          state: 'active',
+          round: 1,
+          totalRounds: 1,
+          roundDeadline: Date.now() + 600_000,
+          players: Object.fromEntries(
+            [email, 'b@x', 'c@x', 'd@x'].map((e) => [e, { score: 0, opponents: [], byes: 0 }]),
+          ),
+          pairings: [
+            // 缺席判负（没到场）→ 已离开，不给观战。
+            { code: '0001', players: [email, 'b@x'], checkedIn: ['b@x'], result: 'b' },
+            { code: '0002', players: ['c@x', 'd@x'], checkedIn: ['c@x', 'd@x'], result: null },
+          ],
+        }),
+      ),
+    )
+    const info = await stub().getInfo(token)
+    expect(info.rounds).toEqual([])
+  })
+
   it('hides rounds from non-participants during an active event', async () => {
     const outsider = await sessionFor('nobody@example.com')
     await seedActive(['a@x', 'b@x'])
