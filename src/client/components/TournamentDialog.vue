@@ -71,7 +71,7 @@ const buttonVariant = computed(() =>
     <div v-if="loading && !info" class="flex justify-center py-6">
       <IconSpinner class="size-5 text-stone-400" />
     </div>
-    <div v-else-if="info" class="flex flex-col gap-4">
+    <div v-else-if="info" class="-mx-3 -mb-2 flex flex-col gap-4">
       <div class="rounded-xl bg-stone-100 px-4 py-3 text-center dark:bg-stone-700/50">
         <template v-if="info.participating">
           <p class="text-sm text-stone-500 dark:text-stone-400">
@@ -98,7 +98,7 @@ const buttonVariant = computed(() =>
         <p class="text-xs text-stone-400 dark:text-stone-500">
           {{ info.state === 'active' ? '实时积分' : '昨日排名' }}
         </p>
-        <TournamentStandings :standings="info.standings" class="max-h-48" />
+        <TournamentStandings :standings="info.standings" class="max-h-64" />
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
         瑞士轮积分赛 · 报名后到点自动配对开赛
