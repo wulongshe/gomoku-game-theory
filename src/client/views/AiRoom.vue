@@ -38,7 +38,7 @@ const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbid
 const frameSeconds = 0
 const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
 
-// strength 是「加成」滑条（只对地狱难度生效），取 URL 参数，非法则回落到默认；范围 0.05~1、步长 0.05。
+// strength 是「棋力」滑条（只对地狱难度生效），取 URL 参数，非法则回落到默认；范围 0.05~1、步长 0.05。
 // 引擎读心置信度 read = strength - 0.05：滑条 5%~100% → 置信 0~0.95（AI 本就有自然命中率，0 即纯盲搜、不再额外削弱）。
 function clampStrength(raw: number): number {
   if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_HELL_STRENGTH

@@ -72,7 +72,7 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
         <SegmentedControl v-model="difficulty" :options="difficulties" :label="difficultyLabel" />
       </div>
       <div v-if="difficulties && difficulty === 'hell'" class="flex flex-col gap-2">
-        <span class="text-center text-stone-500 dark:text-stone-400">{{ Math.round(strength * 100) }}% 加成</span>
+        <span class="text-center text-stone-500 dark:text-stone-400">{{ Math.round(strength * 100) }} 点棋力</span>
         <RangeSlider v-model="strength" :min="0.05" :max="1" :step="0.05" :fill="fillColor" />
       </div>
     </div>
