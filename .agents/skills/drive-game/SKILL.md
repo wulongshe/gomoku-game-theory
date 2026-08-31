@@ -13,9 +13,9 @@ Game rules, board geometry, and UI copy live in the code and change over time â€
 read them fresh each run instead of trusting remembered values:
 
 - board constants (cell size, padding, grid size) and the board svg markup:
-  `src/client/components/Board.vue`, `src/engine/game.ts`
+  `src/client/components/Board.vue`, `packages/engine/src/game.ts`
 - move legality (opening restrictions, collisions, win/annihilation
-  conditions): `src/engine/game.ts`
+  conditions): `packages/engine/src/game.ts`
 - button/status text used for selectors: `src/client/views/*.vue`
 
 ## Setup (once per environment)

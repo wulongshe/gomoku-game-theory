@@ -1,4 +1,4 @@
-import { FRAME_SECONDS, type GameMode } from '@/engine/game'
+import { FRAME_SECONDS, type GameMode } from '@gomoku/engine/game'
 import { EMAIL_PATTERN, FRAME_OPTIONS, MODE_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
 import { parseMatchOptions } from './lobby'

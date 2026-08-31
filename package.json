@@ -29,6 +29,7 @@
     "wrangler": "^4.0.0"
   },
   "dependencies": {
+    "@gomoku/engine": "workspace:*",
     "@vueuse/core": "^14.4.0",
     "nanoid": "^6.0.1",
     "uqr": "^0.1.3",

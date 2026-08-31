@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { searchBestMove } from '@/engine/mcts'
+import { searchBestMove } from '@gomoku/engine/mcts'
 import {
   BOARD_SIZE,
   createGame,
@@ -9,7 +9,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from '@/engine/game'
+} from '@gomoku/engine/game'
 
 function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
   const game = createGame(mode)

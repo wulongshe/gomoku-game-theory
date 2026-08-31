@@ -8,7 +8,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from '@/engine/game'
+} from '@gomoku/engine/game'
 
 const props = defineProps<{
   state: GameState

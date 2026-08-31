@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import type { GameState, Seat } from '@/engine/game'
+import type { GameState, Seat } from '@gomoku/engine/game'
 
 // 从对局阶段与本方 seat 推导结果展示：艺术字 char、渐变色 colors、文字色 textCls。
 // 未分胜负（进行中 / 和棋）时按和棋样式。

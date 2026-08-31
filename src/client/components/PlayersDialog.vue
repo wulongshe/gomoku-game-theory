@@ -4,7 +4,7 @@ import AppDialog from '~/components/AppDialog.vue'
 import AppSwitch from '~/components/AppSwitch.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import { useAuth } from '~/composables/useAuth'
-import type { Seat } from '@/engine/game'
+import type { Seat } from '@gomoku/engine/game'
 
 const props = defineProps<{
   accounts: Record<Seat, string | null>

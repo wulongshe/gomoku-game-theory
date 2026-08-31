@@ -5,5 +5,5 @@
     "types": ["node"],
     "tsBuildInfoFile": "node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
-  "include": ["vite.config.ts", "scripts", "src/engine"]
+  "include": ["vite.config.ts", "scripts", "packages/engine/src"]
 }

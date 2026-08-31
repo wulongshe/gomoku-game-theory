@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import { RATING_DEFAULT } from './accounts'
 import { allocateRoom } from './roomCode'

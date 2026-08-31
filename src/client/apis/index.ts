@@ -1,4 +1,4 @@
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 import type { TournamentInfo } from '@/shared/protocol'
 import { useAuthToken } from '~/composables/useAuthToken'
 

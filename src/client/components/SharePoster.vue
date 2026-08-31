@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
 import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 
 const props = defineProps<{
   url: string

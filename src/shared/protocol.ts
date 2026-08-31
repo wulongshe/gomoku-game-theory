@@ -1,4 +1,4 @@
-import type { GameMode, GameState, Point, Seat } from '@/engine/game'
+import type { GameMode, GameState, Point, Seat } from '@gomoku/engine/game'
 
 export const FRAME_OPTIONS = [30, 60, 120, 0]
 export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus', 'race']

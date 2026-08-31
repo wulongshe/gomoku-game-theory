@@ -1,5 +1,5 @@
-import type { GameMode } from '@/engine/game'
-import type { Difficulty } from '@/engine/ai'
+import type { GameMode } from '@gomoku/engine/game'
+import type { Difficulty } from '@gomoku/engine/ai'
 
 export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'

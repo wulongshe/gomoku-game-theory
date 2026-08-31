@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiMove } from '@/engine/ai'
-import { evaluateState } from '@/engine/eval'
+import { chooseAiMove } from '@gomoku/engine/ai'
+import { evaluateState } from '@gomoku/engine/eval'
 import {
   BOARD_SIZE,
   createGame,
@@ -10,7 +10,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from '@/engine/game'
+} from '@gomoku/engine/game'
 
 function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
   const game = createGame(mode)

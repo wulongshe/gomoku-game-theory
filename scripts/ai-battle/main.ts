@@ -1,6 +1,6 @@
 // 由 Node 原生运行 TypeScript（Node ≥ 23.6，--import 加载 loader.ts 为相对导入补 .ts）：pnpm ai:battle
 import { Worker } from 'node:worker_threads'
-import { createGame, settleFrame, type GameMode, type GameState, type Point, type Seat } from '../../src/engine/game'
+import { createGame, settleFrame, type GameMode, type GameState, type Point, type Seat } from '../../packages/engine/src/game'
 import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====

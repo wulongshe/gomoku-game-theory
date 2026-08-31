@@ -12,7 +12,7 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { type Difficulty } from '@/engine/ai'
+import { type Difficulty } from '@gomoku/engine/ai'
 import {
   createGame,
   isLegalChoice,
@@ -21,7 +21,7 @@ import {
   type GameMode,
   type GameState,
   type Point,
-} from '@/engine/game'
+} from '@gomoku/engine/game'
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'

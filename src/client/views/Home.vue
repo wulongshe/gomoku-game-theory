@@ -27,8 +27,8 @@ import {
   ROOM_CODE_PATTERN,
   type LobbyServerMessage,
 } from '@/shared/protocol'
-import type { GameMode } from '@/engine/game'
-import { type Difficulty } from '@/engine/ai'
+import type { GameMode } from '@gomoku/engine/game'
+import { type Difficulty } from '@gomoku/engine/ai'
 
 const creating = ref(false)
 const matching = ref(false)

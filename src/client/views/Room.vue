@@ -38,7 +38,7 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from '@/engine/game'
+} from '@gomoku/engine/game'
 import { type ClientMessage, type ServerMessage } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()

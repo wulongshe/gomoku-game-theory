@@ -8,9 +8,9 @@ import {
   type GameState,
   type Point,
   type Seat,
-} from '@/engine/game'
-import { searchBestMove } from '@/engine/mcts'
-import type { Difficulty } from '@/engine/ai'
+} from '@gomoku/engine/game'
+import { searchBestMove } from '@gomoku/engine/mcts'
+import type { Difficulty } from '@gomoku/engine/ai'
 import { maskEmail, parseClientMessage, type ServerMessage } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
 

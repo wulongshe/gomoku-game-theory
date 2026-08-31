@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid'
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 import { ROOM_CODE_LENGTHS } from '@/shared/protocol'
 
 const generators = ROOM_CODE_LENGTHS.map((length) => customAlphabet('0123456789', length))

@@ -1,6 +1,6 @@
-import { searchBestMove } from '@/engine/mcts'
-import type { Difficulty } from '@/engine/ai'
-import type { GameState, Point, Seat } from '@/engine/game'
+import { searchBestMove } from '@gomoku/engine/mcts'
+import type { Difficulty } from '@gomoku/engine/ai'
+import type { GameState, Point, Seat } from '@gomoku/engine/game'
 
 interface AiRequest {
   id: number

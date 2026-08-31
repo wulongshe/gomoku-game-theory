@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import SharePoster from '~/components/SharePoster.vue'
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 
 defineProps<{ code: string; url: string; frameSeconds: number; mode: GameMode }>()
 

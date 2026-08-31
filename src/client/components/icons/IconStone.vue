@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Seat } from '@/engine/game'
+import type { Seat } from '@gomoku/engine/game'
 
 defineProps<{ seat: Seat }>()
 </script>

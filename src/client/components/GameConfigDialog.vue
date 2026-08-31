@@ -7,8 +7,8 @@ import SegmentedControl from '~/components/SegmentedControl.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '~/constants/branding'
 import { FRAME_OPTIONS, MODE_OPTIONS } from '@/shared/protocol'
-import type { GameMode } from '@/engine/game'
-import type { Difficulty } from '@/engine/ai'
+import type { GameMode } from '@gomoku/engine/game'
+import type { Difficulty } from '@gomoku/engine/ai'
 
 withDefaults(
   defineProps<{

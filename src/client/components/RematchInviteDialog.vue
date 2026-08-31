@@ -2,7 +2,7 @@
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import { frameLabel, MODE_LABELS } from '~/constants/branding'
-import type { GameMode } from '@/engine/game'
+import type { GameMode } from '@gomoku/engine/game'
 
 defineProps<{
   proposal: { frameSeconds: number; mode: GameMode } | null

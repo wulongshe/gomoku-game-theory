@@ -1,6 +1,6 @@
-import { type GameState, type Point, type Seat } from '../../src/engine/game'
-import { ductSearch } from '../../src/engine/mcts/duct'
-import { rmSearch } from '../../src/engine/mcts/rm'
+import { type GameState, type Point, type Seat } from '../../packages/engine/src/game'
+import { ductSearch } from '../../packages/engine/src/mcts/duct'
+import { rmSearch } from '../../packages/engine/src/mcts/rm'
 
 export type SideConfig =
   | { policy: 'duct'; candidates: number; explore: number; budgetMs: number }

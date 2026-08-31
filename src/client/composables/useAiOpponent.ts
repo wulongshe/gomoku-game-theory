@@ -1,6 +1,6 @@
 import { onScopeDispose, ref } from 'vue'
-import { chooseAiMove, type Difficulty } from '@/engine/ai'
-import type { GameState, Point, Seat } from '@/engine/game'
+import { chooseAiMove, type Difficulty } from '@gomoku/engine/ai'
+import type { GameState, Point, Seat } from '@gomoku/engine/game'
 
 // 只带上引擎选点真正会读到的字段，得到一个纯数据快照，可结构化克隆传给 Worker，
 // 避免直接克隆 Vue 响应式代理（会抛 could not be cloned），也省去无关字段的拷贝。

@@ -1,6 +1,6 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it, vi } from 'vitest'
-import { cellAt, type Point } from '@/engine/game'
+import { cellAt, type Point } from '@gomoku/engine/game'
 import type { ServerMessage } from '@/shared/protocol'
 import { allocateRoom } from '@/worker/roomCode'
 
