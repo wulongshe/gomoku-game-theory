@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
-import { frameLabel, MODE_LABELS } from '~/constants/branding'
+import { MODE_LABELS } from '@gomoku/branding'
+import { frameLabel } from '~/utils/format'
 import type { GameMode } from '@gomoku/engine/game'
 
 defineProps<{

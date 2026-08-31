@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import AppButton from '~/components/AppButton.vue'
 import IconCheck from '~/components/icons/IconCheck.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import { frameLabel, MODE_LABELS } from '~/constants/branding'
+import { MODE_LABELS } from '@gomoku/branding'
+import { frameLabel } from '~/utils/format'
 import type { GameMode, Seat } from '@gomoku/engine/game'
 
 const props = defineProps<{

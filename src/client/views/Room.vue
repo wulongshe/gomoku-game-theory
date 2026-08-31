@@ -28,7 +28,7 @@ import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
-import { MODE_LABELS } from '~/constants/branding'
+import { MODE_LABELS } from '@gomoku/branding'
 import { ROOM_KEY_PREFIX } from '~/constants/storage'
 import {
   FRAME_SECONDS,

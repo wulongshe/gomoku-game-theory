@@ -25,9 +25,8 @@ import {
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
-import { DEFAULT_HELL_STRENGTH, DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '~/constants/branding'
+import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '@gomoku/branding'
 import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
-import { AI_MODE_OPTIONS } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
@@ -292,7 +291,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
       <template v-if="playing">
         <AppButton class="w-full" :disabled="!selected || resolving" @click="submitChoice">
-          {{ resolving ? 'AI 结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
+          {{ resolving ? '结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
         </AppButton>
       </template>
       <template v-else>

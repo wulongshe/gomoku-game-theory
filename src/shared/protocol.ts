@@ -3,9 +3,6 @@ import type { GameMode, GameState, Point, Seat } from '@gomoku/engine/game'
 export const FRAME_OPTIONS = [30, 60, 120, 0]
 export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus', 'race']
 
-// 人机对战本地单步结算，抢点撞子只能随机归属，沦为运气，故不开放给 AI
-export const AI_MODE_OPTIONS: GameMode[] = MODE_OPTIONS.filter((mode) => mode !== 'race')
-
 // 房号纯数字、优先 4 位好记；同长度接连撞车（房间多）才升到 6、8 位。
 export const ROOM_CODE_LENGTHS = [4, 6, 8]
 export const ROOM_CODE_MAX_LENGTH = ROOM_CODE_LENGTHS[ROOM_CODE_LENGTHS.length - 1]

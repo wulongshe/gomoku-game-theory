@@ -7,7 +7,7 @@ import IconStones from '~/components/icons/IconStones.vue'
 import { fetchTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
-import { formatCountdown } from '~/constants/branding'
+import { formatCountdown } from '~/utils/format'
 import { maskEmail, type TournamentInfo } from '@/shared/protocol'
 
 const { email, loggedIn } = useAuth()

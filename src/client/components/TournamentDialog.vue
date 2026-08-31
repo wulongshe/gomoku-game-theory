@@ -7,7 +7,7 @@ import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { fetchTournament, registerTournament, withdrawTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
-import { formatCountdown } from '~/constants/branding'
+import { formatCountdown } from '~/utils/format'
 import type { TournamentInfo } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: []; login: [] }>()

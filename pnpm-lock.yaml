@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@gomoku/branding':
+        specifier: workspace:*
+        version: link:packages/branding
       '@gomoku/engine':
         specifier: workspace:*
         version: link:packages/engine
@@ -60,6 +63,9 @@ importers:
 
   miniapp:
     dependencies:
+      '@gomoku/branding':
+        specifier: workspace:*
+        version: link:../packages/branding
       '@gomoku/engine':
         specifier: workspace:*
         version: link:../packages/engine
@@ -109,6 +115,12 @@ importers:
       vue-tsc:
         specifier: ^2.2.0
         version: 2.2.12(typescript@5.9.3)
+
+  packages/branding:
+    dependencies:
+      '@gomoku/engine':
+        specifier: workspace:*
+        version: link:../engine
 
   packages/engine: {}
 

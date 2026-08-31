@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import IconCross from '~/components/icons/IconCross.vue'
-import { FULL_RULES } from '~/constants/branding'
+import { fullRules } from '@gomoku/branding'
 
 const emit = defineEmits<{ close: [] }>()
+
+const FULL_RULES = fullRules()
 </script>
 
 <template>

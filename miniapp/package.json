@@ -9,6 +9,7 @@
     "check": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@gomoku/branding": "workspace:*",
     "@gomoku/engine": "workspace:*",
     "@tarojs/components": "4.2.1",
     "@tarojs/runtime": "4.2.1",

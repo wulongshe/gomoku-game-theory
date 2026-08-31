@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
-import { frameLabel, MODE_LABELS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { MODE_LABELS, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { frameLabel } from '~/utils/format'
 import type { GameMode } from '@gomoku/engine/game'
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const props = defineProps<{
   frameSeconds?: number
   mode?: GameMode
 }>()
+
+const RULES = rules()
 
 const W = 640
 const H = 950

@@ -18,9 +18,8 @@ import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
-import { DEFAULT_HELL_STRENGTH, DIFFICULTY_OPTIONS, RULES, SUBTITLE, TAGLINE, TITLE } from '~/constants/branding'
+import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_OPTIONS, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import {
-  AI_MODE_OPTIONS,
   FRAME_OPTIONS,
   MODE_OPTIONS,
   ROOM_CODE_MAX_LENGTH,
@@ -30,6 +29,7 @@ import {
 import type { GameMode } from '@gomoku/engine/game'
 import { type Difficulty } from '@gomoku/engine/ai'
 
+const RULES = rules()
 const creating = ref(false)
 const matching = ref(false)
 const showRules = ref(false)
