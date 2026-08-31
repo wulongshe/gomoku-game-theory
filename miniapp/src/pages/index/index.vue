@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
-import ConfigDialog, { type GameConfig } from '@/components/ConfigDialog.vue'
+import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
+import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 
 useShareAppMessage(() => ({
@@ -11,11 +12,18 @@ useShareAppMessage(() => ({
 }))
 
 const RULES = rules('ai')
+const savedConfig = ref(loadConfig())
 const showConfig = ref(false)
 const showRules = ref(false)
 
+function openConfig(): void {
+  savedConfig.value = loadConfig()
+  showConfig.value = true
+}
+
 function start(config: GameConfig): void {
   showConfig.value = false
+  saveConfig(config)
   Taro.navigateTo({
     url: `/pages/game/index?mode=${config.mode}&level=${config.difficulty}&strength=${config.strength}`,
   })
@@ -46,9 +54,16 @@ function start(config: GameConfig): void {
       </view>
     </view>
 
-    <view class="btn btn-primary" @tap="showConfig = true">人机对战</view>
+    <view class="btn btn-primary" @tap="openConfig">人机对战</view>
 
-    <ConfigDialog v-if="showConfig" @cancel="showConfig = false" @confirm="start" />
+    <ConfigDialog
+      v-if="showConfig"
+      :mode="savedConfig.mode"
+      :difficulty="savedConfig.difficulty"
+      :strength="savedConfig.strength"
+      @cancel="showConfig = false"
+      @confirm="start"
+    />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
   </view>

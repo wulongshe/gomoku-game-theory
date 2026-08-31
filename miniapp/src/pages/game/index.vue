@@ -2,9 +2,10 @@
 import { computed, onUnmounted, ref } from 'vue'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
 import Board from '@/components/Board.vue'
-import ConfigDialog, { type GameConfig } from '@/components/ConfigDialog.vue'
+import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { aiMove } from '@/game/ai'
+import { saveConfig, type GameConfig } from '@/game/config'
 import {
   AI_MODE_OPTIONS,
   DEFAULT_HELL_STRENGTH,
@@ -137,6 +138,7 @@ function applyConfig(config: GameConfig): void {
   mode.value = config.mode
   difficulty.value = config.difficulty
   strength.value = config.strength
+  saveConfig(config)
   restart()
 }
 </script>

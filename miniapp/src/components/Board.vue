@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { BOARD_SIZE, cellAt, type GameState, type Point } from '@gomoku/engine/game'
+import Taro from '@tarojs/taro'
+import { BOARD_SIZE, cellAt, type CellState, type GameState, type Point } from '@gomoku/engine/game'
 
 const props = defineProps<{
   state: GameState
@@ -10,12 +11,15 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ select: [Point] }>()
 
-// 棋盘几何（rpx）：整盘 690，四周留白 PAD，14 段等分得到格距 U。
+// 棋盘几何（rpx）：整盘 690，四周留白 PAD，14 段等分得到格距 U。比例对齐 web（U=40 坐标系）。
 const BOARD = 690
 const PAD = 30
 const U = (BOARD - PAD * 2) / (BOARD_SIZE - 1)
-const STONE = U * 0.82
+const STONE_R = U * 0.46
 const INNER = BOARD - PAD * 2
+const LAST_DOT = 11
+const RING_R = STONE_R + 4.5
+const LINE_W = 8
 const STARS = [
   { x: 3, y: 3 },
   { x: 11, y: 3 },
@@ -25,40 +29,130 @@ const STARS = [
 ]
 const lines = Array.from({ length: BOARD_SIZE }, (_, i) => PAD + i * U)
 
-type Kind = 'empty' | 'black' | 'white' | 'forbidden' | 'minus' | 'preview'
-
-function kindOf(x: number, y: number): Kind {
-  const cell = cellAt(props.state, { x, y })
-  if (cell === 'black' || cell === 'white' || cell === 'forbidden' || cell === 'minus') return cell
-  if (props.interactive && props.selected && props.selected.x === x && props.selected.y === y)
-    return 'preview'
-  return 'empty'
+function pos(i: number): number {
+  return PAD + i * U
 }
 
-const cells = computed(() => {
-  const out: { x: number; y: number; left: number; top: number; kind: Kind; last: boolean }[] = []
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      out.push({
-        x,
-        y,
-        left: PAD + x * U - U / 2,
-        top: PAD + y * U - U / 2,
-        kind: kindOf(x, y),
-        last: props.lastMoves.some((p) => p.x === x && p.y === y),
-      })
+// 首回合限落中央 3×3（除天元）：3×3 外整盘压暗、天元单独压暗，虚线框呼吸提示。
+const CENTER = (BOARD_SIZE - 1) / 2
+const ZONE_PAD = U * 0.7
+const ZONE_POS = PAD + (CENTER - 1) * U - ZONE_PAD
+const ZONE_SIZE = U * 2 + ZONE_PAD * 2
+const TY_SIZE = U * 0.8
+const TY_POS = PAD + CENTER * U - TY_SIZE / 2
+// 亮区圆角半径（对齐 web 的 rx=12/U40 比例）；洞的圆角用四个反圆角渐变补丁实现。
+const ZONE_R = 14
+const openingZone = computed(() => props.state.frame === 1 && props.state.phase === 'playing')
+
+const ALL_POINTS: Point[] = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => ({
+  x: i % BOARD_SIZE,
+  y: Math.floor(i / BOARD_SIZE),
+}))
+
+const stones = computed(() =>
+  ALL_POINTS.filter((p) => {
+    const cell = cellAt(props.state, p)
+    return cell === 'black' || cell === 'white'
+  }).map((p) => ({
+    ...p,
+    cell: cellAt(props.state, p) as 'black' | 'white',
+    last: props.lastMoves.some((m) => m.x === p.x && m.y === p.y),
+  })),
+)
+
+const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
+const minuses = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'minus'))
+
+// 湮灭动画：从连线原点向外逐格延迟消失，与 web 的 delay 公式一致。
+const VANISH_BASE_MS = 280
+const VANISH_STEP_MS = 90
+
+const vanishStones = computed(() => {
+  const map = new Map<string, { x: number; y: number; cell: CellState; delay: number }>()
+  for (const group of props.state.cleared) {
+    for (const { x, y, cell } of group.cells) {
+      const delay =
+        VANISH_BASE_MS +
+        Math.max(Math.abs(x - group.origin.x), Math.abs(y - group.origin.y)) * VANISH_STEP_MS
+      const key = `${x},${y}`
+      const seen = map.get(key)
+      if (!seen || delay < seen.delay) map.set(key, { x, y, cell, delay })
+    }
+  }
+  return [...map.values()]
+})
+
+// 线段（湮灭射线 / 胜利连线）转成居中定位 + 旋转的横条；内层再做 scaleX 描画动画。
+type Bar = { key: string; left: number; top: number; len: number; angle: number }
+
+function toBar(key: string, from: Point, to: Point): Bar {
+  const x1 = pos(from.x)
+  const y1 = pos(from.y)
+  const x2 = pos(to.x)
+  const y2 = pos(to.y)
+  const len = Math.hypot(x2 - x1, y2 - y1)
+  return {
+    key,
+    left: (x1 + x2) / 2 - len / 2,
+    top: (y1 + y2) / 2 - LINE_W / 2,
+    len,
+    angle: (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI,
+  }
+}
+
+const rays = computed(() => {
+  const out: Bar[] = []
+  for (const group of props.state.cleared) {
+    const farthest = new Map<string, { point: Point; dist: number }>()
+    for (const { x, y } of group.cells) {
+      const dx = Math.sign(x - group.origin.x)
+      const dy = Math.sign(y - group.origin.y)
+      if (!dx && !dy) continue
+      const dist = Math.max(Math.abs(x - group.origin.x), Math.abs(y - group.origin.y))
+      const key = `${dx},${dy}`
+      const seen = farthest.get(key)
+      if (!seen || dist > seen.dist) farthest.set(key, { point: { x, y }, dist })
+    }
+    for (const [key, { point }] of farthest) {
+      out.push(toBar(`${group.origin.x},${group.origin.y}>${key}`, group.origin, point))
     }
   }
   return out
 })
 
-function onTap(cell: { x: number; y: number }): void {
-  if (props.interactive) emit('select', { x: cell.x, y: cell.y })
+const winLines = computed(() =>
+  props.state.winningLines.map((line, i) => toBar(`w${i}`, line[0], line[line.length - 1])),
+)
+
+// 整盘单一 tap：取点击页面坐标，对照棋盘实际矩形换算 rpx，吸附到最近交叉点。
+// 比逐格小方块（约 22px）好点得多，也把 225 个事件节点降为 1 个。
+type TapEvent = {
+  detail?: { x?: number; y?: number }
+  changedTouches?: { pageX: number; pageY: number }[]
+}
+
+function onBoardTap(e: TapEvent): void {
+  if (!props.interactive) return
+  const px = e.detail?.x ?? e.changedTouches?.[0]?.pageX
+  const py = e.detail?.y ?? e.changedTouches?.[0]?.pageY
+  if (px == null || py == null) return
+  Taro.createSelectorQuery()
+    .select('#board')
+    .boundingClientRect((rect) => {
+      const r = rect as { left: number; top: number; width: number } | null
+      if (!r || !r.width) return
+      const scale = BOARD / r.width
+      const x = Math.round(((px - r.left) * scale - PAD) / U)
+      const y = Math.round(((py - r.top) * scale - PAD) / U)
+      if (x < 0 || y < 0 || x >= BOARD_SIZE || y >= BOARD_SIZE) return
+      emit('select', { x, y })
+    })
+    .exec()
 }
 </script>
 
 <template>
-  <view class="board" :style="`width:${BOARD}rpx;height:${BOARD}rpx`">
+  <view id="board" class="board" :style="`width:${BOARD}rpx;height:${BOARD}rpx`" @tap="onBoardTap">
     <view
       v-for="p in lines"
       :key="`h${p}`"
@@ -75,95 +169,339 @@ function onTap(cell: { x: number; y: number }): void {
       v-for="s in STARS"
       :key="`s${s.x}-${s.y}`"
       class="star"
-      :style="`left:${PAD + s.x * U - 5}rpx;top:${PAD + s.y * U - 5}rpx`"
+      :style="`left:${pos(s.x) - 5}rpx;top:${pos(s.y) - 5}rpx`"
     />
-    <view
-      v-for="c in cells"
-      :key="`${c.x}-${c.y}`"
-      class="hit"
-      :style="`left:${c.left}rpx;top:${c.top}rpx;width:${U}rpx;height:${U}rpx`"
-      @tap="onTap(c)"
-    >
+
+    <template v-if="openingZone">
+      <view class="dim" :style="`left:0;top:0;width:${BOARD}rpx;height:${ZONE_POS}rpx`" />
       <view
-        v-if="c.kind !== 'empty'"
-        :class="['stone', `stone-${c.kind}`, c.last ? 'stone-last' : '']"
-        :style="`width:${STONE}rpx;height:${STONE}rpx`"
-      >
-        <text v-if="c.kind === 'forbidden'" class="mark">×</text>
-        <text v-else-if="c.kind === 'minus'" class="mark mark-minus">−</text>
+        class="dim"
+        :style="`left:0;top:${ZONE_POS + ZONE_SIZE}rpx;width:${BOARD}rpx;height:${BOARD - ZONE_POS - ZONE_SIZE}rpx`"
+      />
+      <view
+        class="dim"
+        :style="`left:0;top:${ZONE_POS}rpx;width:${ZONE_POS}rpx;height:${ZONE_SIZE}rpx`"
+      />
+      <view
+        class="dim"
+        :style="`left:${ZONE_POS + ZONE_SIZE}rpx;top:${ZONE_POS}rpx;width:${BOARD - ZONE_POS - ZONE_SIZE}rpx;height:${ZONE_SIZE}rpx`"
+      />
+      <view
+        class="zone-corner corner-tl"
+        :style="`left:${ZONE_POS}rpx;top:${ZONE_POS}rpx;width:${ZONE_R}rpx;height:${ZONE_R}rpx`"
+      />
+      <view
+        class="zone-corner corner-tr"
+        :style="`left:${ZONE_POS + ZONE_SIZE - ZONE_R}rpx;top:${ZONE_POS}rpx;width:${ZONE_R}rpx;height:${ZONE_R}rpx`"
+      />
+      <view
+        class="zone-corner corner-bl"
+        :style="`left:${ZONE_POS}rpx;top:${ZONE_POS + ZONE_SIZE - ZONE_R}rpx;width:${ZONE_R}rpx;height:${ZONE_R}rpx`"
+      />
+      <view
+        class="zone-corner corner-br"
+        :style="`left:${ZONE_POS + ZONE_SIZE - ZONE_R}rpx;top:${ZONE_POS + ZONE_SIZE - ZONE_R}rpx;width:${ZONE_R}rpx;height:${ZONE_R}rpx`"
+      />
+      <view
+        class="dim dim-center"
+        :style="`left:${TY_POS}rpx;top:${TY_POS}rpx;width:${TY_SIZE}rpx;height:${TY_SIZE}rpx`"
+      />
+      <view
+        class="zone-frame"
+        :style="`left:${ZONE_POS}rpx;top:${ZONE_POS}rpx;width:${ZONE_SIZE}rpx;height:${ZONE_SIZE}rpx`"
+      />
+    </template>
+
+    <view
+      v-for="c in stones"
+      :key="`s${c.x}-${c.y}`"
+      :class="['stone', `stone-${c.cell}`]"
+      :style="`left:${pos(c.x) - STONE_R}rpx;top:${pos(c.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
+    >
+      <view v-if="c.last" :class="['last-dot', `last-dot-${c.cell}`]" />
+    </view>
+
+    <view
+      v-for="p in minuses"
+      :key="`m${p.x}-${p.y}`"
+      class="mark-cell mark-minus"
+      :style="`left:${pos(p.x) - STONE_R}rpx;top:${pos(p.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
+    >
+      <view class="bar bar-minus" />
+    </view>
+
+    <view
+      v-for="p in forbidden"
+      :key="`f${p.x}-${p.y}`"
+      class="mark-cell mark-forbidden"
+      :style="`left:${pos(p.x) - STONE_R}rpx;top:${pos(p.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
+    >
+      <view class="bar bar-cross bar-cross-a" />
+      <view class="bar bar-cross bar-cross-b" />
+    </view>
+
+    <view
+      v-for="v in vanishStones"
+      :key="`v${state.frame}-${v.x}-${v.y}`"
+      class="vanish"
+      :style="`left:${pos(v.x) - STONE_R}rpx;top:${pos(v.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx;animation-delay:${v.delay}ms`"
+    >
+      <view v-if="v.cell === 'black' || v.cell === 'white'" :class="['stone-still', `stone-${v.cell}`]" />
+      <view v-else-if="v.cell === 'minus'" class="mark-still mark-minus"><view class="bar bar-minus" /></view>
+      <view v-else-if="v.cell === 'forbidden'" class="mark-still mark-forbidden">
+        <view class="bar bar-cross bar-cross-a" />
+        <view class="bar bar-cross bar-cross-b" />
       </view>
     </view>
+
+    <view
+      v-for="ray in rays"
+      :key="`r${state.frame}-${ray.key}`"
+      class="beam"
+      :style="`left:${ray.left}rpx;top:${ray.top}rpx;width:${ray.len}rpx;height:${LINE_W}rpx;transform:rotate(${ray.angle}deg)`"
+    >
+      <view class="beam-fill beam-ray" />
+    </view>
+
+    <view
+      v-for="line in winLines"
+      :key="`w${line.key}`"
+      class="beam"
+      :style="`left:${line.left}rpx;top:${line.top}rpx;width:${line.len}rpx;height:${LINE_W}rpx;transform:rotate(${line.angle}deg)`"
+    >
+      <view class="beam-fill beam-win" />
+    </view>
+
+    <template v-if="interactive && selected">
+      <view
+        class="stone-still stone-black preview"
+        :style="`left:${pos(selected.x) - STONE_R}rpx;top:${pos(selected.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
+      />
+      <view
+        class="ring"
+        :style="`left:${pos(selected.x) - RING_R}rpx;top:${pos(selected.y) - RING_R}rpx;width:${RING_R * 2}rpx;height:${RING_R * 2}rpx`"
+      />
+    </template>
   </view>
 </template>
 
 <style>
 .board {
   position: relative;
-  background: #f2e4c3;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e0b26e, #d9a55f);
   border-radius: 16rpx;
   box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.12);
 }
 .line-h {
   position: absolute;
   height: 1px;
-  background: #b59b6a;
+  background: #7c5a33;
 }
 .line-v {
   position: absolute;
   width: 1px;
-  background: #b59b6a;
+  background: #7c5a33;
 }
 .star {
   position: absolute;
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background: #8a734a;
+  background: #7c5a33;
 }
-.hit {
+.dim {
   position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(28, 25, 23, 0.35);
 }
-.stone {
+.dim-center {
+  border-radius: 8rpx;
+}
+.zone-corner {
+  position: absolute;
+}
+.corner-tl {
+  background: radial-gradient(circle at 100% 100%, transparent 14rpx, rgba(28, 25, 23, 0.35) 14rpx);
+}
+.corner-tr {
+  background: radial-gradient(circle at 0% 100%, transparent 14rpx, rgba(28, 25, 23, 0.35) 14rpx);
+}
+.corner-bl {
+  background: radial-gradient(circle at 100% 0%, transparent 14rpx, rgba(28, 25, 23, 0.35) 14rpx);
+}
+.corner-br {
+  background: radial-gradient(circle at 0% 0%, transparent 14rpx, rgba(28, 25, 23, 0.35) 14rpx);
+}
+.zone-frame {
+  position: absolute;
+  border: 2px dashed #7c5a33;
+  border-radius: 14rpx;
+  box-sizing: border-box;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+.stone,
+.stone-still {
+  position: absolute;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.25);
+}
+.stone {
+  animation: stone-drop 0.18s ease-out;
 }
 .stone-black {
-  background: #1c1917;
+  background: radial-gradient(circle at 35% 30%, #5a5a5a, #111111);
 }
 .stone-white {
-  background: #fafaf9;
-  border: 1px solid #cfc9c1;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #d6d3d1);
+  border: 1px solid #a8a29e;
 }
-.stone-preview {
+.last-dot {
+  width: 11rpx;
+  height: 11rpx;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+.last-dot-black {
+  background: #ffffff;
+}
+.last-dot-white {
   background: #1c1917;
-  opacity: 0.4;
-  box-shadow: none;
 }
-.stone-forbidden {
-  background: #e7e5e4;
-  box-shadow: none;
+.mark-cell,
+.mark-still {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.stone-minus {
-  background: #d6d3d1;
-  box-shadow: none;
+.mark-cell {
+  animation: mark-pop 0.25s ease-out;
 }
-.stone-last {
-  border: 3rpx solid #10b981;
+.mark-still {
+  width: 100%;
+  height: 100%;
 }
-.mark {
-  color: #b91c1c;
-  font-size: 30rpx;
-  line-height: 1;
-  font-weight: 700;
+.mark-forbidden {
+  border: 3rpx solid #ef4444;
 }
 .mark-minus {
-  color: #57534e;
+  border: 3rpx solid #7c3aed;
+}
+.bar {
+  position: absolute;
+  height: 3rpx;
+  border-radius: 3rpx;
+}
+.bar-minus {
+  width: 60%;
+  background: #7c3aed;
+}
+.bar-cross {
+  width: 84%;
+  background: #ef4444;
+}
+.bar-cross-a {
+  transform: rotate(45deg);
+}
+.bar-cross-b {
+  transform: rotate(-45deg);
+}
+.vanish {
+  position: absolute;
+  animation: vanish 0.3s ease-in both;
+}
+.beam {
+  position: absolute;
+}
+.beam-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 4rpx;
+  background: #fbbf24;
+  transform-origin: left center;
+}
+.beam-ray {
+  animation: beam-ray 0.5s ease-out forwards;
+}
+.beam-win {
+  opacity: 0.9;
+  animation: beam-draw 0.5s ease-out forwards;
+}
+.preview {
+  opacity: 0.55;
+}
+.ring {
+  position: absolute;
+  border: 3rpx solid #1c1917;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes stone-drop {
+  from {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes mark-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes vanish {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+@keyframes beam-ray {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.9;
+  }
+  55% {
+    transform: scaleX(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+@keyframes beam-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 </style>

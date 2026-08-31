@@ -9,12 +9,7 @@ import {
   DIFFICULTY_OPTIONS,
   MODE_LABELS,
 } from '@gomoku/branding'
-
-export interface GameConfig {
-  mode: GameMode
-  difficulty: Difficulty
-  strength: number
-}
+import type { GameConfig } from '@/game/config'
 
 const props = withDefaults(
   defineProps<{
@@ -53,16 +48,19 @@ function confirm(): void {
 <template>
   <view class="mask" @tap="emit('cancel')">
     <view class="panel" @tap.stop>
-      <text class="panel-title">人机对战</text>
+      <view class="panel-head">
+        <text class="panel-title">人机对战</text>
+        <text class="panel-close" @tap="emit('cancel')">✕</text>
+      </view>
 
       <view class="field">
         <text class="field-label">撞子后</text>
-        <view class="chips">
+        <view class="seg">
           <view
             v-for="m in AI_MODE_OPTIONS"
             :key="m"
-            class="chip"
-            :class="{ 'chip-on': m === mode }"
+            class="seg-item"
+            :class="{ 'seg-on': m === mode }"
             @tap="mode = m"
           >
             {{ MODE_LABELS[m] }}
@@ -72,12 +70,12 @@ function confirm(): void {
 
       <view class="field">
         <text class="field-label">难度</text>
-        <view class="chips">
+        <view class="seg">
           <view
             v-for="d in DIFFICULTY_OPTIONS"
             :key="d"
-            class="chip"
-            :class="{ 'chip-on': d === difficulty }"
+            class="seg-item"
+            :class="{ 'seg-on': d === difficulty }"
             @tap="difficulty = d"
           >
             {{ DIFFICULTY_LABELS[d] }}
@@ -94,13 +92,15 @@ function confirm(): void {
           :step="5"
           :value="strengthPercent"
           :active-color="fillColor"
-          block-size="20"
+          background-color="#e7e5e4"
+          block-size="18"
+          block-color="#ffffff"
           @changing="onStrength"
           @change="onStrength"
         />
       </view>
 
-      <view class="btn btn-primary" @tap="confirm">开始对战</view>
+      <view class="dialog-btn" @tap="confirm">开始对战</view>
     </view>
   </view>
 </template>
@@ -118,51 +118,77 @@ function confirm(): void {
 }
 .panel {
   width: 100%;
+  max-width: 640rpx;
   display: flex;
   flex-direction: column;
   gap: 32rpx;
   padding: 48rpx;
   border-radius: 32rpx;
   background: #ffffff;
+  box-shadow: 0 20rpx 50rpx rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
 }
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .panel-title {
-  text-align: center;
-  font-size: 34rpx;
-  font-weight: 700;
+  font-size: 32rpx;
+  font-weight: 600;
   color: #292524;
+}
+.panel-close {
+  padding: 8rpx;
+  margin: -8rpx;
+  font-size: 28rpx;
+  color: #a8a29e;
 }
 .field {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 16rpx;
 }
 .field-label {
-  font-size: 26rpx;
+  text-align: center;
+  font-size: 28rpx;
   color: #78716c;
 }
-.chips {
+.seg {
   display: flex;
-  gap: 12rpx;
-  flex-wrap: wrap;
+  padding: 4rpx;
+  border-radius: 16rpx;
+  background: #e7e5e4;
+}
+.seg-item {
+  flex: 1;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #78716c;
 }
-.chip {
-  padding: 10rpx 24rpx;
-  border-radius: 999rpx;
-  background: #f5f5f4;
-  color: #57534e;
-  border: 1px solid #e7e5e4;
-  font-size: 26rpx;
-}
-.chip-on {
-  background: #1c1917;
-  color: #fafaf9;
-  border-color: #1c1917;
+.seg-on {
+  background: #ffffff;
+  color: #292524;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.08);
 }
 .slider {
   width: 100%;
   margin: 0;
+}
+.dialog-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx 0;
+  border-radius: 24rpx;
+  background: #292524;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 500;
 }
 </style>
