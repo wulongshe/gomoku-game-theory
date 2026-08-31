@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { computed, ref } from 'vue'
+import { useWebSocket } from '@vueuse/core'
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
-import { fetchTournament, registerTournament, withdrawTournament } from '~/apis'
+import { registerTournament, tournamentWsUrl, withdrawTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
@@ -22,20 +22,25 @@ const loading = ref(true)
 const startDeadline = ref<number | null>(null)
 const startLeft = useCountdown(startDeadline)
 
-async function load() {
-  try {
-    const data = await fetchTournament()
-    info.value = data
-    startDeadline.value = Date.now() + (data.startsAt - data.now)
-  } catch {
-    // 静默：保留上次数据
-  } finally {
-    loading.value = false
-  }
+function apply(data: TournamentInfo) {
+  info.value = data
+  startDeadline.value = Date.now() + (data.startsAt - data.now)
+  loading.value = false
 }
 
-onMounted(load)
-useIntervalFn(load, 3000)
+// 服务端连上即推一帧、状态变化再推，无需轮询。
+useWebSocket(tournamentWsUrl(), {
+  heartbeat: {
+    message: 'ping',
+    responseMessage: 'pong',
+    interval: 20_000,
+    pongTimeout: 10_000,
+  },
+  autoReconnect: { delay: 3000 },
+  onMessage(_ws, event) {
+    apply(JSON.parse(event.data as string) as TournamentInfo)
+  },
+})
 
 async function act() {
   if (!loggedIn.value) return emit('login')
@@ -44,7 +49,7 @@ async function act() {
   if (i.participating) return location.assign('/tournament') // 参赛者点击后才进入大厅
   busy.value = true
   try {
-    info.value = i.registered ? await withdrawTournament() : await registerTournament()
+    apply(i.registered ? await withdrawTournament() : await registerTournament())
   } catch {
     // ignore
   } finally {

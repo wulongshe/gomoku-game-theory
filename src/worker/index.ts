@@ -83,6 +83,9 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     }
     if (url.pathname.startsWith('/api/tournament')) {
       const tournament = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
+      if (url.pathname === '/api/tournament/ws') {
+        return tournament.fetch(request)
+      }
       const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
       if (request.method === 'GET' && url.pathname === '/api/tournament') {
         return Response.json(await tournament.getInfo(token))

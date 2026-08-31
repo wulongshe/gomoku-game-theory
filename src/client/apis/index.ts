@@ -124,10 +124,9 @@ export async function authLogout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', headers: bearer() })
 }
 
-export async function fetchTournament(): Promise<TournamentInfo> {
-  const res = await fetch('/api/tournament', { headers: bearer() })
-  if (!res.ok) throw new Error(`fetchTournament failed: ${res.status}`)
-  return (await res.json()) as TournamentInfo
+export function tournamentWsUrl(): string {
+  const token = authToken.value ? `?token=${authToken.value}` : ''
+  return `${wsProto()}://${location.host}/api/tournament/ws${token}`
 }
 
 async function tournamentAction(action: 'register' | 'withdraw'): Promise<TournamentInfo> {

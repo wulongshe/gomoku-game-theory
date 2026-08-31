@@ -353,3 +353,59 @@ describe('active-state registration and spectating', () => {
     expect(info.rounds).toEqual([])
   })
 })
+
+describe('websocket push', () => {
+  interface WsClient {
+    next(): Promise<{ registered: boolean; playerCount: number; me: number | null }>
+  }
+
+  async function connectWs(token?: string): Promise<WsClient> {
+    const res = await SELF.fetch(
+      `https://example.com/api/tournament/ws${token ? `?token=${token}` : ''}`,
+      { headers: { Upgrade: 'websocket' } },
+    )
+    expect(res.status).toBe(101)
+    const ws = res.webSocket!
+    ws.accept()
+    const queue: string[] = []
+    const waiters: Array<() => void> = []
+    ws.addEventListener('message', (event) => {
+      queue.push(event.data as string)
+      waiters.shift()?.()
+    })
+    return {
+      async next() {
+        while (queue.length === 0) {
+          await new Promise<void>((resolve) => waiters.push(resolve))
+        }
+        return JSON.parse(queue.shift()!)
+      },
+    }
+  }
+
+  it('sends a personalized frame on connect and pushes on state changes', async () => {
+    await seed({})
+    const email = 'push@example.com'
+    const token = await sessionFor(email)
+    const mine = await connectWs(token)
+    const guest = await connectWs()
+
+    const first = await mine.next()
+    expect(first.registered).toBe(false)
+    expect((await guest.next()).registered).toBe(false)
+
+    await stub().register(token)
+    const pushed = await mine.next()
+    expect(pushed.registered).toBe(true)
+    expect(pushed.playerCount).toBe(1)
+    // 游客也收到同一次变更，但按其身份个性化。
+    const guestPushed = await guest.next()
+    expect(guestPushed.registered).toBe(false)
+    expect(guestPushed.playerCount).toBe(1)
+  })
+
+  it('rejects non-websocket requests', async () => {
+    const res = await SELF.fetch('https://example.com/api/tournament/ws')
+    expect(res.status).toBe(426)
+  })
+})

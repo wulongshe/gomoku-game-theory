@@ -108,7 +108,55 @@ export function pairRound(players: SwissPlayer[], rng: () => number = Math.rando
   return pairings
 }
 
+interface SocketTag {
+  email: string | null
+}
+
 export class Tournament extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
+  }
+
+  // 大厅/弹窗不轮询，改走 WebSocket：连上即推一帧，此后每次状态变化按连接者身份各推一帧。
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      return new Response('Expected WebSocket', { status: 426 })
+    }
+    const token = new URL(request.url).searchParams.get('token')
+    const email = token ? await this.email(token) : null
+    const pair = new WebSocketPair()
+    this.ctx.acceptWebSocket(pair[1])
+    pair[1].serializeAttachment({ email } satisfies SocketTag)
+    const info = await this.ctx.blockConcurrencyWhile(async () => {
+      const s = await this.load()
+      await this.armIfNeeded(s)
+      return this.toInfo(s, email)
+    })
+    try {
+      pair[1].send(JSON.stringify(info))
+    } catch {}
+    return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  private async broadcast(s: TournamentState): Promise<void> {
+    const sockets = this.ctx.getWebSockets()
+    if (sockets.length === 0) return
+    // 内容按身份个性化（registered/myGame/me），相同身份共享一次序列化。
+    const payloads = new Map<string | null, string>()
+    for (const ws of sockets) {
+      const { email } = ws.deserializeAttachment() as SocketTag
+      let payload = payloads.get(email)
+      if (payload === undefined) {
+        payload = JSON.stringify(await this.toInfo(s, email))
+        payloads.set(email, payload)
+      }
+      try {
+        ws.send(payload)
+      } catch {}
+    }
+  }
+
   async getInfo(token: string | null): Promise<TournamentInfo> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const email = token ? await this.email(token) : null
@@ -126,6 +174,7 @@ export class Tournament extends DurableObject<Env> {
       if (email && !s.registrations.includes(email)) {
         s.registrations.push(email)
         await this.save(s)
+        await this.broadcast(s)
       }
       await this.armIfNeeded(s)
       return this.toInfo(s, email)
@@ -139,6 +188,7 @@ export class Tournament extends DurableObject<Env> {
       if (email && s.registrations.includes(email)) {
         s.registrations = s.registrations.filter((e) => e !== email)
         await this.save(s)
+        await this.broadcast(s)
       }
       return this.toInfo(s, email)
     })
@@ -151,6 +201,7 @@ export class Tournament extends DurableObject<Env> {
       if (p && !p.checkedIn.includes(input.email)) {
         p.checkedIn.push(input.email)
         await this.save(s)
+        await this.broadcast(s)
       }
     })
   }
@@ -178,6 +229,7 @@ export class Tournament extends DurableObject<Env> {
       this.applyResult(s, p)
       if (s.pairings.every((x) => x.result !== null)) await this.advance(s)
       await this.save(s)
+      await this.broadcast(s)
     })
   }
 
@@ -187,6 +239,7 @@ export class Tournament extends DurableObject<Env> {
       if (s.state === 'active') await this.closeRound(s)
       else await this.start(s)
       await this.save(s)
+      await this.broadcast(s)
     })
   }
 

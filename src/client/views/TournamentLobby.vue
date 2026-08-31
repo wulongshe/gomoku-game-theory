@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { ref } from 'vue'
+import { useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { fetchTournament } from '~/apis'
+import { tournamentWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
@@ -21,22 +21,27 @@ const startLeft = useCountdown(startDeadline)
 const roundDeadline = ref<number | null>(null)
 const roundLeft = useCountdown(roundDeadline)
 
-async function load() {
-  try {
-    const data = await fetchTournament()
-    info.value = data
-    startDeadline.value = Date.now() + (data.startsAt - data.now)
-    roundDeadline.value =
-      data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
-  } catch {
-    // 静默：保留上次数据
-  } finally {
-    loading.value = false
-  }
+function apply(data: TournamentInfo) {
+  info.value = data
+  startDeadline.value = Date.now() + (data.startsAt - data.now)
+  roundDeadline.value =
+    data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
+  loading.value = false
 }
 
-onMounted(load)
-useIntervalFn(load, 3000)
+// 服务端连上即推一帧、状态变化再推，无需轮询。
+useWebSocket(tournamentWsUrl(), {
+  heartbeat: {
+    message: 'ping',
+    responseMessage: 'pong',
+    interval: 20_000,
+    pongTimeout: 10_000,
+  },
+  autoReconnect: { delay: 3000 },
+  onMessage(_ws, event) {
+    apply(JSON.parse(event.data as string) as TournamentInfo)
+  },
+})
 </script>
 
 <template>
