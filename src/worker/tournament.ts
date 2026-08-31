@@ -426,7 +426,10 @@ export class Tournament extends DurableObject<Env> {
     const now = Date.now()
     const participating = s.state === 'active' && email !== null && email in s.players
     const registered = email !== null && s.registrations.includes(email)
-    const showLive = s.state !== 'active' || participating
+    // 观战门槛：本轮自己的对局出了结果（含轮空/判负）才开放各桌对阵，未打完不能先看别人。
+    const myDone =
+      participating && s.pairings.some((p) => p.players.includes(email!) && p.result !== null)
+    const showLive = s.state !== 'active' || myDone
     const myGame = participating
       ? (s.pairings.find((x) => x.code && x.result === null && x.players.includes(email!))?.code ??
           null)

@@ -416,6 +416,16 @@ describe('active-state registration and spectating', () => {
     expect(info.rounds[0][1].status).toBe('playing')
   })
 
+  it('hides rounds from a participant whose own game is still unfinished', async () => {
+    const email = 'busy@example.com'
+    const token = await sessionFor(email)
+    await seedActive([email, 'b@x'])
+    const info = await stub().getInfo(token)
+    expect(info.participating).toBe(true)
+    expect(info.myGame).toEqual({ code: '0001' })
+    expect(info.rounds).toEqual([]) // 自己的对局没打完，不能观战
+  })
+
   it('hides rounds from non-participants during an active event', async () => {
     const outsider = await sessionFor('nobody@example.com')
     await seedActive(['a@x', 'b@x'])

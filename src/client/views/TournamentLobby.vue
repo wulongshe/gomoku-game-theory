@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import SegmentedControl from '~/components/SegmentedControl.vue'
 import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
@@ -10,7 +11,7 @@ import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
 import { backOrReplace } from '~/utils/navigation'
-import type { TournamentInfo } from '@/shared/protocol'
+import type { Match, TournamentInfo } from '@/shared/protocol'
 
 const { loggedIn } = useAuth()
 const info = ref<TournamentInfo | null>(null)
@@ -28,6 +29,20 @@ function apply(data: TournamentInfo) {
     data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
   loading.value = false
 }
+
+// 参赛者可切到「对局状态」观战本轮各桌对阵（rounds 仅对参赛者下发）。
+const VIEWS = ['standings', 'matches'] as const
+const VIEW_LABELS: Record<(typeof VIEWS)[number], string> = {
+  standings: '积分',
+  matches: '观战',
+}
+const view = ref<(typeof VIEWS)[number]>('standings')
+// 只列对局中的桌（打完的看积分即可，没开的没内容可看）。
+const currentMatches = computed<Match[]>(() =>
+  info.value?.state === 'active'
+    ? (info.value.rounds[info.value.rounds.length - 1] ?? []).filter((m) => m.status === 'playing')
+    : [],
+)
 
 // 服务端连上即推一帧、状态变化再推，无需轮询。
 useWebSocket(tournamentWsUrl(), {
@@ -48,7 +63,7 @@ useWebSocket(tournamentWsUrl(), {
   <main
     class="flex min-h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-6 dark:from-stone-900 dark:to-stone-950"
   >
-    <div class="flex w-full max-w-md flex-1 flex-col items-center justify-center gap-5">
+    <div class="flex w-full max-w-md flex-1 flex-col items-center gap-5 pt-4">
       <div class="flex flex-col items-center gap-2">
         <IconStones class="h-7 drop-shadow" />
         <h1 class="text-xl font-bold tracking-wide text-stone-800 dark:text-stone-100">每日大赛</h1>
@@ -115,16 +130,40 @@ useWebSocket(tournamentWsUrl(), {
           </template>
         </div>
 
-        <div v-if="info.standings.length" class="flex min-h-0 w-full flex-col gap-1.5">
+        <div
+          v-if="info.standings.length || currentMatches.length"
+          class="flex min-h-0 w-full flex-col gap-1.5"
+        >
           <p v-if="info.state !== 'active'" class="px-1 text-xs text-stone-400 dark:text-stone-500">
             昨日排名
           </p>
+          <SegmentedControl
+            v-else-if="currentMatches.length"
+            v-model="view"
+            :options="VIEWS"
+            :label="(v) => VIEW_LABELS[v]"
+            class="text-sm"
+          />
           <TournamentStandings
+            v-if="view === 'standings' || !currentMatches.length"
             :standings="info.standings"
             :me="info.me"
             row-class="bg-white dark:bg-stone-800"
             class="max-h-96"
           />
+          <div v-else class="flex max-h-96 min-h-0 flex-col gap-1 overflow-y-auto">
+            <div
+              v-for="(m, i) in currentMatches"
+              :key="i"
+              class="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm dark:bg-stone-800"
+            >
+              <span class="min-w-0 flex-1 truncate text-left text-stone-700 dark:text-stone-200">{{ m.a }}</span>
+              <span
+                class="shrink-0 bg-gradient-to-br from-amber-500 to-red-600 bg-clip-text font-black italic tracking-tight text-transparent"
+              >VS</span>
+              <span class="min-w-0 flex-1 truncate text-right text-stone-700 dark:text-stone-200">{{ m.b }}</span>
+            </div>
+          </div>
         </div>
 
         <button
