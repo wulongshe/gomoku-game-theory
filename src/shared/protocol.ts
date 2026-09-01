@@ -36,7 +36,6 @@ export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
   | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode; tournament?: true; spectator?: true }
-  | { type: 'choices'; black: WatchChoice; white: WatchChoice }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | { type: 'players'; accounts: Record<Seat, string | null> }
   | {
@@ -77,9 +76,6 @@ export interface Match {
   status: 'pending' | 'readying' | 'playing' | 'done'
   result: 'a' | 'b' | 'draw' | 'void' | 'bye' | null
 }
-
-// 观战者可见的双方当前选点（草稿或已提交）；对局双方之间互不可见。
-export type WatchChoice = { point: Point | null; final: boolean } | null
 
 export interface TournamentInfo {
   state: 'idle' | 'active'

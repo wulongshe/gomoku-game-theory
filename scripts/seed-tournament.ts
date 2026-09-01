@@ -1,8 +1,9 @@
 // 由 Node 原生运行 TypeScript（同 ai:battle）：给本地 dev 的每日大赛注入演示数据。
-// 用法：pnpm seed:tournament [active|idle|prestart] [--url http://localhost:5173]
+// 用法：pnpm seed:tournament [active|idle|prestart|spectate] [--url http://localhost:5173]
 //  - active（默认）：第 2/3 轮进行中，四种状态齐全（对局中/待开始/已结束/已离开）
 //  - idle：只写一份「昨日排名」
 //  - prestart：shewulong@outlook.com 已报名、2 分钟后开赛（走真实 start：bot 注水补位、真打）
+//  - spectate：同 active，但「对局中」那桌换成真房 + 双 AI 自动对弈，outlook 已打完可观战
 // 数据经 worker 的 dev 专用注入口（仅 vite dev 存在）写进活着的 Tournament DO 并即时广播。
 // 形状对齐 src/worker/tournament.ts 的 TournamentState/Pairing（不直接 import，避免把
 // worker 模块拖进 node 侧类型检查）。
@@ -116,9 +117,23 @@ const SEEDS: Record<string, { body: SeedState; label: string }> = {
   idle: { body: IDLE, label: '昨日排名' },
   prestart: { body: PRESTART, label: `${OUTLOOK} 已报名，2 分钟后开赛` },
 }
-const seed = SEEDS[mode]
+let seed = SEEDS[mode]
+if (mode === 'spectate') {
+  const alloc = await fetch(
+    `${base}/api/dev/tournament-room?round=2&p0=${encodeURIComponent(ZHANG)}&p1=${encodeURIComponent(GMAIL)}&ai0=normal&ai1=normal`,
+  )
+  if (!alloc.ok) {
+    console.error(`建房失败：${alloc.status}（dev server 是否在 ${base}？）`)
+    process.exit(1)
+  }
+  const { code } = (await alloc.json()) as { code: string }
+  const body = structuredClone(ACTIVE)
+  // 双 AI 会在 5~60s 内错峰进场（待开始→准备中），到齐自动开局（对局中），随后可观战。
+  body.pairings[1] = { code, players: [ZHANG, GMAIL], checkedIn: [], result: null }
+  seed = { body, label: `观战演示：${ZHANG} vs ${GMAIL} 双 AI 对弈（房 ${code}）` }
+}
 if (!seed) {
-  console.error(`未知模式：${mode}（可选 active | idle | prestart）`)
+  console.error(`未知模式：${mode}（可选 active | idle | prestart | spectate）`)
   process.exit(1)
 }
 

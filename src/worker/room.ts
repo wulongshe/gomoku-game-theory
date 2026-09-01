@@ -260,7 +260,7 @@ export class Room extends DurableObject<Env> {
   }
 
   // 观战连接：仅大赛房开放，且由大赛 DO 校验资格（本轮参赛且自己的对局已打完）。
-  // 观战者无席位、只收广播，另发 choices 让其看到双方的草稿/提交点。
+  // 观战者无席位、只收广播；帧内双方选点不下发，帧结算后才能看到落子（防多号传点）。
   private async acceptSpectator(url: URL): Promise<Response> {
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     const email = await this.accountEmail(url.searchParams.get('token'))
@@ -305,22 +305,8 @@ export class Room extends DurableObject<Env> {
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: null,
       })
-      this.send(pair[1], this.choicesMessage(choices))
     }
     return new Response(null, { status: 101, webSocket: pair[0] })
-  }
-
-  private choicesMessage(choices: Choices): ServerMessage {
-    const pick = (seat: Seat) =>
-      choices[seat] ? { point: choices[seat].point, final: choices[seat].final } : null
-    return { type: 'choices', black: pick('black'), white: pick('white') }
-  }
-
-  private sendChoices(choices: Choices): void {
-    const msg = this.choicesMessage(choices)
-    for (const ws of this.ctx.getWebSockets()) {
-      if ((ws.deserializeAttachment() as Attachment).spectator) this.send(ws, msg)
-    }
   }
 
   private async accountEmail(auth: string | null): Promise<string | null> {
@@ -567,7 +553,6 @@ export class Room extends DurableObject<Env> {
       ...(msg.final && { finalAt: Date.now() }),
     }
     await this.ctx.storage.put('choices', choices)
-    this.sendChoices(choices)
     if (msg.final !== wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: msg.final })
@@ -643,7 +628,6 @@ export class Room extends DurableObject<Env> {
       'frameStart',
       'aiPlan',
       'aiArrive',
-      'aiRethink',
     ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -760,50 +744,26 @@ export class Room extends DurableObject<Env> {
       const submit = async (point: Point | null) => {
         choices[seat] = { point, final: true, finalAt: Date.now() }
         await this.ctx.storage.put('choices', choices)
-        this.sendChoices(choices)
         this.broadcast({ type: 'opponent_submitted', submitted: true })
         const other: Seat = seat === 'black' ? 'white' : 'black'
         if (choices[other]?.final) return this.settle(game, choices)
         return this.armAlarm()
       }
-      const draft = async () => {
-        choices[seat] = { point: chooseAiMove(game, seat, info.difficulty), final: false }
+      // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常犹豫一阵才交，
+      // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。
+      const late = lateness(game.frame)
+      if (!current) {
+        const point = chooseAiMove(game, seat, info.difficulty)
+        if (left < 3500 || Math.random() < 0.55 - 0.4 * late) return submit(point)
+        choices[seat] = { point, final: false }
         await this.ctx.storage.put('choices', choices)
-        this.sendChoices(choices)
-      }
-      // 落子（草稿）后的去向在此刻预谋：要再换点的先长考 4~15s 再换（可连锁多次换点）；
-      // 不换的短暂犹豫就定稿——大部分 0.5~3s，其余 3~8s。
-      const scheduleNext = async () => {
-        if (left > 9000 && Math.random() < 0.25) {
-          const rethink = (await this.ctx.storage.get<SeatFlags>('aiRethink')) ?? {}
-          rethink[seat] = true
-          await this.ctx.storage.put('aiRethink', rethink)
-          return this.planAi(seat, 4000 + Math.random() * 11000)
+        if (Number.isFinite(left) && Math.random() < 0.03 + 0.22 * late) {
+          return this.armAlarm() // 不再行动，草稿在帧超时自动提交
         }
         return this.planAi(
           seat,
           Math.random() < 0.7 ? 500 + Math.random() * 2500 : 3000 + Math.random() * 5000,
         )
-      }
-      // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常打草稿犹豫，
-      // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。
-      const late = lateness(game.frame)
-      if (!current) {
-        if (left < 3500 || Math.random() < 0.55 - 0.4 * late) {
-          return submit(chooseAiMove(game, seat, info.difficulty))
-        }
-        await draft()
-        return scheduleNext()
-      }
-      const rethink = (await this.ctx.storage.get<SeatFlags>('aiRethink')) ?? {}
-      if (rethink[seat]) {
-        delete rethink[seat]
-        await this.ctx.storage.put('aiRethink', rethink)
-        await draft()
-        return scheduleNext()
-      }
-      if (Number.isFinite(left) && Math.random() < 0.03 + 0.22 * late) {
-        return this.armAlarm() // 不再行动，草稿在帧超时自动提交
       }
       return submit(current.point)
     }
@@ -865,7 +825,7 @@ export class Room extends DurableObject<Env> {
     })
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
-      await this.ctx.storage.delete(['choices', 'aiRethink'])
+      await this.ctx.storage.delete('choices')
       const deadline = await this.scheduleFrame(next, await this.frameSeconds())
       this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed })
     } else {
@@ -874,7 +834,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
-    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiRethink', 'aiDrawOffered'])
+    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })

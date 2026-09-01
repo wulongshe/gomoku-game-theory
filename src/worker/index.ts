@@ -143,10 +143,15 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       return login.ok ? Response.json({ token: login.token }) : authError('unauthorized', 401)
     }
     if (DEV && url.pathname === '/api/dev/tournament-room') {
+      const diff = (name: string) => {
+        const value = url.searchParams.get(name)
+        return value === 'easy' || value === 'normal' || value === 'hard' ? value : null
+      }
       const code = await allocateRoom(env, 15, 'forbidden', {
         tournament: {
           round: Number(url.searchParams.get('round') ?? 1),
           players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
+          bots: [diff('ai0'), diff('ai1')],
         },
       })
       return Response.json({ code })

@@ -45,15 +45,13 @@ import {
   tournamentFrameSeconds,
   type ClientMessage,
   type ServerMessage,
-  type WatchChoice,
 } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
 const roomUrl = location.href
-// 观战模式（大赛限定）：只读连接，另收 choices 展示双方草稿/提交点。
+// 观战模式（大赛限定）：只读连接；帧内选点不可见，帧结算后才看到双方落子。
 const spectating = new URLSearchParams(location.search).get('spectate') === '1'
-const watchChoices = ref<{ black: WatchChoice; white: WatchChoice } | null>(null)
 
 type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 
@@ -225,17 +223,12 @@ function handleMessage(msg: ServerMessage) {
       showConcede.value = false
       drawInvite.value = false
       drawInviteDeadline.value = null
-      watchChoices.value = null
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
-      break
-    case 'choices':
-      watchChoices.value = { black: msg.black, white: msg.white }
       break
     case 'frame_settled':
       if (!spectating && msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
         showToast('对方上一回合弃着')
       }
-      watchChoices.value = null
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
@@ -580,7 +573,6 @@ function exitRoom() {
             :last-moves="lastMoves"
             :vanishing="vanishing"
             :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
-            :watch-choices="spectating ? watchChoices : null"
             @select="select"
           />
           <ResultOverlay

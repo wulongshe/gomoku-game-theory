@@ -957,7 +957,7 @@ describe('tournament spectating', () => {
     })
   }
 
-  it('lets a finished participant watch drafts, collisions, and the settled forbidden point', async () => {
+  it('hides in-frame choices from spectators until the frame settles', async () => {
     const viewer = 'viewer@example.com'
     const token = await sessionFor(viewer)
     await seedSpectatableTournament(viewer, true)
@@ -980,9 +980,12 @@ describe('tournament spectating', () => {
     const ws = res.webSocket!
     ws.accept()
     const queue: ServerMessage[] = []
+    const seenTypes: string[] = []
     const waiters: Array<() => void> = []
     ws.addEventListener('message', (event) => {
-      queue.push(JSON.parse(event.data as string) as ServerMessage)
+      const msg = JSON.parse(event.data as string) as ServerMessage
+      queue.push(msg)
+      seenTypes.push(msg.type)
       waiters.shift()?.()
     })
     const next = async (type: ServerMessage['type']) => {
@@ -995,25 +998,18 @@ describe('tournament spectating', () => {
 
     expect(await next('joined')).toMatchObject({ tournament: true, spectator: true })
     await next('start')
-    await next('choices')
 
-    // 黑方草稿 → 观战者看到草稿点。
+    // 黑方草稿、白方提交同一点：帧内不向观战者透出任何选点（防多号传点）。
     a.submit(1, { x: 6, y: 7 }, false)
-    let choices = await next('choices')
-    if (choices.type !== 'choices') throw new Error('unreachable')
-    expect(choices.black).toEqual({ point: { x: 6, y: 7 }, final: false })
-
-    // 白方提交同一点 → 观战者两边都可见（客户端渲染太极子）。
     b.submit(1, { x: 6, y: 7 })
-    choices = await next('choices')
-    if (choices.type !== 'choices') throw new Error('unreachable')
-    expect(choices.white).toEqual({ point: { x: 6, y: 7 }, final: true })
+    await next('opponent_submitted')
 
-    // 黑方也提交 → 结算，撞子成禁点。
+    // 黑方也提交 → 结算，撞子成禁点此刻才可见。
     a.submit(1, { x: 6, y: 7 })
     const settled = await next('frame_settled')
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
     expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('forbidden')
+    expect(seenTypes).not.toContain('choices')
   })
 
   it('rejects spectators whose own game is unfinished and guests', async () => {

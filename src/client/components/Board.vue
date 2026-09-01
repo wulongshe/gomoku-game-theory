@@ -9,7 +9,6 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import type { WatchChoice } from '@/shared/protocol'
 
 const props = defineProps<{
   state: GameState
@@ -19,8 +18,6 @@ const props = defineProps<{
   lastMoves: Point[]
   vanishing: ClearedGroup[]
   interactive: boolean
-  // 观战视角：双方的草稿/提交点（撞子时合并为一枚太极子）。
-  watchChoices?: { black: WatchChoice; white: WatchChoice } | null
 }>()
 
 const emit = defineEmits<{ select: [point: Point] }>()
@@ -126,25 +123,6 @@ function isLastMove(p: Point): boolean {
   return props.lastMoves.some((m) => m.x === p.x && m.y === p.y)
 }
 
-// 观战：双方选点撞在同一格 → 一枚太极子；否则各画各的（草稿呼吸圈 / 已提交角标）。
-// 撞点上已提交的一方以其棋色画角标方框。
-const watchCollision = computed(() => {
-  const b = props.watchChoices?.black
-  const w = props.watchChoices?.white
-  if (!b?.point || !w?.point || b.point.x !== w.point.x || b.point.y !== w.point.y) return null
-  return {
-    point: b.point,
-    finals: (['black', 'white'] as const).filter((seat) => props.watchChoices![seat]!.final),
-  }
-})
-
-const watchMarks = computed(() => {
-  if (!props.watchChoices || watchCollision.value) return []
-  return (['black', 'white'] as const).flatMap((seat) => {
-    const choice = props.watchChoices![seat]
-    return choice?.point ? [{ seat, point: choice.point, final: choice.final }] : []
-  })
-})
 </script>
 
 <template>
@@ -359,65 +337,6 @@ const watchMarks = computed(() => {
       opacity="0.9"
       class="animate-[win-line_0.5s_ease-out_forwards]"
     />
-
-    <g v-for="mark in watchMarks" :key="`w${mark.seat}`">
-      <circle
-        :cx="pos(mark.point.x)"
-        :cy="pos(mark.point.y)"
-        :r="STONE_R"
-        :fill="`url(#stone-${mark.seat})`"
-        opacity="0.55"
-      />
-      <circle
-        v-if="!mark.final"
-        :cx="pos(mark.point.x)"
-        :cy="pos(mark.point.y)"
-        :r="STONE_R + 4"
-        fill="none"
-        :stroke="mark.seat === 'black' ? '#1c1917' : '#ffffff'"
-        stroke-width="2.5"
-        class="animate-[breathe_1.6s_ease-in-out_infinite]"
-      />
-      <g
-        v-else
-        :transform="`translate(${pos(mark.point.x)}, ${pos(mark.point.y)})`"
-        :stroke="mark.seat === 'black' ? '#1c1917' : '#ffffff'"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        fill="none"
-      >
-        <path
-          v-for="[sx, sy] in MARK_CORNERS"
-          :key="`wc${sx},${sy}`"
-          :d="`M ${sx * (MARK_D - MARK_L)} ${sy * MARK_D} L ${sx * MARK_D} ${sy * MARK_D} L ${sx * MARK_D} ${sy * (MARK_D - MARK_L)}`"
-        />
-      </g>
-    </g>
-
-    <g
-      v-if="watchCollision"
-      :transform="`translate(${pos(watchCollision.point.x)}, ${pos(watchCollision.point.y)})`"
-      opacity="0.85"
-    >
-      <circle :r="TAICHI_R" fill="#fafaf9" stroke="#a8a29e" stroke-width="1" />
-      <path :d="TAICHI_PATH" fill="#1c1917" />
-      <circle :cx="0" :cy="-TAICHI_R / 2" :r="TAICHI_DOT" fill="#1c1917" />
-      <circle :cx="0" :cy="TAICHI_R / 2" :r="TAICHI_DOT" fill="#fafaf9" />
-      <g
-        v-for="seat in watchCollision.finals"
-        :key="`tf${seat}`"
-        :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        fill="none"
-      >
-        <path
-          v-for="[sx, sy] in MARK_CORNERS"
-          :key="`tfc${sx},${sy}`"
-          :d="`M ${sx * (MARK_D - MARK_L)} ${sy * MARK_D} L ${sx * MARK_D} ${sy * MARK_D} L ${sx * MARK_D} ${sy * (MARK_D - MARK_L)}`"
-        />
-      </g>
-    </g>
 
     <g v-if="selected">
       <circle
