@@ -22,6 +22,7 @@ interface TState {
     code: string | null
     players: [string, string | null]
     checkedIn: string[]
+    started?: true
     result: string | null
   }>
   past: Array<
@@ -29,6 +30,7 @@ interface TState {
       code: string | null
       players: [string, string | null]
       checkedIn: string[]
+      started?: true
       result: string | null
     }>
   >
@@ -402,11 +404,22 @@ describe('active-state registration and spectating', () => {
           totalRounds: 1,
           roundDeadline: Date.now() + 600_000,
           players: Object.fromEntries(
-            [email, 'b@x', 'c@x', 'd@x'].map((e) => [e, { score: 0, opponents: [], byes: 0 }]),
+            [email, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x', 'h@x'].map((e) => [
+              e,
+              { score: 0, opponents: [], byes: 0 },
+            ]),
           ),
           pairings: [
             { code: '0001', players: [email, 'b@x'], checkedIn: [email, 'b@x'], result: 'a' },
-            { code: '0002', players: ['c@x', 'd@x'], checkedIn: ['c@x', 'd@x'], result: null },
+            {
+              code: '0002',
+              players: ['c@x', 'd@x'],
+              checkedIn: ['c@x', 'd@x'],
+              started: true,
+              result: null,
+            },
+            { code: '0003', players: ['e@x', 'f@x'], checkedIn: ['e@x'], result: null },
+            { code: '0004', players: ['g@x', 'h@x'], checkedIn: [], result: null },
           ],
         }),
       ),
@@ -415,6 +428,12 @@ describe('active-state registration and spectating', () => {
     expect(info.rounds.length).toBe(1)
     expect(info.rounds[0][0]).toMatchObject({ status: 'done', result: 'a' })
     expect(info.rounds[0][1].status).toBe('playing')
+    expect(info.rounds[0][2].status).toBe('readying')
+    expect(info.rounds[0][3].status).toBe('pending')
+    const byEmail = Object.fromEntries(info.standings.map((row) => [row.email, row.status]))
+    expect(byEmail['c***@x']).toBe('playing')
+    expect(byEmail['e***@x']).toBe('readying')
+    expect(byEmail['f***@x']).toBe('pending')
   })
 
   it('hides rounds from a participant whose own game is still unfinished', async () => {

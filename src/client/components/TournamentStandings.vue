@@ -10,11 +10,12 @@ const props = defineProps<{
   rowClass?: string
 }>()
 
-const STATUS_META: Record<PlayerStatus, { label: string; dot: string; text: string }> = {
-  playing: { label: '对局中', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
-  pending: { label: '待开始', dot: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400' },
-  done: { label: '已结束', dot: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
-  left: { label: '已离开', dot: 'bg-red-500', text: 'text-red-500 dark:text-red-400' },
+const STATUS_META: Record<PlayerStatus, { label: string; dot: string }> = {
+  pending: { label: '待开始', dot: 'bg-amber-400' },
+  readying: { label: '准备中', dot: 'bg-sky-400' },
+  playing: { label: '对局中', dot: 'bg-emerald-500' },
+  done: { label: '已结束', dot: 'bg-purple-500' },
+  left: { label: '已离开', dot: 'bg-red-500' },
 }
 
 // 仅实时积分带状态（昨日排名不带），有状态才显示图例与着色。
@@ -25,9 +26,9 @@ const hasStatus = computed(() => props.standings.some((row) => row.status))
   <div class="flex min-h-0 flex-col gap-1.5">
     <div
       v-if="hasStatus"
-      class="flex items-center justify-center gap-4 text-xs text-stone-500 dark:text-stone-400"
+      class="flex items-start justify-center gap-4 text-xs text-stone-500 dark:text-stone-400"
     >
-      <span v-for="item in STATUS_META" :key="item.label" class="flex items-center gap-1.5">
+      <span v-for="item in STATUS_META" :key="item.label" class="flex flex-col items-center gap-1">
         <span class="size-2 rounded-full" :class="item.dot" />
         {{ item.label }}
       </span>
@@ -48,9 +49,11 @@ const hasStatus = computed(() => props.standings.some((row) => row.status))
           class="absolute right-0 top-0 rounded-bl-lg rounded-tr-xl bg-wood-deep px-1.5 py-0.5 text-[10px] leading-none text-white"
         >我</span>
         <span
-          class="min-w-5 text-center font-semibold"
-          :class="row.status ? STATUS_META[row.status].text : 'text-stone-400 dark:text-stone-500'"
-        >
+          v-if="row.status"
+          class="size-2 shrink-0 rounded-full"
+          :class="STATUS_META[row.status].dot"
+        />
+        <span class="min-w-5 text-center font-semibold text-stone-400 dark:text-stone-500">
           {{ i + 1 }}
         </span>
         <span

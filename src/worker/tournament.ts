@@ -39,6 +39,7 @@ export interface Pairing {
   code: string | null
   players: [string, string | null] // [a, b]；b === null 表示轮空
   checkedIn: string[]
+  started?: true // 房间已实际开局（双方就绪）；入座只算 checkedIn
   result: Result
 }
 
@@ -213,6 +214,18 @@ export class Tournament extends DurableObject<Env> {
       const p = s.pairings.find((x) => x.code === input.code)
       if (p && !p.checkedIn.includes(input.email)) {
         p.checkedIn.push(input.email)
+        await this.save(s)
+        await this.broadcast(s)
+      }
+    })
+  }
+
+  async gameStarted(input: { code: string }): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const s = await this.load()
+      const p = s.pairings.find((x) => x.code === input.code)
+      if (p && !p.started) {
+        p.started = true
         await this.save(s)
         await this.broadcast(s)
       }
@@ -416,7 +429,7 @@ export class Tournament extends DurableObject<Env> {
       .map(({ email, score, played }) => ({ email, score, played }))
   }
 
-  // 按本轮配对推断每人状态：未出结果时到场即对局中、未到场为待开始；
+  // 按本轮配对推断每人状态：未出结果时未到场为待开始，到场后随房间实际开局分准备中/对局中；
   // 已出结果时到过场的算已结束（轮空视同），整轮没露面的视为已离开。
   private playerStatuses(s: TournamentState): Map<string, PlayerStatus> {
     const statuses = new Map<string, PlayerStatus>()
@@ -428,7 +441,9 @@ export class Tournament extends DurableObject<Env> {
           email,
           p.result === null
             ? arrived
-              ? 'playing'
+              ? p.started
+                ? 'playing'
+                : 'readying'
               : 'pending'
             : p.result === 'bye' || arrived
               ? 'done'
@@ -511,7 +526,14 @@ export class Tournament extends DurableObject<Env> {
       code: p.code,
       a: p.players[0],
       b: p.players[1],
-      status: p.result !== null ? 'done' : p.checkedIn.length >= 2 ? 'playing' : 'pending',
+      status:
+        p.result !== null
+          ? 'done'
+          : p.started
+            ? 'playing'
+            : p.checkedIn.length
+              ? 'readying'
+              : 'pending',
       result: p.result,
     }
   }

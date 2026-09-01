@@ -435,6 +435,14 @@ export class Room extends DurableObject<Env> {
     const frameSeconds = await this.frameSeconds()
     await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
+    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
+    if (tournament) {
+      try {
+        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).gameStarted({
+          code: tournament.code,
+        })
+      } catch {}
+    }
     this.broadcast({
       type: 'start',
       state: game,

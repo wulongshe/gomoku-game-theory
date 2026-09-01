@@ -65,16 +65,16 @@ export interface Standing {
   email: string
   score: number
   played: number
-  status?: PlayerStatus // 仅实时积分下发：本轮对局中/待开始/已结束/已离开
+  status?: PlayerStatus // 仅实时积分下发：本轮待开始/准备中/对局中/已结束/已离开
 }
 
-export type PlayerStatus = 'playing' | 'pending' | 'done' | 'left'
+export type PlayerStatus = 'pending' | 'readying' | 'playing' | 'done' | 'left'
 
 export interface Match {
   code: string | null // 房号：观战入口（能看到 rounds 的人才拿得到）
   a: string
   b: string | null // null = 轮空
-  status: 'pending' | 'playing' | 'done'
+  status: 'pending' | 'readying' | 'playing' | 'done'
   result: 'a' | 'b' | 'draw' | 'void' | 'bye' | null
 }
 
