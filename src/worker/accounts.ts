@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { maskEmail } from '@/shared/protocol'
+import { parseBotPool } from './bots'
 
 const CODE_TTL = 10 * 60_000
 const SEND_COOLDOWN = 60_000
@@ -222,19 +223,24 @@ export class Accounts extends DurableObject<Env> {
     const myEmail = token ? ((await this.me(token))?.email ?? null) : null
     const users = await this.ctx.storage.list<UserRecord>({ prefix: 'user:' })
     const stats = await this.ctx.storage.list<StatsRecord>({ prefix: 'stats:' })
-    const rows = [...users.entries()]
-      .map(([key, user]) => {
-        const email = key.slice('user:'.length)
-        const record = stats.get(`stats:${email}`)
-        return {
-          email,
-          visible: user.emailVisible ?? false,
-          wins: record?.wins ?? 0,
-          losses: record?.losses ?? 0,
-          draws: record?.draws ?? 0,
-        }
-      })
-      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))
+    const rows = [...users.entries()].map(([key, user]) => {
+      const email = key.slice('user:'.length)
+      const record = stats.get(`stats:${email}`)
+      return {
+        email,
+        visible: user.emailVisible ?? false,
+        wins: record?.wins ?? 0,
+        losses: record?.losses ?? 0,
+        draws: record?.draws ?? 0,
+      }
+    })
+    // 大赛陪打 bot 以 0 战绩挂榜：只打大赛、缺席排行榜反而是身份破绽。
+    for (const email of parseBotPool(this.env.TOURNAMENT_BOTS)) {
+      if (!rows.some((row) => row.email === email)) {
+        rows.push({ email, visible: false, wins: 0, losses: 0, draws: 0 })
+      }
+    }
+    rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.email.localeCompare(b.email))
     const index = myEmail === null ? -1 : rows.findIndex((row) => row.email === myEmail)
     return {
       entries: rows.map(({ email, visible, wins, losses, draws }) => ({

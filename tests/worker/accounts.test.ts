@@ -114,6 +114,23 @@ describe('login and sessions', () => {
     expect(board.me).toBeNull()
   })
 
+  it('lists tournament bots as zero-record masked rows', async () => {
+    await createUser('realuser@example.com', 'secret123')
+    await runInDurableObject(accountsStub(), (instance) => {
+      ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS =
+        'ghost1@bots.example,ghost2@bots.example'
+    })
+    const res = await SELF.fetch('https://example.com/api/leaderboard')
+    const board = await res.json<{
+      entries: Array<{ email: string; wins: number; losses: number; draws: number }>
+    }>()
+    const bots = board.entries.filter((e) => e.email.endsWith('@bots.example'))
+    expect(bots).toEqual([
+      { email: 'gh***@bots.example', wins: 0, losses: 0, draws: 0 },
+      { email: 'gh***@bots.example', wins: 0, losses: 0, draws: 0 },
+    ])
+  })
+
   it('reveals the leaderboard email once the owner opts in', async () => {
     await createUser('reveal@example.com', 'secret123')
     const login = await post('login', { email: 'reveal@example.com', password: 'secret123' })
