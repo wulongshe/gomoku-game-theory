@@ -2,6 +2,7 @@ import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare
 import { describe, expect, it } from 'vitest'
 import { tournamentFrameSeconds } from '@/shared/protocol'
 import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
+import { botRegistrations, dailyBots, parityBot, parseBotPool } from '@/worker/bots'
 
 const NEUTRAL = () => 0.5
 
@@ -513,5 +514,78 @@ describe('websocket push', () => {
   it('rejects non-websocket requests', async () => {
     const res = await SELF.fetch('https://example.com/api/tournament/ws')
     expect(res.status).toBe(426)
+  })
+})
+
+describe('tournament bots', () => {
+  const POOL = Array.from({ length: 10 }, (_, i) => `bot${i}@pool.example`)
+
+  it('parses the comma-separated pool from the environment value', () => {
+    expect(parseBotPool(' a@x , b@y ,,a@x,')).toEqual(['a@x', 'b@y'])
+    expect(parseBotPool('')).toEqual([])
+    expect(parseBotPool(undefined)).toEqual([])
+  })
+
+  it('picks a deterministic daily lineup with identity-bound strength', () => {
+    const lineup = dailyBots('2026-08-31', POOL)
+    expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
+    expect(lineup.length).toBeGreaterThanOrEqual(4)
+    expect(lineup.length).toBeLessThanOrEqual(6)
+    expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
+
+    const nextDay = dailyBots('2026-09-01', POOL)
+    expect(nextDay.map((b) => b.email)).not.toEqual(lineup.map((b) => b.email))
+    // 棋力绑定身份：跨日期同邮箱同棋力
+    for (const bot of nextDay) {
+      const same = lineup.find((x) => x.email === bot.email)
+      if (same) expect(same.difficulty).toBe(bot.difficulty)
+    }
+  })
+
+  it('ramps virtual registrations monotonically up to the full lineup', () => {
+    const dateKey = '2026-08-31'
+    const startsAt = 1_772_280_000_000
+    expect(botRegistrations(dateKey, POOL, startsAt, startsAt - 4 * 3600_000)).toHaveLength(0)
+    expect(botRegistrations(dateKey, POOL, startsAt, startsAt)).toHaveLength(
+      dailyBots(dateKey, POOL).length,
+    )
+    let prev = 0
+    for (let minutes = 180; minutes >= 0; minutes -= 15) {
+      const n = botRegistrations(dateKey, POOL, startsAt, startsAt - minutes * 60_000).length
+      expect(n).toBeGreaterThanOrEqual(prev)
+      prev = n
+    }
+  })
+
+  it('keeps the parity filler outside the daily lineup', () => {
+    const emails = dailyBots('2026-08-31', POOL).map((b) => b.email)
+    expect(emails).not.toContain(parityBot('2026-08-31', POOL)!.email)
+  })
+
+  it('scales the lineup down for a tiny pool', () => {
+    expect(dailyBots('2026-08-31', ['only@x'])).toHaveLength(0)
+    expect(parityBot('2026-08-31', ['only@x'])!.email).toBe('only@x')
+    expect(parityBot('2026-08-31', [])).toBeNull()
+  })
+
+  it('fills the field with bots to an even total when enabled', async () => {
+    await seed({ registrations: ['solo@x'] })
+    await runInDurableObject(stub(), (instance) => {
+      ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS = POOL.join(',')
+    })
+    await fireStart()
+    const s = await read()
+    expect(s.state).toBe('active')
+    const emails = Object.keys(s.players)
+    expect(emails).toContain('solo@x')
+    expect(emails.length).toBeGreaterThanOrEqual(6)
+    expect(emails.length % 2).toBe(0)
+    const bots = (s as TState & { bots: Record<string, string> }).bots
+    expect(Object.keys(bots).sort()).toEqual(emails.filter((e) => e !== 'solo@x').sort())
+    // 凑成偶数 → 无轮空，全部配上房间
+    for (const p of s.pairings) {
+      expect(p.players[1]).not.toBeNull()
+      expect(p.code).toBeTruthy()
+    }
   })
 })

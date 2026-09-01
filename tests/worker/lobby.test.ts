@@ -212,9 +212,11 @@ describe('AI fallback', () => {
 
     const room = env.ROOM.get(env.ROOM.idFromName(msg.code))
     const entries = await runInDurableObject(room, (_, state) =>
-      state.storage.get(['ai', 'frameSeconds', 'mode']),
+      state.storage.get(['aiSeats', 'frameSeconds', 'mode']),
     )
-    expect(['black', 'white']).toContain(entries.get('ai'))
+    const aiSeats = Object.keys((entries.get('aiSeats') as Record<string, unknown>) ?? {})
+    expect(aiSeats).toHaveLength(1)
+    expect(['black', 'white']).toContain(aiSeats[0])
     expect(entries.get('frameSeconds')).toBe(0)
     expect(entries.get('mode')).toBe('race')
   })

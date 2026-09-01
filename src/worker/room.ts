@@ -20,13 +20,25 @@ import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
-// 匹配久等无人时顶替真人的 AI：启发式单步走子（免费层 10ms CPU 限制内），行为节奏拟人（见各处随机延时）。
+// 顶替真人的 AI（匹配久等兜底 / 大赛陪打 bot）：启发式单步走子（免费层 10ms CPU 限制内），
+// 行为节奏拟人（见各处随机延时）。
 const AI_DIFFICULTY: Difficulty = 'normal'
 
-// 拟人思考时长：限时局压在时限的六成与 10.5s 之内，不限时局也别让对面干等。
-function aiThinkDelay(frameSeconds: number): number {
+// 拟人节奏的对局进度插值：越下越慢、越犹豫。
+function lateness(frame: number): number {
+  return Math.min(1, (frame - 1) / 30)
+}
+
+// 拟人思考时长：限时局压在时限的六成与 10.5s 之内，不限时局也别让对面干等；
+// 开局出手快，越到中后盘想得越久。
+function aiThinkDelay(frameSeconds: number, late: number): number {
   const cap = frameSeconds ? Math.min(frameSeconds * 600, 9000) : 8000
-  return 1500 + Math.random() * cap
+  return 1500 + Math.random() * cap * (0.35 + 0.65 * late)
+}
+
+// 大赛 bot 的进场延时：开轮后错峰入座，别整齐划一地秒到。
+function aiArriveDelay(): number {
+  return 5_000 + Math.random() * 55_000
 }
 
 interface Attachment {
@@ -54,6 +66,16 @@ interface TournamentTag {
   players: [string, string]
 }
 
+// AI 占用的席位：email 为大赛 bot 的参赛邮箱（匹配兜底 AI 无身份为 null）。
+interface AiSeatInfo {
+  email: string | null
+  difficulty: Difficulty
+}
+
+type AiSeats = Partial<Record<Seat, AiSeatInfo>>
+
+type AiTimes = Partial<Record<Seat, number>>
+
 export class Room extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -73,18 +95,41 @@ export class Room extends DurableObject<Env> {
       if (url.searchParams.get('ai') === '1') {
         // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
         const seat: Seat = Math.random() < 0.5 ? 'black' : 'white'
-        entries.ai = seat
+        entries.aiSeats = { [seat]: { email: null, difficulty: AI_DIFFICULTY } } satisfies AiSeats
         entries.players = { [seat]: crypto.randomUUID() } satisfies Players
       }
       if (url.searchParams.get('tournament') === '1') {
+        const tPlayers: [string, string] = [
+          url.searchParams.get('p0') ?? '',
+          url.searchParams.get('p1') ?? '',
+        ]
         entries.tournament = {
           round: Number(url.searchParams.get('round')),
           code: url.searchParams.get('code') ?? '',
-          players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
+          players: tPlayers,
         } satisfies TournamentTag
+        const bots = [url.searchParams.get('ai0'), url.searchParams.get('ai1')]
+        if (bots.some(Boolean)) {
+          // bot 席位与参赛邮箱在建房时绑定（上报赢家要对得上号），执色随机。
+          const order: [Seat, Seat] = Math.random() < 0.5 ? ['black', 'white'] : ['white', 'black']
+          const aiSeats: AiSeats = {}
+          const claims: Players = {}
+          const arrive: AiTimes = {}
+          bots.forEach((difficulty, i) => {
+            if (!difficulty) return
+            const seat = order[i]
+            aiSeats[seat] = { email: tPlayers[i], difficulty: difficulty as Difficulty }
+            claims[seat] = crypto.randomUUID()
+            arrive[seat] = Date.now() + aiArriveDelay()
+          })
+          entries.aiSeats = aiSeats
+          entries.players = claims
+          entries.aiArrive = arrive
+        }
       }
       await this.ctx.storage.put(entries)
-      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      const arrivals = Object.values((entries.aiArrive as AiTimes | undefined) ?? {})
+      await this.ctx.storage.setAlarm(Math.min(Date.now() + IDLE_TTL_MS, ...arrivals))
       return new Response(null, { status: 204 })
     }
     const created = (await this.ctx.storage.get<boolean>('created')) ?? false
@@ -166,25 +211,19 @@ export class Room extends DurableObject<Env> {
       mode: await this.mode(),
       ...(tournament && { tournament: true as const }),
     })
-    this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
+    this.broadcast({ type: 'players', accounts: await this.displayAccounts(await this.seatEmails()) })
 
-    const aiSeat = await this.aiSeat()
+    const aiSeats = await this.aiSeats()
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
       await this.ctx.storage.delete('emptySince')
-      if (game.phase === 'playing' && this.ctx.getWebSockets().length === 1) {
+      if (game.phase === 'playing' && this.playerSockets().length === 1) {
         const stale = await this.ctx.storage.get<number>('deadline')
         if (stale !== undefined && Date.now() >= stale) {
           await this.scheduleFrame(game, await this.frameSeconds())
-        } else if (aiSeat) {
+        } else if (Object.keys(aiSeats).length) {
           // 掉线期间闹钟可能被空房逻辑改走，回来后拨回 AI 行动或结算时点。
-          const targets = [
-            await this.ctx.storage.get<number>('aiActAt'),
-            await this.ctx.storage.get<number>('deadline'),
-          ].filter((t): t is number => t !== undefined)
-          await this.ctx.storage.setAlarm(
-            targets.length ? Math.min(...targets) : Date.now() + IDLE_TTL_MS,
-          )
+          await this.armAlarm()
         }
       }
       const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
@@ -205,13 +244,11 @@ export class Room extends DurableObject<Env> {
       }
     } else {
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
-      if (ready.black && ready.white && this.ctx.getWebSockets().length === (aiSeat ? 1 : 2)) {
+      if (ready.black && ready.white && this.readyToStart(aiSeats)) {
         await this.startGame()
       } else {
         await this.broadcastLobby()
-        if (aiSeat && !ready[aiSeat]) {
-          await this.armAiAlarm(600 + Math.random() * 2200)
-        }
+        await this.scheduleAiArrivals(aiSeats, 600 + Math.random() * 2200)
       }
     }
 
@@ -245,8 +282,10 @@ export class Room extends DurableObject<Env> {
       tournament: true,
       spectator: true,
     })
-    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-    this.send(pair[1], { type: 'players', accounts: await this.displayAccounts(accounts) })
+    this.send(pair[1], {
+      type: 'players',
+      accounts: await this.displayAccounts(await this.seatEmails()),
+    })
     const game = await this.ctx.storage.get<GameState>('game')
     if (game) {
       const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
@@ -303,16 +342,61 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private aiSeat(): Promise<Seat | undefined> {
-    return this.ctx.storage.get<Seat>('ai')
+  private async aiSeats(): Promise<AiSeats> {
+    return (await this.ctx.storage.get<AiSeats>('aiSeats')) ?? {}
   }
 
-  // AI 的下一次行动时点：闹钟取行动点与帧结算点的较早者，行动后各分支自会拨回。
-  private async armAiAlarm(delayMs: number): Promise<void> {
-    const at = Date.now() + delayMs
-    await this.ctx.storage.put('aiActAt', at)
+  private playerSockets(): WebSocket[] {
+    return this.ctx.getWebSockets().filter((ws) => {
+      const attachment = ws.deserializeAttachment() as Attachment
+      return !attachment.spectator && !attachment.replaced
+    })
+  }
+
+  private readyToStart(aiSeats: AiSeats): boolean {
+    return this.playerSockets().length === 2 - Object.keys(aiSeats).length
+  }
+
+  private async seatEmails(): Promise<Players> {
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    const aiSeats = await this.aiSeats()
+    const emailOf = (seat: Seat) => accounts[seat] ?? aiSeats[seat]?.email ?? undefined
+    return { black: emailOf('black'), white: emailOf('white') }
+  }
+
+  private async armAlarm(): Promise<void> {
+    const plan = (await this.ctx.storage.get<AiTimes>('aiPlan')) ?? {}
+    const arrive = (await this.ctx.storage.get<AiTimes>('aiArrive')) ?? {}
     const deadline = await this.ctx.storage.get<number>('deadline')
-    await this.ctx.storage.setAlarm(deadline !== undefined ? Math.min(at, deadline) : at)
+    const targets = [...Object.values(plan), ...Object.values(arrive), deadline].filter(
+      (t): t is number => t !== undefined,
+    )
+    await this.ctx.storage.setAlarm(targets.length ? Math.min(...targets) : Date.now() + IDLE_TTL_MS)
+  }
+
+  private async planAi(seat: Seat, delayMs: number): Promise<void> {
+    const plan = (await this.ctx.storage.get<AiTimes>('aiPlan')) ?? {}
+    plan[seat] = Date.now() + delayMs
+    await this.ctx.storage.put('aiPlan', plan)
+    await this.armAlarm()
+  }
+
+  // 隐身 AI 在真人现身后才「进场」准备；大赛 bot 的进场时点建房时已定，不覆盖。
+  private async scheduleAiArrivals(aiSeats: AiSeats, delayMs: number): Promise<void> {
+    const seats = Object.keys(aiSeats) as Seat[]
+    if (!seats.length) return
+    const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
+    const arrive = (await this.ctx.storage.get<AiTimes>('aiArrive')) ?? {}
+    let changed = false
+    for (const seat of seats) {
+      if (ready[seat] || arrive[seat] !== undefined) continue
+      arrive[seat] = Date.now() + delayMs
+      changed = true
+    }
+    if (changed) {
+      await this.ctx.storage.put('aiArrive', arrive)
+      await this.armAlarm()
+    }
   }
 
   private async broadcastLobby(exclude?: WebSocket): Promise<void> {
@@ -322,8 +406,7 @@ export class Room extends DurableObject<Env> {
       const attachment = ws.deserializeAttachment() as Attachment
       if (!attachment.replaced && !attachment.spectator) present[attachment.seat] = true
     }
-    const aiSeat = await this.aiSeat()
-    if (aiSeat) present[aiSeat] = true
+    for (const seat of Object.keys(await this.aiSeats()) as Seat[]) present[seat] = true
     const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
     const message: ServerMessage = {
       type: 'lobby',
@@ -376,8 +459,8 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.put({ game, frameStart, deadline })
       await this.ctx.storage.setAlarm(deadline)
     }
-    if (await this.aiSeat()) {
-      await this.armAiAlarm(aiThinkDelay(frameSeconds))
+    for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
+      await this.planAi(seat, aiThinkDelay(frameSeconds, lateness(game.frame)))
     }
     return deadline
   }
@@ -401,11 +484,7 @@ export class Room extends DurableObject<Env> {
         ready[seat] = true
         await this.ctx.storage.put('ready', ready)
       }
-      if (
-        ready.black &&
-        ready.white &&
-        this.ctx.getWebSockets().length === ((await this.aiSeat()) ? 1 : 2)
-      ) {
+      if (ready.black && ready.white && this.readyToStart(await this.aiSeats())) {
         return this.startGame()
       }
       return this.broadcastLobby()
@@ -443,9 +522,10 @@ export class Room extends DurableObject<Env> {
         for (const other of this.ctx.getWebSockets()) {
           if (other !== ws) this.send(other, { type: 'draw_offered' })
         }
-        if (await this.aiSeat()) {
+        const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
+        if (aiSeat) {
           await this.ctx.storage.put('aiDrawOffered', true)
-          await this.armAiAlarm(800 + Math.random() * 1500)
+          await this.planAi(aiSeat, 800 + Math.random() * 1500)
         }
         return
       }
@@ -532,8 +612,9 @@ export class Room extends DurableObject<Env> {
       for (const socket of this.ctx.getWebSockets()) {
         if (socket !== ws) this.send(socket, { type: 'rematch_requested', ...proposal })
       }
-      if (await this.aiSeat()) {
-        await this.armAiAlarm(1000 + Math.random() * 2500)
+      const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
+      if (aiSeat) {
+        await this.planAi(aiSeat, 1000 + Math.random() * 2500)
       }
       return
     }
@@ -541,7 +622,16 @@ export class Room extends DurableObject<Env> {
   }
 
   private async applyRematch(proposal: RematchProposal): Promise<void> {
-    await this.ctx.storage.delete(['game', 'choices', 'rematch', 'ready', 'deadline', 'frameStart'])
+    await this.ctx.storage.delete([
+      'game',
+      'choices',
+      'rematch',
+      'ready',
+      'deadline',
+      'frameStart',
+      'aiPlan',
+      'aiArrive',
+    ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     for (const socket of this.ctx.getWebSockets()) {
@@ -553,7 +643,17 @@ export class Room extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     const game = await this.ctx.storage.get<GameState>('game')
-    if (this.ctx.getWebSockets().length === 0) {
+    const aiSeats = await this.aiSeats()
+    const botCount = Object.keys(aiSeats).length
+    const tournament = botCount
+      ? await this.ctx.storage.get<TournamentTag>('tournament')
+      : undefined
+    const botGame = tournament !== undefined && botCount > 0
+    // 有真人在场时 AI 正常行动；大赛 bot 局即使无人连接（bot vs bot、真人掉线）也照常推进。
+    if (this.playerSockets().length > 0 || botGame) {
+      if (botCount && (await this.aiStep(game, aiSeats, tournament))) return
+    }
+    if (this.ctx.getWebSockets().length === 0 && !(botGame && game?.phase === 'playing')) {
       if (game && game.phase === 'playing') {
         const emptySince = (await this.ctx.storage.get<number>('emptySince')) ?? Date.now()
         if (Date.now() - emptySince < IDLE_TTL_MS) {
@@ -561,16 +661,16 @@ export class Room extends DurableObject<Env> {
           return this.ctx.storage.setAlarm(emptySince + IDLE_TTL_MS)
         }
       }
-      if (!game && (await this.ctx.storage.get<number>('aiActAt')) !== undefined) {
-        // 真人掉线时 AI 行动闹钟提前敲门，不能当空房超时关房。
-        await this.ctx.storage.delete('aiActAt')
+      if (
+        !game &&
+        !botGame &&
+        (await this.ctx.storage.get<AiTimes>('aiArrive')) !== undefined
+      ) {
+        // 真人掉线时隐身 AI 的进场闹钟提前敲门，不能当空房超时关房。
+        await this.ctx.storage.delete(['aiArrive', 'aiPlan'])
         return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       }
       return this.close()
-    }
-    const aiActAt = await this.ctx.storage.get<number>('aiActAt')
-    if (aiActAt !== undefined && Date.now() >= aiActAt) {
-      return this.aiAct(game)
     }
     if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
       return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -579,52 +679,112 @@ export class Room extends DurableObject<Env> {
     await this.settle(game, choices)
   }
 
-  // AI 到点行动，按房间当前阶段推断该做什么：备战点准备、对局中落子/回应求和、终局应答再来一局。
-  private async aiAct(game: GameState | undefined): Promise<void> {
-    await this.ctx.storage.delete('aiActAt')
-    const aiSeat = await this.aiSeat()
-    if (!aiSeat) {
-      return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
-    }
-    const humanSeat: Seat = aiSeat === 'black' ? 'white' : 'black'
+  // 到点的 AI 进场/行动；返回 true 表示本次闹钟由 AI 消费（行动分支自会重挂闹钟）。
+  private async aiStep(
+    game: GameState | undefined,
+    aiSeats: AiSeats,
+    tournament: TournamentTag | undefined,
+  ): Promise<boolean> {
+    const now = Date.now()
     if (!game) {
+      const arrive = (await this.ctx.storage.get<AiTimes>('aiArrive')) ?? {}
+      const due = (Object.keys(arrive) as Seat[]).filter((seat) => now >= arrive[seat]!)
+      if (due.length === 0) return false
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
-      if (!ready[aiSeat]) {
-        ready[aiSeat] = true
-        await this.ctx.storage.put('ready', ready)
+      for (const seat of due) {
+        delete arrive[seat]
+        ready[seat] = true
+        const email = aiSeats[seat]?.email
+        if (tournament && email) {
+          try {
+            await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).checkIn({
+              code: tournament.code,
+              email,
+            })
+          } catch {}
+        }
       }
-      if (ready.black && ready.white) {
-        return this.startGame()
+      await this.ctx.storage.put({ aiArrive: arrive, ready })
+      if (ready.black && ready.white && this.readyToStart(aiSeats)) {
+        await this.startGame()
+      } else {
+        await this.broadcastLobby()
+        await this.armAlarm()
       }
-      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
-      return this.broadcastLobby()
+      return true
     }
+    const plan = (await this.ctx.storage.get<AiTimes>('aiPlan')) ?? {}
+    for (const seat of Object.keys(plan) as Seat[]) {
+      if (now < plan[seat]! || !aiSeats[seat]) continue
+      delete plan[seat]
+      await this.ctx.storage.put('aiPlan', plan)
+      await this.aiAct(seat, aiSeats[seat], game, tournament)
+      return true
+    }
+    return false
+  }
+
+  private async aiAct(
+    seat: Seat,
+    info: AiSeatInfo,
+    game: GameState,
+    tournament: TournamentTag | undefined,
+  ): Promise<void> {
     if (game.phase === 'playing') {
       if (await this.ctx.storage.get<boolean>('aiDrawOffered')) {
         await this.ctx.storage.delete('aiDrawOffered')
         this.broadcast({ type: 'draw_declined' })
-        return this.armAiAlarm(1200 + Math.random() * 2500)
+        return this.planAi(seat, 1200 + Math.random() * 2500)
       }
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
-      if (!choices[aiSeat]?.final) {
-        const point = chooseAiMove(game, aiSeat, AI_DIFFICULTY)
-        choices[aiSeat] = { point, final: true, finalAt: Date.now() }
-        await this.ctx.storage.put('choices', choices)
-        this.broadcast({ type: 'opponent_submitted', submitted: true })
-        if (choices[humanSeat]?.final) {
-          return this.settle(game, choices)
-        }
-      }
+      const current = choices[seat]
+      if (current?.final) return this.armAlarm()
       const deadline = await this.ctx.storage.get<number>('deadline')
-      return this.ctx.storage.setAlarm(deadline ?? Date.now() + IDLE_TTL_MS)
+      const left = deadline !== undefined ? deadline - Date.now() : Infinity
+      const submit = async (point: Point | null) => {
+        choices[seat] = { point, final: true, finalAt: Date.now() }
+        await this.ctx.storage.put('choices', choices)
+        this.sendChoices(choices)
+        this.broadcast({ type: 'opponent_submitted', submitted: true })
+        const other: Seat = seat === 'black' ? 'white' : 'black'
+        if (choices[other]?.final) return this.settle(game, choices)
+        return this.armAlarm()
+      }
+      const draft = async (delayMs: number) => {
+        choices[seat] = { point: chooseAiMove(game, seat, info.difficulty), final: false }
+        await this.ctx.storage.put('choices', choices)
+        this.sendChoices(choices)
+        return this.planAi(seat, delayMs)
+      }
+      // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常打草稿犹豫，
+      // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。
+      const late = lateness(game.frame)
+      // 草稿后的犹豫时长同样越拖越久；限时局超出帧限则由超时自动提交接住长尾，
+      // 不限时局（无超时可磨）靠这里的时长上限撑出「拖得很长」。
+      const dwell = (base: number) =>
+        base + Math.random() * Math.min(4000 + late * 16000, Math.max(1500, left - 2000))
+      if (!current) {
+        if (left < 3500 || Math.random() < 0.55 - 0.4 * late) {
+          return submit(chooseAiMove(game, seat, info.difficulty))
+        }
+        return draft(dwell(1500))
+      }
+      if (left > 5000 && Math.random() < 0.22) {
+        return draft(dwell(1200))
+      }
+      if (Number.isFinite(left) && Math.random() < 0.03 + 0.22 * late) {
+        return this.armAlarm() // 不再行动，草稿在帧超时自动提交
+      }
+      return submit(current.point)
     }
+    if (tournament) return this.armAlarm()
     const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
-    const proposal = rematch[humanSeat]
+    const proposal = rematch[seat === 'black' ? 'white' : 'black']
     if (proposal) {
       await this.applyRematch(proposal)
-      return this.armAiAlarm(800 + Math.random() * 2000)
+      return this.scheduleAiArrivals(await this.aiSeats(), 800 + Math.random() * 2000)
     }
-    return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    return this.armAlarm()
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -648,8 +808,11 @@ export class Room extends DurableObject<Env> {
       if (game && game.phase !== 'playing') await this.close()
       else if (game) await this.ctx.storage.put('emptySince', Date.now())
       else {
-        await this.ctx.storage.delete('aiActAt')
-        await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+        // 大赛 bot 的进场时点保留（真人始终缺席时 bot 仍到场 → 轮空胜）；隐身 AI 则随真人离场作罢。
+        if (!(await this.ctx.storage.get<TournamentTag>('tournament'))) {
+          await this.ctx.storage.delete(['aiArrive', 'aiPlan'])
+        }
+        await this.armAlarm()
       }
     } else if (!game) {
       await this.broadcastLobby(ws)
@@ -681,7 +844,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
-    await this.ctx.storage.delete(['choices', 'aiActAt', 'aiDrawOffered'])
+    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
@@ -689,18 +852,16 @@ export class Room extends DurableObject<Env> {
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {
-    // AI 顶替局不入战绩/ELO，防止空窗期刷分。
-    if (await this.aiSeat()) return
-    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament) {
-      // 赢家按座位→email 实表算、按房号上报（座位颜色由连接顺序定，与大赛无关）；
-      // 大赛对局独立结算，不计入普通战绩/ELO。
+      // 赢家按座位→email 实表算（bot 席位取建房时绑定的参赛邮箱）、按房号上报
+      //（座位颜色由连接顺序/建房随机定，与大赛无关）；大赛对局独立结算，不计入普通战绩/ELO。
+      const emails = await this.seatEmails()
       const winnerEmail =
         phase === 'black_won'
-          ? (accounts.black ?? null)
+          ? (emails.black ?? null)
           : phase === 'white_won'
-            ? (accounts.white ?? null)
+            ? (emails.white ?? null)
             : null
       const game = await this.ctx.storage.get<GameState>('game')
       try {
@@ -713,6 +874,9 @@ export class Room extends DurableObject<Env> {
       } catch {}
       return
     }
+    // AI 顶替局不入战绩/ELO，防止空窗期刷分。
+    if (Object.keys(await this.aiSeats()).length) return
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const results = (['black', 'white'] as const).flatMap((seat) => {
       const email = accounts[seat]
       if (!email) return []

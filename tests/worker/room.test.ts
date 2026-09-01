@@ -1,5 +1,5 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cellAt, type Point } from '@gomoku/engine/game'
 import type { ServerMessage } from '@/shared/protocol'
 import { allocateRoom } from '@/worker/roomCode'
@@ -789,29 +789,40 @@ describe('account seat recovery', () => {
   })
 })
 
+const stubOf = (code: string) => env.ROOM.get(env.ROOM.idFromName(code))
+
+async function aiSeatOf(code: string): Promise<'black' | 'white'> {
+  const seats = await runInDurableObject(stubOf(code), async (_i, state) =>
+    Object.keys((await state.storage.get<Record<string, unknown>>('aiSeats')) ?? {}),
+  )
+  if (!seats.length) throw new Error('missing ai seat')
+  return seats[0] as 'black' | 'white'
+}
+
+// 把 AI 的进场/行动时点拨到过去再敲响闹钟，等价于现实中延时到点。
+// 对局中只催还没定稿的席位（闹钟一次只行动一个席位，定稿席位会白耗一响）。
+async function fireAi(code: string): Promise<void> {
+  await runInDurableObject(stubOf(code), async (_i, state) => {
+    const seats = Object.keys((await state.storage.get<Record<string, unknown>>('aiSeats')) ?? {})
+    if (!(await state.storage.get('game'))) {
+      await state.storage.put('aiArrive', Object.fromEntries(seats.map((s) => [s, Date.now() - 1])))
+      return
+    }
+    const choices =
+      ((await state.storage.get('choices')) as Record<string, { final?: boolean }> | undefined) ?? {}
+    const idle = seats.filter((s) => !choices[s]?.final)
+    await state.storage.put('aiPlan', Object.fromEntries(idle.map((s) => [s, Date.now() - 1])))
+  })
+  expect(await runDurableObjectAlarm(stubOf(code))).toBe(true)
+}
+
 describe('AI stand-in room', () => {
-  const stubOf = (code: string) => env.ROOM.get(env.ROOM.idFromName(code))
+  afterEach(() => vi.restoreAllMocks())
 
   async function createAiRoom(code: string, frame = 30, mode = 'forbidden'): Promise<void> {
     await stubOf(code).fetch(`https://room/create?frame=${frame}&mode=${mode}&ai=1`, {
       method: 'POST',
     })
-  }
-
-  async function aiSeatOf(code: string): Promise<'black' | 'white'> {
-    const seat = await runInDurableObject(stubOf(code), (_i, state) =>
-      state.storage.get<'black' | 'white'>('ai'),
-    )
-    if (!seat) throw new Error('missing ai seat')
-    return seat
-  }
-
-  // 把 AI 的行动时点拨到过去再敲响闹钟，等价于现实中延时到点。
-  async function fireAi(code: string): Promise<void> {
-    await runInDurableObject(stubOf(code), (_i, state) =>
-      state.storage.put('aiActAt', Date.now() - 1),
-    )
-    expect(await runDurableObjectAlarm(stubOf(code))).toBe(true)
   }
 
   it('seats the human opposite the AI and keeps a second human out', async () => {
@@ -831,7 +842,18 @@ describe('AI stand-in room', () => {
     expect(stranger.status).toBe(409)
   })
 
+  // 不强拨时点：真人进房并准备后，AI 应靠自己的进场闹钟就位并开局（TODO 报过「匹配到后 AI 不准备」）。
+  it('readies up on its own arrival alarm after the human readies', { timeout: 15_000 }, async () => {
+    await createAiRoom('7104')
+    const human = await connect('7104', 'key-h')
+    await human.next('joined')
+    human.ready()
+    await human.next('start')
+  })
+
   it('readies up, submits a move, and settles the frame', async () => {
+    // 压低随机数走「笃定直接提交」分支，避免草稿-定稿节奏引入的不确定性。
+    vi.spyOn(Math, 'random').mockReturnValue(0.1)
     await createAiRoom('7102')
     const human = await connect('7102', 'key-h')
     await human.next('joined')
@@ -988,5 +1010,180 @@ describe('tournament spectating', () => {
       headers: { Upgrade: 'websocket' },
     })
     expect(guest.status).toBe(403)
+  })
+})
+
+describe('tournament bot rooms', () => {
+  afterEach(() => vi.restoreAllMocks())
+  const tstub = () => env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
+
+  interface TPairing {
+    code: string | null
+    players: [string, string | null]
+    checkedIn: string[]
+    result: string | null
+  }
+
+  async function seedTournament(
+    players: Record<string, { score: number; opponents: string[]; byes: number }>,
+    pairings: TPairing[],
+  ): Promise<void> {
+    await runInDurableObject(tstub(), (_i, state) =>
+      state.storage.put('t', {
+        state: 'active',
+        startedAt: Date.now(),
+        round: 1,
+        totalRounds: 1,
+        roundDeadline: Date.now() + 600_000,
+        registrations: [],
+        players,
+        bots: {},
+        pairings,
+        past: [],
+        lastStandings: [],
+      }),
+    )
+  }
+
+  const readT = () =>
+    runInDurableObject(tstub(), (_i, state) =>
+      state.storage.get('t'),
+    ) as Promise<{ state: string; pairings: TPairing[]; past: TPairing[][] }>
+
+  it('checks the bot in, plays human vs bot, and reports the result by bot email', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.1)
+    const human = 'tb-human@example.com'
+    const bot = 'tb-bot@example.com'
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { round: 1, players: [bot, human], bots: ['normal', null] },
+    })
+    await seedTournament(
+      {
+        [bot]: { score: 0, opponents: [human], byes: 0 },
+        [human]: { score: 0, opponents: [bot], byes: 0 },
+      },
+      [{ code, players: [bot, human], checkedIn: [], result: null }],
+    )
+
+    // bot 到点进场 → 向大赛 check-in
+    await fireAi(code)
+    expect((await readT()).pairings[0].checkedIn).toContain(bot)
+
+    const token = await sessionFor(human)
+    const h = await connect(code, 'key-h', token)
+    await h.next('joined')
+    h.ready()
+    await h.next('start')
+
+    // 真人认输 → 赢家按 bot 的参赛邮箱上报（bot 是 players[0] → 'a'）
+    h.ws.send(JSON.stringify({ type: 'resign' }))
+    await h.next('frame_settled')
+    const t = await readT()
+    expect(t.state).toBe('idle') // 唯一一轮唯一一局出结果 → 收轮收赛
+    expect(t.past[0][0].result).toBe('a')
+
+    // 不入普通战绩
+    const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    expect(
+      await runInDurableObject(accounts, (_i, st) => st.storage.get(`stats:${human}`)),
+    ).toBeUndefined()
+  })
+
+  it('plays bot vs bot unattended and streams identities and choices to spectators', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.1)
+    const viewer = 'botwatcher@example.com'
+    const token = await sessionFor(viewer)
+    const b0 = 'tb-b0@example.com'
+    const b1 = 'tb-b1@example.com'
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { round: 1, players: [b0, b1], bots: ['normal', 'easy'] },
+    })
+    await seedTournament(
+      {
+        [viewer]: { score: 1, opponents: ['x@x'], byes: 0 },
+        'x@x': { score: 0, opponents: [viewer], byes: 0 },
+        [b0]: { score: 0, opponents: [b1], byes: 0 },
+        [b1]: { score: 0, opponents: [b0], byes: 0 },
+      },
+      [
+        { code: '9901', players: [viewer, 'x@x'], checkedIn: [viewer, 'x@x'], result: 'a' },
+        { code, players: [b0, b1], checkedIn: [], result: null },
+      ],
+    )
+
+    // 双方 bot 到点进场：check-in 齐 → 无人连接也自动开局
+    await fireAi(code)
+    expect((await readT()).pairings[1].checkedIn).toEqual(expect.arrayContaining([b0, b1]))
+    const game = await runInDurableObject(stubOf(code), (_i, st) => st.storage.get('game'))
+    expect(game).toMatchObject({ frame: 1, phase: 'playing' })
+
+    // 观战者能看到双方（脱敏的）参赛身份
+    const res = await SELF.fetch(
+      `https://example.com/api/rooms/${code}/ws?spectate=1&token=${token}`,
+      { headers: { Upgrade: 'websocket' } },
+    )
+    expect(res.status).toBe(101)
+    const ws = res.webSocket!
+    ws.accept()
+    const queue: ServerMessage[] = []
+    const waiters: Array<() => void> = []
+    ws.addEventListener('message', (event) => {
+      queue.push(JSON.parse(event.data as string) as ServerMessage)
+      waiters.shift()?.()
+    })
+    const next = async (type: ServerMessage['type']) => {
+      while (true) {
+        const msg = queue.shift()
+        if (msg?.type === type) return msg
+        if (!msg) await new Promise<void>((resolve) => waiters.push(resolve))
+      }
+    }
+    const players = await next('players')
+    if (players.type !== 'players') throw new Error('unreachable')
+    expect(players.accounts.black).toBeTruthy()
+    expect(players.accounts.white).toBeTruthy()
+
+    // 两个席位先后行动 → 双方提交 → 帧自行结算
+    await fireAi(code)
+    await fireAi(code)
+    const settled = await next('frame_settled')
+    if (settled.type !== 'frame_settled') throw new Error('unreachable')
+    expect(settled.state.frame).toBe(2)
+    expect(settled.state.phase).toBe('playing')
+  })
+
+  // 不用 fireAi 强拨时点，验证真实的闹钟链路（进场 → 开局 → 落子 → 结算）会自续，
+  // 掉链子在线上表现为 bot 局整轮卡死判平。
+  it('advances a bot vs bot game on its own alarms', { timeout: 30_000 }, async () => {
+    const b0 = 'tb-auto0@example.com'
+    const b1 = 'tb-auto1@example.com'
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { round: 1, players: [b0, b1], bots: ['easy', 'easy'] },
+    })
+    await seedTournament(
+      {
+        [b0]: { score: 0, opponents: [b1], byes: 0 },
+        [b1]: { score: 0, opponents: [b0], byes: 0 },
+      },
+      [{ code, players: [b0, b1], checkedIn: [], result: null }],
+    )
+    // 只把进场时点提前，其后全靠房间自己挂的闹钟推进
+    await runInDurableObject(stubOf(code), async (_i, state) => {
+      const seats = Object.keys((await state.storage.get<Record<string, unknown>>('aiSeats')) ?? {})
+      await state.storage.put(
+        'aiArrive',
+        Object.fromEntries(seats.map((s) => [s, Date.now() + 50])),
+      )
+      await state.storage.setAlarm(Date.now() + 50)
+    })
+    await vi.waitFor(
+      async () => {
+        const game = (await runInDurableObject(stubOf(code), (_i, st) =>
+          st.storage.get('game'),
+        )) as { frame: number } | undefined
+        expect(game?.frame ?? 0).toBeGreaterThanOrEqual(2)
+      },
+      { timeout: 25_000, interval: 500 },
+    )
   })
 })

@@ -1,5 +1,6 @@
 import { customAlphabet } from 'nanoid'
 import type { GameMode } from '@gomoku/engine/game'
+import type { Difficulty } from '@gomoku/engine/ai'
 import { ROOM_CODE_LENGTHS } from '@/shared/protocol'
 
 const generators = ROOM_CODE_LENGTHS.map((length) => customAlphabet('0123456789', length))
@@ -11,7 +12,14 @@ export async function allocateRoom(
   env: Env,
   frame: number,
   mode: GameMode,
-  opts?: { tournament?: { round: number; players: [string, string] }; ai?: boolean },
+  opts?: {
+    tournament?: {
+      round: number
+      players: [string, string]
+      bots?: [Difficulty | null, Difficulty | null]
+    }
+    ai?: boolean
+  },
 ): Promise<string> {
   for (const generate of generators) {
     for (let attempt = 0; attempt < ATTEMPTS_PER_LENGTH; attempt++) {
@@ -24,6 +32,8 @@ export async function allocateRoom(
         params.set('code', code)
         params.set('p0', opts.tournament.players[0])
         params.set('p1', opts.tournament.players[1])
+        if (opts.tournament.bots?.[0]) params.set('ai0', opts.tournament.bots[0])
+        if (opts.tournament.bots?.[1]) params.set('ai1', opts.tournament.bots[1])
       }
       if (opts?.ai) params.set('ai', '1')
       const created = await env.ROOM.get(env.ROOM.idFromName(code)).fetch(

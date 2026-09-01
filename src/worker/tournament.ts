@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
+import type { Difficulty } from '@gomoku/engine/ai'
 import {
   maskEmail,
   type Match,
@@ -7,6 +8,7 @@ import {
   type TournamentInfo,
 } from '@/shared/protocol'
 import { allocateRoom } from './roomCode'
+import { botRegistrations, dailyBots, parityBot, parseBotPool } from './bots'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ROUND_MS = 10 * 60_000
@@ -48,6 +50,7 @@ interface TournamentState {
   roundDeadline: number | null
   registrations: string[]
   players: Record<string, Player>
+  bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 棋力
   pairings: Pairing[] // 当前轮
   past: Pairing[][] // 已结束的各轮
   lastStandings: Standing[]
@@ -62,6 +65,7 @@ function defaultState(): TournamentState {
     roundDeadline: null,
     registrations: [],
     players: {},
+    bots: {},
     pairings: [],
     past: [],
     lastStandings: [],
@@ -257,12 +261,29 @@ export class Tournament extends DurableObject<Env> {
 
   private async start(s: TournamentState): Promise<void> {
     if (s.state !== 'idle') return
-    if (s.registrations.length < 2) {
+    const emails = [...s.registrations]
+    s.bots = {}
+    const pool = this.botPool()
+    if (pool.length) {
+      // 凑成偶数免得轮空送运气分。
+      const dateKey = beijingDate(Date.now())
+      const bots = dailyBots(dateKey, pool)
+      if ((emails.length + bots.length) % 2 === 1) {
+        const filler = parityBot(dateKey, pool)
+        if (filler) bots.push(filler)
+      }
+      for (const bot of bots) {
+        if (emails.includes(bot.email)) continue
+        emails.push(bot.email)
+        s.bots[bot.email] = bot.difficulty
+      }
+    }
+    if (emails.length < 2) {
       await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
       return
     }
     s.players = {}
-    for (const email of s.registrations) s.players[email] = { score: 0, opponents: [], byes: 0 }
+    for (const email of emails) s.players[email] = { score: 0, opponents: [], byes: 0 }
     s.registrations = []
     s.past = []
     s.startedAt = Date.now()
@@ -319,6 +340,7 @@ export class Tournament extends DurableObject<Env> {
       s.totalRounds = 0
       s.roundDeadline = null
       s.players = {}
+      s.bots = {}
       s.pairings = []
       await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
     }
@@ -337,7 +359,11 @@ export class Tournament extends DurableObject<Env> {
       } else {
         try {
           p.code = await allocateRoom(this.env, TFRAME, TMODE, {
-            tournament: { round: s.round, players: [p.players[0], p.players[1]!] },
+            tournament: {
+              round: s.round,
+              players: [p.players[0], p.players[1]!],
+              bots: [s.bots[p.players[0]] ?? null, s.bots[p.players[1]!] ?? null],
+            },
           })
         } catch {
           p.result = 'void' // 建房失败则该局作废
@@ -448,13 +474,22 @@ export class Tournament extends DurableObject<Env> {
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
     const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
+    const startsAt = nextDailyStart(now)
+    // 报名注水：开赛前的报名人数惰性叠加当日 bot 时间表里已「报名」的数量。
+    const pool = this.botPool()
+    const virtualCount = pool.length
+      ? botRegistrations(beijingDate(startsAt), pool, startsAt, now).length
+      : 0
     return {
       state: s.state,
       now,
-      startsAt: nextDailyStart(now),
+      startsAt,
       round: s.round,
       totalRounds: s.totalRounds,
-      playerCount: s.state === 'idle' ? s.registrations.length : Object.keys(s.players).length,
+      playerCount:
+        s.state === 'idle'
+          ? s.registrations.length + virtualCount
+          : Object.keys(s.players).length,
       registered,
       participating,
       myGame: myGame ? { code: myGame } : null,
@@ -514,9 +549,14 @@ export class Tournament extends DurableObject<Env> {
     }
   }
 
+  private botPool(): string[] {
+    return parseBotPool(this.env.TOURNAMENT_BOTS)
+  }
+
   private async load(): Promise<TournamentState> {
     const s = (await this.ctx.storage.get<TournamentState>('t')) ?? defaultState()
     s.past ??= []
+    s.bots ??= {}
     // 旧状态没有网格锚点时按当前轮的截止反推，保证进行中的一届无缝续跑。
     s.startedAt ??= (s.roundDeadline ?? Date.now()) - s.round * ROUND_MS
     return s

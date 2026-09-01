@@ -21,8 +21,8 @@ const WIDEN_PER_SEC = 40
 const RECHECK_MS = 3000
 
 // 久等无人时悄悄换 AI 顶替，每人到点时间在区间内随机，避免固定时长露馅。
-const AI_FALLBACK_MIN_MS = 30_000
-const AI_FALLBACK_MAX_MS = 60_000
+const AI_FALLBACK_MIN_MS = 15_000
+const AI_FALLBACK_MAX_MS = 30_000
 
 export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
   const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]
