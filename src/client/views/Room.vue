@@ -632,11 +632,9 @@ function exitRoom() {
         </template>
 
         <template v-else-if="tournament">
-          <a class="w-full" href="/tournament">
-            <AppButton class="w-full">
-              返回每日大赛<template v-if="tournamentReturnLeft !== null">（{{ tournamentReturnLeft }}s）</template>
-            </AppButton>
-          </a>
+          <AppButton class="w-full" @click="backOrReplace('/tournament')">
+            返回每日大赛<template v-if="tournamentReturnLeft !== null">（{{ tournamentReturnLeft }}s）</template>
+          </AppButton>
         </template>
 
         <template v-else>
