@@ -54,6 +54,7 @@ interface TournamentState {
   pairings: Pairing[] // 当前轮
   past: Pairing[][] // 已结束的各轮
   lastStandings: Standing[]
+  devStartsAt?: number // 仅 dev 注入：覆盖下一场开赛时点（正常恒为每天 20:00）
 }
 
 function defaultState(): TournamentState {
@@ -261,6 +262,7 @@ export class Tournament extends DurableObject<Env> {
 
   private async start(s: TournamentState): Promise<void> {
     if (s.state !== 'idle') return
+    s.devStartsAt = undefined
     const emails = [...s.registrations]
     s.bots = {}
     const pool = this.botPool()
@@ -474,7 +476,7 @@ export class Tournament extends DurableObject<Env> {
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
     const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
-    const startsAt = nextDailyStart(now)
+    const startsAt = (s.state === 'idle' && s.devStartsAt) || nextDailyStart(now)
     // 报名注水：开赛前的报名人数惰性叠加当日 bot 时间表里已「报名」的数量。
     const pool = this.botPool()
     const virtualCount = pool.length
@@ -530,13 +532,14 @@ export class Tournament extends DurableObject<Env> {
   async devSeed(input: Partial<TournamentState>): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = { ...(await this.load()), ...input }
+      s.devStartsAt = input.devStartsAt // 不从上一次注入残留
       if (s.state === 'active') {
         s.roundDeadline = Date.now() + ROUND_MS
         s.startedAt = s.roundDeadline - s.round * ROUND_MS
         await this.ctx.storage.setAlarm(Date.now() + FORFEIT_MS)
       } else {
         s.roundDeadline = null
-        await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+        await this.ctx.storage.setAlarm(s.devStartsAt ?? nextDailyStart(Date.now()))
       }
       await this.save(s)
       await this.broadcast(s)
@@ -545,7 +548,7 @@ export class Tournament extends DurableObject<Env> {
 
   private async armIfNeeded(s: TournamentState): Promise<void> {
     if (s.state === 'idle' && (await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+      await this.ctx.storage.setAlarm(s.devStartsAt ?? nextDailyStart(Date.now()))
     }
   }
 

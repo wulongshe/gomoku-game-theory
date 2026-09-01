@@ -631,6 +631,7 @@ export class Room extends DurableObject<Env> {
       'frameStart',
       'aiPlan',
       'aiArrive',
+      'aiRethink',
     ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -750,27 +751,41 @@ export class Room extends DurableObject<Env> {
         if (choices[other]?.final) return this.settle(game, choices)
         return this.armAlarm()
       }
-      const draft = async (delayMs: number) => {
+      const draft = async () => {
         choices[seat] = { point: chooseAiMove(game, seat, info.difficulty), final: false }
         await this.ctx.storage.put('choices', choices)
         this.sendChoices(choices)
-        return this.planAi(seat, delayMs)
+      }
+      // 落子（草稿）后的去向在此刻预谋：要再换点的先长考 4~15s 再换（可连锁多次换点）；
+      // 不换的短暂犹豫就定稿——大部分 0.5~3s，其余 3~8s。
+      const scheduleNext = async () => {
+        if (left > 9000 && Math.random() < 0.25) {
+          const rethink = (await this.ctx.storage.get<SeatFlags>('aiRethink')) ?? {}
+          rethink[seat] = true
+          await this.ctx.storage.put('aiRethink', rethink)
+          return this.planAi(seat, 4000 + Math.random() * 11000)
+        }
+        return this.planAi(
+          seat,
+          Math.random() < 0.7 ? 500 + Math.random() * 2500 : 3000 + Math.random() * 5000,
+        )
       }
       // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常打草稿犹豫，
       // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。
       const late = lateness(game.frame)
-      // 草稿后的犹豫时长同样越拖越久；限时局超出帧限则由超时自动提交接住长尾，
-      // 不限时局（无超时可磨）靠这里的时长上限撑出「拖得很长」。
-      const dwell = (base: number) =>
-        base + Math.random() * Math.min(4000 + late * 16000, Math.max(1500, left - 2000))
       if (!current) {
         if (left < 3500 || Math.random() < 0.55 - 0.4 * late) {
           return submit(chooseAiMove(game, seat, info.difficulty))
         }
-        return draft(dwell(1500))
+        await draft()
+        return scheduleNext()
       }
-      if (left > 5000 && Math.random() < 0.22) {
-        return draft(dwell(1200))
+      const rethink = (await this.ctx.storage.get<SeatFlags>('aiRethink')) ?? {}
+      if (rethink[seat]) {
+        delete rethink[seat]
+        await this.ctx.storage.put('aiRethink', rethink)
+        await draft()
+        return scheduleNext()
       }
       if (Number.isFinite(left) && Math.random() < 0.03 + 0.22 * late) {
         return this.armAlarm() // 不再行动，草稿在帧超时自动提交
@@ -835,7 +850,7 @@ export class Room extends DurableObject<Env> {
     })
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
-      await this.ctx.storage.delete('choices')
+      await this.ctx.storage.delete(['choices', 'aiRethink'])
       const deadline = await this.scheduleFrame(next, await this.frameSeconds())
       this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed })
     } else {
@@ -844,7 +859,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
-    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered'])
+    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiRethink', 'aiDrawOffered'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
