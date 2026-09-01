@@ -49,6 +49,10 @@ const ALL_POINTS: Point[] = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, 
   y: Math.floor(i / BOARD_SIZE),
 }))
 
+function isLast(p: Point): boolean {
+  return props.lastMoves.some((m) => m.x === p.x && m.y === p.y)
+}
+
 const stones = computed(() =>
   ALL_POINTS.filter((p) => {
     const cell = cellAt(props.state, p)
@@ -56,7 +60,7 @@ const stones = computed(() =>
   }).map((p) => ({
     ...p,
     cell: cellAt(props.state, p) as 'black' | 'white',
-    last: props.lastMoves.some((m) => m.x === p.x && m.y === p.y),
+    last: isLast(p),
   })),
 )
 
@@ -228,6 +232,7 @@ function onBoardTap(e: TapEvent): void {
       :style="`left:${pos(p.x) - STONE_R}rpx;top:${pos(p.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
     >
       <view class="bar bar-minus" />
+      <view v-if="isLast(p)" class="last-dot last-dot-mark" />
     </view>
 
     <view
@@ -238,6 +243,7 @@ function onBoardTap(e: TapEvent): void {
     >
       <view class="bar bar-cross bar-cross-a" />
       <view class="bar bar-cross bar-cross-b" />
+      <view v-if="isLast(p)" class="last-dot last-dot-mark" />
     </view>
 
     <view
@@ -368,6 +374,12 @@ function onBoardTap(e: TapEvent): void {
   background: #ffffff;
 }
 .last-dot-white {
+  background: #1c1917;
+}
+/* 白色描边遮住穿过中心的符号线，观感与棋子上的圆点一致 */
+.last-dot-mark {
+  box-sizing: content-box;
+  border: 4rpx solid #ffffff;
   background: #1c1917;
 }
 .mark-cell,

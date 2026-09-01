@@ -235,7 +235,7 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
   const lastMoves = (collided ? [black] : [black, white]).filter(
     (p): p is Point =>
       p !== null &&
-      ['black', 'white', 'minus'].includes(board[p.y * BOARD_SIZE + p.x]),
+      ['black', 'white', 'minus', 'forbidden'].includes(board[p.y * BOARD_SIZE + p.x]),
   )
 
   // 抢点撞子由掷币定归属：留存的那颗子先以太极呈现，再翻出先手方棋色。
