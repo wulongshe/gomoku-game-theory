@@ -9,8 +9,7 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import { searchBestMove } from '@gomoku/engine/mcts'
-import type { Difficulty } from '@gomoku/engine/ai'
+import { chooseAiMove, type Difficulty } from '@gomoku/engine/ai'
 import {
   maskEmail,
   parseClientMessage,
@@ -21,7 +20,7 @@ import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
-// 匹配久等无人时顶替真人的 AI：中等棋力，行为节奏拟人（见各处随机延时）。
+// 匹配久等无人时顶替真人的 AI：启发式单步走子（免费层 10ms CPU 限制内），行为节奏拟人（见各处随机延时）。
 const AI_DIFFICULTY: Difficulty = 'normal'
 
 // 拟人思考时长：限时局压在时限的六成与 10.5s 之内，不限时局也别让对面干等。
@@ -608,7 +607,7 @@ export class Room extends DurableObject<Env> {
       }
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
       if (!choices[aiSeat]?.final) {
-        const point = searchBestMove(game, aiSeat, AI_DIFFICULTY)
+        const point = chooseAiMove(game, aiSeat, AI_DIFFICULTY)
         choices[aiSeat] = { point, final: true, finalAt: Date.now() }
         await this.ctx.storage.put('choices', choices)
         this.broadcast({ type: 'opponent_submitted', submitted: true })
