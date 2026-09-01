@@ -25,27 +25,26 @@ import {
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameResult } from '~/composables/useGameResult'
-import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_LABELS, DIFFICULTY_OPTIONS, MODE_LABELS } from '@gomoku/branding'
+import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
+import { AI_MODE_OPTIONS, clampExpertLevel, DIFFICULTY_OPTIONS, expertRead } from '@gomoku/config'
 import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
-const rawLevel = params.get('level') as Difficulty
+const rawDifficulty = params.get('difficulty') as Difficulty
 
 const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
 // 人机对战恒不限时（无回合计时，仅正计时 Ns/∞）。
 const frameSeconds = 0
-const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
+const difficulty = ref<Difficulty>(
+  DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
+)
 
-// strength 是「棋力」滑条（只对地狱难度生效），取 URL 参数，非法则回落到默认；范围 0.05~1、步长 0.05。
-// 引擎读心置信度 read = strength - 0.05：滑条 5%~100% → 置信 0~0.95（AI 本就有自然命中率，0 即纯盲搜、不再额外削弱）。
-function clampStrength(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_HELL_STRENGTH
-  return Math.min(1, Math.max(0.05, Math.round(raw * 20) / 20))
-}
-const strength = ref(clampStrength(Number(params.get('strength'))))
-const engineRead = computed(() => Math.max(0, strength.value - 0.05))
+// level 是专家难度等级（1~20，仅专家难度生效），取 URL 参数，非法则回落默认；
+// 引擎读心置信度 read = (level - 1) / 20：1 级纯盲搜（AI 本就有自然命中率），20 级置信 0.95。
+const level = ref(clampExpertLevel(Number(params.get('level'))))
+const engineRead = computed(() => expertRead(level.value))
 
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
@@ -84,10 +83,9 @@ let responseTimer: ReturnType<typeof setTimeout> | undefined
 const showConfig = ref(false)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
-const configStrength = ref(strength.value)
+const configLevel = ref(level.value)
 
-const responds = computed(() => difficulty.value === 'hell')
-const strengthPoints = computed(() => Math.round(strength.value * 100))
+const responds = computed(() => difficulty.value === 'expert')
 const showThinking = ref(false)
 let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
@@ -200,7 +198,7 @@ function exitRoom() {
 function openConfig() {
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
-  configStrength.value = strength.value
+  configLevel.value = level.value
   showConfig.value = true
 }
 
@@ -208,8 +206,8 @@ function confirmConfig() {
   showConfig.value = false
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  strength.value = configStrength.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&level=${difficulty.value}&strength=${strength.value}`)
+  level.value = configLevel.value
+  history.replaceState(null, '', `/ai?mode=${mode.value}&difficulty=${difficulty.value}&level=${level.value}`)
   restart()
 }
 
@@ -239,7 +237,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </span>
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
-          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ strengthPoints }}点</template>
+          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ level }}级</template>
           <button
             class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
             aria-label="退出对局"
@@ -304,7 +302,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       v-if="showConfig"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
-      v-model:strength="configStrength"
+      v-model:level="configLevel"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

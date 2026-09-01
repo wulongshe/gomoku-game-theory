@@ -1,7 +1,7 @@
 import { settleFrame, type GameState, type Point, type Seat } from './game'
 import { analyzeBoard, evaluateState, sampleIndex } from './eval'
 
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'hell'
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert'
 
 // explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
 // 读心置信度不在此预设：引擎对难度不可知，read 由调用方逐局提供（见 searchBestMove / AiRoom）。
@@ -12,7 +12,7 @@ export const DIFFICULTY_SETTINGS: Record<
   easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
   normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
   hard: { candidates: 7, explore: 0, budgetMs: 800 },
-  hell: { candidates: 8, explore: 0, budgetMs: 850 },
+  expert: { candidates: 8, explore: 0, budgetMs: 850 },
 }
 
 const FICTITIOUS_ITERATIONS = 300

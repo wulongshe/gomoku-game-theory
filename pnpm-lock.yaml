@@ -11,6 +11,9 @@ importers:
       '@gomoku/branding':
         specifier: workspace:*
         version: link:packages/branding
+      '@gomoku/config':
+        specifier: workspace:*
+        version: link:packages/config
       '@gomoku/engine':
         specifier: workspace:*
         version: link:packages/engine
@@ -66,6 +69,9 @@ importers:
       '@gomoku/branding':
         specifier: workspace:*
         version: link:../packages/branding
+      '@gomoku/config':
+        specifier: workspace:*
+        version: link:../packages/config
       '@gomoku/engine':
         specifier: workspace:*
         version: link:../packages/engine
@@ -117,6 +123,12 @@ importers:
         version: 2.2.12(typescript@5.9.3)
 
   packages/branding:
+    dependencies:
+      '@gomoku/engine':
+        specifier: workspace:*
+        version: link:../engine
+
+  packages/config:
     dependencies:
       '@gomoku/engine':
         specifier: workspace:*

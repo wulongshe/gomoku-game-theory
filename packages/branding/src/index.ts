@@ -11,20 +11,12 @@ export const MODE_LABELS: Record<GameMode, string> = {
   minus: '负子',
 }
 
-// 人机对战本地单步结算，抢点撞子只能随机归属，沦为运气，故不开放给 AI
-export const AI_MODE_OPTIONS: GameMode[] = ['forbidden', 'minus']
-
-export const DIFFICULTY_OPTIONS: Difficulty[] = ['easy', 'normal', 'hard', 'hell']
-
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
   normal: '普通',
   hard: '困难',
-  hell: '地狱',
+  expert: '专家',
 }
-
-// 地狱难度「棋力」滑条默认值（5%~100%）；引擎读心置信度 = 棋力 - 0.05。
-export const DEFAULT_HELL_STRENGTH = 0.05
 
 export function rules(audience: RuleAudience = 'pvp') {
   const pvp = audience === 'pvp'

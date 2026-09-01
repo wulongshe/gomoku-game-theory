@@ -1,12 +1,17 @@
 import Taro from '@tarojs/taro'
-import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_OPTIONS } from '@gomoku/branding'
+import {
+  AI_MODE_OPTIONS,
+  clampExpertLevel,
+  DEFAULT_EXPERT_LEVEL,
+  DIFFICULTY_OPTIONS,
+} from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
 import type { GameMode } from '@gomoku/engine/game'
 
 export interface GameConfig {
   mode: GameMode
   difficulty: Difficulty
-  strength: number
+  level: number
 }
 
 const CONFIG_KEY = 'ai-config'
@@ -14,7 +19,7 @@ const CONFIG_KEY = 'ai-config'
 const DEFAULT_CONFIG: GameConfig = {
   mode: 'forbidden',
   difficulty: 'normal',
-  strength: DEFAULT_HELL_STRENGTH,
+  level: DEFAULT_EXPERT_LEVEL,
 }
 
 export function loadConfig(): GameConfig {
@@ -26,10 +31,7 @@ export function loadConfig(): GameConfig {
       difficulty: DIFFICULTY_OPTIONS.includes(saved.difficulty as Difficulty)
         ? (saved.difficulty as Difficulty)
         : DEFAULT_CONFIG.difficulty,
-      strength:
-        typeof saved.strength === 'number' && saved.strength >= 0.05 && saved.strength <= 1
-          ? saved.strength
-          : DEFAULT_CONFIG.strength,
+      level: clampExpertLevel(Number(saved.level)),
     }
   } catch {
     return DEFAULT_CONFIG

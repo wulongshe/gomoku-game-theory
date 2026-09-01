@@ -70,14 +70,14 @@ describe('searchBestMove', () => {
   // 对手手为其唯一胜点 (8,7)，白必撞点封杀，每次都对。
   it('best-responds to a fixed opponent move by contesting its winning point', () => {
     const game = withStones({ black: row(7, [4, 5, 6, 7]), white: [{ x: 3, y: 7 }] })
-    const move = searchBestMove(game, 'white', 'hell', 150, { x: 8, y: 7 })
+    const move = searchBestMove(game, 'white', 'expert', 150, { x: 8, y: 7 })
     expect(move).toEqual({ x: 8, y: 7 })
   })
 
   // 对手手固定为无关点，白直接成五取胜（两端皆可）。
   it('best-responds by taking its own win when the fixed opponent move is harmless', () => {
     const game = withStones({ white: row(7, [4, 5, 6, 7]) })
-    const move = searchBestMove(game, 'white', 'hell', 150, { x: 0, y: 0 })
+    const move = searchBestMove(game, 'white', 'expert', 150, { x: 0, y: 0 })
     expect(move?.y).toBe(7)
     expect([3, 8]).toContain(move?.x)
   })

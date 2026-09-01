@@ -25,7 +25,7 @@ function start(config: GameConfig): void {
   showConfig.value = false
   saveConfig(config)
   Taro.navigateTo({
-    url: `/pages/game/index?mode=${config.mode}&level=${config.difficulty}&strength=${config.strength}`,
+    url: `/pages/game/index?mode=${config.mode}&difficulty=${config.difficulty}&level=${config.level}`,
   })
 }
 </script>
@@ -60,7 +60,7 @@ function start(config: GameConfig): void {
       v-if="showConfig"
       :mode="savedConfig.mode"
       :difficulty="savedConfig.difficulty"
-      :strength="savedConfig.strength"
+      :level="savedConfig.level"
       @cancel="showConfig = false"
       @confirm="start"
     />

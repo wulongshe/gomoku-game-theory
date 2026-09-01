@@ -18,7 +18,8 @@ import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
-import { AI_MODE_OPTIONS, DEFAULT_HELL_STRENGTH, DIFFICULTY_OPTIONS, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { AI_MODE_OPTIONS, DEFAULT_EXPERT_LEVEL, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import {
   FRAME_OPTIONS,
   MODE_OPTIONS,
@@ -76,13 +77,13 @@ if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
-const aiStrength = useStorage('ai-strength', DEFAULT_HELL_STRENGTH)
+const aiLevel = useStorage('ai-level', DEFAULT_EXPERT_LEVEL)
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 // 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&level=${aiDifficulty.value}&strength=${aiStrength.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&difficulty=${aiDifficulty.value}&level=${aiLevel.value}`)
 }
 
 async function create() {
@@ -291,7 +292,7 @@ function closeMatchDialog() {
       v-if="showAi"
       v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
-      v-model:strength="aiStrength"
+      v-model:level="aiLevel"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

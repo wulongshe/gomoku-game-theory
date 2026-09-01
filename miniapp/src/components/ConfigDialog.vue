@@ -2,45 +2,47 @@
 import { computed, ref } from 'vue'
 import type { Difficulty } from '@gomoku/engine/ai'
 import type { GameMode } from '@gomoku/engine/game'
+import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
 import {
   AI_MODE_OPTIONS,
-  DEFAULT_HELL_STRENGTH,
-  DIFFICULTY_LABELS,
+  DEFAULT_EXPERT_LEVEL,
   DIFFICULTY_OPTIONS,
-  MODE_LABELS,
-} from '@gomoku/branding'
+  EXPERT_LEVEL_MAX,
+  EXPERT_LEVEL_MIN,
+} from '@gomoku/config'
 import type { GameConfig } from '@/game/config'
 
 const props = withDefaults(
   defineProps<{
     mode?: GameMode
     difficulty?: Difficulty
-    strength?: number
+    level?: number
   }>(),
-  { mode: 'forbidden', difficulty: 'normal', strength: DEFAULT_HELL_STRENGTH },
+  { mode: 'forbidden', difficulty: 'normal', level: DEFAULT_EXPERT_LEVEL },
 )
 
 const emit = defineEmits<{ cancel: []; confirm: [config: GameConfig] }>()
 
 const mode = ref<GameMode>(props.mode)
 const difficulty = ref<Difficulty>(props.difficulty)
-const strengthPercent = ref(Math.round(props.strength * 100))
+const level = ref(props.level)
 
-// 低难度偏绿、高难度偏红，与 web 端棋力滑条一致。
+// 低等级偏绿、高等级偏红，与 web 端等级滑条一致。
 const fillColor = computed(
-  () => `hsl(${Math.round((1 - strengthPercent.value / 100) * 130)}, 68%, 45%)`,
+  () =>
+    `hsl(${Math.round((1 - (level.value - EXPERT_LEVEL_MIN) / (EXPERT_LEVEL_MAX - EXPERT_LEVEL_MIN)) * 130)}, 68%, 45%)`,
 )
 
 type SliderEvent = { detail: { value: number } }
-function onStrength(e: SliderEvent): void {
-  strengthPercent.value = e.detail.value
+function onLevel(e: SliderEvent): void {
+  level.value = e.detail.value
 }
 
 function confirm(): void {
   emit('confirm', {
     mode: mode.value,
     difficulty: difficulty.value,
-    strength: strengthPercent.value / 100,
+    level: level.value,
   })
 }
 </script>
@@ -83,20 +85,20 @@ function confirm(): void {
         </view>
       </view>
 
-      <view v-if="difficulty === 'hell'" class="field">
-        <text class="field-label">{{ strengthPercent }} 点棋力</text>
+      <view v-if="difficulty === 'expert'" class="field">
+        <text class="field-label">{{ level }} 级</text>
         <slider
           class="slider"
-          :min="5"
-          :max="100"
-          :step="5"
-          :value="strengthPercent"
+          :min="EXPERT_LEVEL_MIN"
+          :max="EXPERT_LEVEL_MAX"
+          :step="1"
+          :value="level"
           :active-color="fillColor"
           background-color="#e7e5e4"
           block-size="18"
           block-color="#ffffff"
-          @changing="onStrength"
-          @change="onStrength"
+          @changing="onLevel"
+          @change="onLevel"
         />
       </view>
 

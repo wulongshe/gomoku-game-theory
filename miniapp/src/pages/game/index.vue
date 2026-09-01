@@ -6,36 +6,29 @@ import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { aiMove } from '@/game/ai'
 import { saveConfig, type GameConfig } from '@/game/config'
-import {
-  AI_MODE_OPTIONS,
-  DEFAULT_HELL_STRENGTH,
-  DIFFICULTY_LABELS,
-  DIFFICULTY_OPTIONS,
-  MODE_LABELS,
-} from '@gomoku/branding'
+import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
+import { AI_MODE_OPTIONS, clampExpertLevel, DIFFICULTY_OPTIONS, expertRead } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
 import { createGame, isLegalChoice, settleFrame, type GameMode, type Point } from '@gomoku/engine/game'
 
 const params = Taro.getCurrentInstance().router?.params ?? {}
 const rawMode = params.mode as GameMode
-const rawLevel = params.level as Difficulty
+const rawDifficulty = params.difficulty as Difficulty
 
 const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
-const difficulty = ref<Difficulty>(DIFFICULTY_OPTIONS.includes(rawLevel) ? rawLevel : 'normal')
+const difficulty = ref<Difficulty>(
+  DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
+)
 
-// strength 是「棋力」滑条（只对地狱难度生效），非法则回落默认；范围 0.05~1、步长 0.05。
-// 引擎读心置信度 read = 棋力 - 0.05（5% 即纯盲搜）。
-function clampStrength(raw: number): number {
-  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_HELL_STRENGTH
-  return Math.min(1, Math.max(0.05, Math.round(raw * 20) / 20))
-}
-const strength = ref(clampStrength(Number(params.strength)))
-const engineRead = computed(() => Math.max(0, strength.value - 0.05))
+// level 是专家难度等级（1~20，仅专家难度生效），非法则回落默认；
+// 引擎读心置信度 read = (level - 1) / 20（1 级纯盲搜）。
+const level = ref(clampExpertLevel(Number(params.level)))
+const engineRead = computed(() => expertRead(level.value))
 
 // 分享当前配置，接收方直达同难度对局。
 useShareAppMessage(() => ({
   title: `敢来挑战${DIFFICULTY_LABELS[difficulty.value]} AI 吗？｜博弈五子棋`,
-  path: `/pages/game/index?mode=${mode.value}&level=${difficulty.value}&strength=${strength.value}`,
+  path: `/pages/game/index?mode=${mode.value}&difficulty=${difficulty.value}&level=${level.value}`,
 }))
 
 // 每次进入对战页都是新对局；退出即弃，避免换难度后还续上一局。
@@ -46,8 +39,7 @@ const showRules = ref(false)
 const showConfig = ref(false)
 
 const playing = computed(() => game.value.phase === 'playing')
-const isHell = computed(() => difficulty.value === 'hell')
-const strengthPoints = computed(() => Math.round(strength.value * 100))
+const isExpert = computed(() => difficulty.value === 'expert')
 
 // 帧正计时（人机恒不限时，Ns/∞），随每帧重置。
 const now = ref(Date.now())
@@ -112,8 +104,8 @@ async function submit(): Promise<void> {
   const white = aiMove(
     game.value,
     difficulty.value,
-    isHell.value ? selected.value : null,
-    isHell.value ? engineRead.value : 0,
+    isExpert.value ? selected.value : null,
+    isExpert.value ? engineRead.value : 0,
   )
   const next = settleFrame(game.value, {
     black: selected.value,
@@ -137,7 +129,7 @@ function applyConfig(config: GameConfig): void {
   showConfig.value = false
   mode.value = config.mode
   difficulty.value = config.difficulty
-  strength.value = config.strength
+  level.value = config.level
   saveConfig(config)
   restart()
 }
@@ -158,7 +150,7 @@ function exitGame(): void {
       </view>
       <text class="vs">
         AI · {{ DIFFICULTY_LABELS[difficulty]
-        }}<text v-if="isHell"> · {{ strengthPoints }}点</text>
+        }}<text v-if="isExpert"> · {{ level }}级</text>
       </text>
       <text class="mode" @tap="showRules = true">{{ MODE_LABELS[mode] }}模式 ?</text>
     </view>
@@ -201,7 +193,7 @@ function exitGame(): void {
       v-if="showConfig"
       :mode="mode"
       :difficulty="difficulty"
-      :strength="strength"
+      :level="level"
       @cancel="showConfig = false"
       @confirm="applyConfig"
     />

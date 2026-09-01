@@ -21,8 +21,8 @@ const WHITE: SideConfig = {
   candidates:  Number(process.env.CAND_WHITE ?? 6),
   explore: Number(process.env.EXPLORE_WHITE ?? 0.22),
   budgetMs: Number(process.env.BUDGET_WHITE ?? 450),
-  // 地狱方读心置信度：root 押注对手真实点的概率（越高越强，1=满血读心）
-  read: Number(process.env.HELL_READ ?? 0.75)
+  // 专家方读心置信度：root 押注对手真实点的概率（越高越强，1=满血读心）
+  read: Number(process.env.EXPERT_READ ?? 0.75)
 }
 // ==========================
 
