@@ -102,6 +102,7 @@ const buttonVariant = computed(() =>
             {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 20:00 · 已报名 ${info.playerCount} 人` }}
           </p>
         </template>
+        <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">约3轮 · 每轮10min · 每回合10~30s</p>
       </div>
 
       <div v-if="info.standings.length" class="flex flex-col gap-1.5">

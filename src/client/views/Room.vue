@@ -498,6 +498,7 @@ function exitRoom() {
       v-else-if="stage === 'ready' || (stage === 'waiting' && tournament)"
       :code="props.code"
       :frame-seconds="frameSeconds"
+      :tournament="tournament"
       :mode="mode"
       :seat="seat"
       :my-ready="myReady"

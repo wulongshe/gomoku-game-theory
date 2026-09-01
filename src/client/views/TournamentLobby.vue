@@ -133,6 +133,7 @@ useWebSocket(tournamentWsUrl(), {
               已报名 {{ info.playerCount }} 人{{ info.registered ? ' · 到点自动进入对局' : '' }}
             </p>
           </template>
+          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">约3轮 · 每轮10min · 每回合10~30s</p>
         </div>
 
         <div
