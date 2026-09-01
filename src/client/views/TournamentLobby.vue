@@ -141,7 +141,7 @@ useWebSocket(tournamentWsUrl(), {
           class="flex min-h-0 w-full flex-1 flex-col gap-1.5"
         >
           <p v-if="info.state !== 'active'" class="px-1 text-xs text-stone-400 dark:text-stone-500">
-            昨日排名
+            上届排名
           </p>
           <SegmentedControl
             v-else

@@ -18,7 +18,7 @@ const STATUS_META: Record<PlayerStatus, { label: string; dot: string }> = {
   left: { label: '已离开', dot: 'bg-red-500' },
 }
 
-// 仅实时积分带状态（昨日排名不带），有状态才显示图例与着色。
+// 仅实时积分带状态（上届排名不带），有状态才显示图例与着色。
 const hasStatus = computed(() => props.standings.some((row) => row.status))
 </script>
 

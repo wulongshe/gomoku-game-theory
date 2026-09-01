@@ -107,7 +107,7 @@ const buttonVariant = computed(() =>
 
       <div v-if="info.standings.length" class="flex flex-col gap-1.5">
         <p v-if="info.state !== 'active'" class="text-xs text-stone-400 dark:text-stone-500">
-          昨日排名
+          上届排名
         </p>
         <TournamentStandings :standings="info.standings" :me="info.me" class="max-h-64" />
       </div>

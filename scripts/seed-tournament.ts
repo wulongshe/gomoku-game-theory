@@ -1,7 +1,7 @@
 // 由 Node 原生运行 TypeScript（同 ai:battle）：给本地 dev 的每日大赛注入演示数据。
 // 用法：pnpm seed:tournament [active|idle|prestart|spectate] [--url http://localhost:5173]
 //  - active（默认）：第 2/3 轮进行中，四种状态齐全（对局中/待开始/已结束/已离开）
-//  - idle：只写一份「昨日排名」
+//  - idle：只写一份「上届排名」
 //  - prestart：shewulong@outlook.com 已报名、2 分钟后开赛（走真实 start：bot 注水补位、真打）
 //  - spectate：同 active，但「对局中」那桌换成真房 + 双 AI 自动对弈，outlook 已打完可观战
 // 数据经 worker 的 dev 专用注入口（仅 vite dev 存在）写进活着的 Tournament DO 并即时广播。
@@ -114,7 +114,7 @@ const base = urlFlag >= 0 ? args[urlFlag + 1] : 'http://localhost:5173'
 
 const SEEDS: Record<string, { body: SeedState; label: string }> = {
   active: { body: ACTIVE, label: '进行中（第 2/3 轮，四种状态）' },
-  idle: { body: IDLE, label: '昨日排名' },
+  idle: { body: IDLE, label: '上届排名' },
   prestart: { body: PRESTART, label: `${OUTLOOK} 已报名，2 分钟后开赛` },
 }
 let seed = SEEDS[mode]
