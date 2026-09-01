@@ -20,6 +20,10 @@ import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
+// 生产环境闹钟可能在 Date.now() 尚差几毫秒到达预定时点时就被调起（线上实证过：
+// 严格 >= 判定落空 → 闹钟被改挂 10 分钟 → AI 行动点孤儿化）。判定一律容忍该偏差。
+const ALARM_SKEW_MS = 1500
+
 // 顶替真人的 AI（匹配久等兜底 / 大赛陪打 bot）：启发式单步走子（免费层 10ms CPU 限制内），
 // 行为节奏拟人（见各处随机延时）。
 const AI_DIFFICULTY: Difficulty = 'normal'
@@ -650,10 +654,10 @@ export class Room extends DurableObject<Env> {
       ? await this.ctx.storage.get<TournamentTag>('tournament')
       : undefined
     const botGame = tournament !== undefined && botCount > 0
-    // 有真人在场时 AI 正常行动；大赛 bot 局即使无人连接（bot vs bot、真人掉线）也照常推进。
-    if (this.playerSockets().length > 0 || botGame) {
-      if (botCount && (await this.aiStep(game, aiSeats, tournament))) return
-    }
+    // 对局中有真人在场（或大赛 bot 局，无人连接也照常推进）时 AI 正常行动；
+    // 赛前进场不看连接状态——闹钟偶发看不到 socket 时也不能把进场弄丢。
+    const live = this.playerSockets().length > 0 || botGame
+    if (botCount && (!game || live) && (await this.aiStep(game, aiSeats, tournament))) return
     if (this.ctx.getWebSockets().length === 0 && !(botGame && game?.phase === 'playing')) {
       if (game && game.phase === 'playing') {
         const emptySince = (await this.ctx.storage.get<number>('emptySince')) ?? Date.now()
@@ -674,7 +678,8 @@ export class Room extends DurableObject<Env> {
       return this.close()
     }
     if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
-      return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+      // 不盲设空房 TTL：若还有待办的 AI 时点（如闹钟早到没判上），拨回去自愈。
+      return this.armAlarm()
     }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
     await this.settle(game, choices)
@@ -689,7 +694,9 @@ export class Room extends DurableObject<Env> {
     const now = Date.now()
     if (!game) {
       const arrive = (await this.ctx.storage.get<AiTimes>('aiArrive')) ?? {}
-      const due = (Object.keys(arrive) as Seat[]).filter((seat) => now >= arrive[seat]!)
+      const due = (Object.keys(arrive) as Seat[]).filter(
+        (seat) => now >= arrive[seat]! - ALARM_SKEW_MS,
+      )
       if (due.length === 0) return false
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
       for (const seat of due) {
@@ -716,7 +723,7 @@ export class Room extends DurableObject<Env> {
     }
     const plan = (await this.ctx.storage.get<AiTimes>('aiPlan')) ?? {}
     for (const seat of Object.keys(plan) as Seat[]) {
-      if (now < plan[seat]! || !aiSeats[seat]) continue
+      if (now < plan[seat]! - ALARM_SKEW_MS || !aiSeats[seat]) continue
       delete plan[seat]
       await this.ctx.storage.put('aiPlan', plan)
       await this.aiAct(seat, aiSeats[seat], game, tournament)

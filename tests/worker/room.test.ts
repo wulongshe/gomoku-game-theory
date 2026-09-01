@@ -851,6 +851,24 @@ describe('AI stand-in room', () => {
     await human.next('start')
   })
 
+  // 线上闹钟可能比预定时点早几毫秒调起；早到的闹钟也必须把进场当作到点处理，
+  // 否则行动点被孤儿化（线上实证的「匹配到 AI 后不准备」）。
+  it('tolerates an alarm firing slightly ahead of the AI schedule', async () => {
+    await createAiRoom('7105')
+    const human = await connect('7105', 'key-h')
+    await human.next('joined')
+    human.ready()
+    await runInDurableObject(stubOf('7105'), async (_i, state) => {
+      const seats = Object.keys((await state.storage.get<Record<string, unknown>>('aiSeats')) ?? {})
+      await state.storage.put(
+        'aiArrive',
+        Object.fromEntries(seats.map((s) => [s, Date.now() + 1000])),
+      )
+    })
+    expect(await runDurableObjectAlarm(stubOf('7105'))).toBe(true)
+    await human.next('start')
+  })
+
   it('readies up, submits a move, and settles the frame', async () => {
     // 压低随机数走「笃定直接提交」分支，避免草稿-定稿节奏引入的不确定性。
     vi.spyOn(Math, 'random').mockReturnValue(0.1)
