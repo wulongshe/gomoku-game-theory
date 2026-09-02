@@ -20,7 +20,8 @@ const BASE_TOLERANCE = 120
 const WIDEN_PER_SEC = 40
 const RECHECK_MS = 3000
 
-// 久等无人时悄悄换 AI 顶替，每人到点时间在区间内随机，避免固定时长露馅。
+// 久等无人时悄悄换 AI 顶替。到点时间在区间内随机且偏前（平方随机）：
+// 多数人等 15~45s 就有「对手」，少数拖到更晚，避免固定时长或均匀分布露馅。
 const AI_FALLBACK_MIN_MS = 15_000
 const AI_FALLBACK_MAX_MS = 120_000
 
@@ -76,7 +77,7 @@ export class Lobby extends DurableObject<Env> {
     this.ctx.acceptWebSocket(pair[1])
     const joinedAt = Date.now()
     const aiAt =
-      joinedAt + AI_FALLBACK_MIN_MS + Math.random() * (AI_FALLBACK_MAX_MS - AI_FALLBACK_MIN_MS)
+      joinedAt + AI_FALLBACK_MIN_MS + Math.random() ** 2 * (AI_FALLBACK_MAX_MS - AI_FALLBACK_MIN_MS)
     pair[1].serializeAttachment({ ...options, joinedAt, aiAt } satisfies Waiter)
     await this.matchWaiting()
     return new Response(null, { status: 101, webSocket: pair[0] })
