@@ -40,6 +40,11 @@ function aiThinkDelay(frameSeconds: number, late: number): number {
   return 1500 + Math.random() * cap * (0.35 + 0.65 * late)
 }
 
+// 提交时限随手数放宽：前 5 手 10s 内交、5~10 手 15s，依次类推，越往后可以长考。
+function aiSubmitCap(frame: number): number {
+  return 10_000 + Math.floor((frame - 1) / 5) * 5_000
+}
+
 // 大赛 bot 的进场延时：开轮后错峰入座，别整齐划一地秒到。
 function aiArriveDelay(): number {
   return 5_000 + Math.random() * 55_000
@@ -459,7 +464,10 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.setAlarm(deadline)
     }
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
-      await this.planAi(seat, aiThinkDelay(frameSeconds, lateness(game.frame)))
+      await this.planAi(
+        seat,
+        Math.min(aiThinkDelay(frameSeconds, lateness(game.frame)), aiSubmitCap(game.frame) - 4000),
+      )
     }
     return deadline
   }
@@ -751,20 +759,22 @@ export class Room extends DurableObject<Env> {
         return this.armAlarm()
       }
       // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常犹豫一阵才交，
-      // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。
+      // 甚至磨到帧超时让草稿自动提交——像真人越下越谨慎。总耗时压在 aiSubmitCap 内。
       const late = lateness(game.frame)
+      const frameStart = (await this.ctx.storage.get<number>('frameStart')) ?? Date.now()
+      const budget = aiSubmitCap(game.frame) - (Date.now() - frameStart)
       if (!current) {
         const point = chooseAiMove(game, seat, info.difficulty)
-        if (left < 3500 || Math.random() < 0.55 - 0.4 * late) return submit(point)
+        if (left < 3500 || budget < 4000 || Math.random() < 0.55 - 0.4 * late) {
+          return submit(point)
+        }
         choices[seat] = { point, final: false }
         await this.ctx.storage.put('choices', choices)
-        if (Number.isFinite(left) && Math.random() < 0.03 + 0.22 * late) {
-          return this.armAlarm() // 不再行动，草稿在帧超时自动提交
+        if (left <= budget && Math.random() < 0.03 + 0.22 * late) {
+          return this.armAlarm() // 不再行动，草稿在帧超时自动提交（帧长在时限内才敢磨）
         }
-        return this.planAi(
-          seat,
-          Math.random() < 0.7 ? 500 + Math.random() * 2500 : 3000 + Math.random() * 5000,
-        )
+        const dwell = Math.random() < 0.7 ? 500 + Math.random() * 2500 : 3000 + Math.random() * 5000
+        return this.planAi(seat, Math.min(dwell, Math.max(500, budget)))
       }
       return submit(current.point)
     }
