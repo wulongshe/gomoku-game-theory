@@ -126,7 +126,7 @@ export class Lobby extends DurableObject<Env> {
       used.add(waiting[i].ws)
       used.add(waiting[j].ws)
       const { frame, mode } = pickSettings(frames, modes)
-      const code = await allocateRoom(this.env, frame, mode)
+      const code = await allocateRoom(this.env, frame, mode, { matched: true })
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
       for (const ws of [waiting[i].ws, waiting[j].ws]) {
         try {
@@ -141,7 +141,7 @@ export class Lobby extends DurableObject<Env> {
       if (used.has(ws) || now < opts.aiAt) continue
       used.add(ws)
       const { frame, mode } = pickSettings(opts.frames, opts.modes)
-      const code = await allocateRoom(this.env, frame, mode, { ai: true })
+      const code = await allocateRoom(this.env, frame, mode, { ai: true, matched: true })
       try {
         ws.send(JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage))
         ws.close(1000, 'matched')

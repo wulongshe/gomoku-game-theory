@@ -96,6 +96,7 @@ export class Room extends DurableObject<Env> {
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
       const entries: Record<string, unknown> = { created: true, frameSeconds, mode }
+      if (url.searchParams.get('matched') === '1') entries.matched = true
       if (url.searchParams.get('ai') === '1') {
         // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
         const seat: Seat = Math.random() < 0.5 ? 'black' : 'white'
@@ -864,8 +865,6 @@ export class Room extends DurableObject<Env> {
       } catch {}
       return
     }
-    // AI 顶替局不入战绩/ELO，防止空窗期刷分。
-    if (Object.keys(await this.aiSeats()).length) return
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const results = (['black', 'white'] as const).flatMap((seat) => {
       const email = accounts[seat]
@@ -875,8 +874,13 @@ export class Room extends DurableObject<Env> {
       return [{ email, outcome }]
     })
     if (results.length === 0) return
+    // 匹配局对手是游客/隐身 AI 时也给注册棋手单边结算 ELO；邀请局对游客仍只记胜负。
+    const matched = (await this.ctx.storage.get<boolean>('matched')) === true
     try {
-      await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).recordResult(results)
+      await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).recordResult(
+        results,
+        matched,
+      )
     } catch {}
   }
 

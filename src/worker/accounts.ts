@@ -178,7 +178,10 @@ export class Accounts extends DurableObject<Env> {
     await this.ctx.storage.delete(`session:${token}`)
   }
 
-  async recordResult(results: Array<{ email: string; outcome: GameOutcome }>): Promise<void> {
+  async recordResult(
+    results: Array<{ email: string; outcome: GameOutcome }>,
+    soloRated = false,
+  ): Promise<void> {
     const records = await Promise.all(
       results.map(async ({ email, outcome }) => {
         const raw = await this.ctx.storage.get<StatsRecord>(`stats:${email}`)
@@ -191,7 +194,8 @@ export class Accounts extends DurableObject<Env> {
         return { email, outcome, stats }
       }),
     )
-    // 只有双方均为注册账号时才结算 ELO，用赛前局数决定 K 值。
+    // 双方均为注册账号时互相结算 ELO；soloRated（匹配局对手为游客/隐身 AI）时，
+    // 单边按默认分的虚拟对手结算。K 值都由赛前局数决定。
     if (records.length === 2) {
       const [a, b] = records
       const expectedA = 1 / (1 + 10 ** ((b.stats.rating - a.stats.rating) / 400))
@@ -199,6 +203,11 @@ export class Accounts extends DurableObject<Env> {
       const deltaB = kFactor(totalGames(b.stats)) * (outcomeScore(b.outcome) - (1 - expectedA))
       a.stats.rating = Math.round(a.stats.rating + deltaA)
       b.stats.rating = Math.round(b.stats.rating + deltaB)
+    } else if (records.length === 1 && soloRated) {
+      const [a] = records
+      const expected = 1 / (1 + 10 ** ((RATING_DEFAULT - a.stats.rating) / 400))
+      const delta = kFactor(totalGames(a.stats)) * (outcomeScore(a.outcome) - expected)
+      a.stats.rating = Math.round(a.stats.rating + delta)
     }
     for (const { email, outcome, stats } of records) {
       if (outcome === 'win') stats.wins += 1

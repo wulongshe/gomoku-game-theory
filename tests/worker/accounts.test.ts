@@ -202,10 +202,18 @@ describe('ELO rating', () => {
     expect(await ratingOf('elo-d2@example.com')).toBe(1200)
   })
 
-  it('does not rate a game against a guest opponent', async () => {
+  it('does not rate a game against a guest opponent outside matchmaking', async () => {
     await register('elo-solo@example.com')
     await accountsStub().recordResult([{ email: 'elo-solo@example.com', outcome: 'win' }])
     expect(await ratingOf('elo-solo@example.com')).toBe(1200)
+  })
+
+  it('rates a solo matched result against a virtual default-rated opponent', async () => {
+    await register('elo-matched@example.com')
+    await accountsStub().recordResult([{ email: 'elo-matched@example.com', outcome: 'win' }], true)
+    expect(await ratingOf('elo-matched@example.com')).toBe(1220)
+    await accountsStub().recordResult([{ email: 'elo-matched@example.com', outcome: 'loss' }], true)
+    expect(await ratingOf('elo-matched@example.com')).toBeLessThan(1220)
   })
 
   it('resolves a match rating from the session, defaulting for unknown tokens', async () => {

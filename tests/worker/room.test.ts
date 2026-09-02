@@ -820,7 +820,7 @@ describe('AI stand-in room', () => {
   afterEach(() => vi.restoreAllMocks())
 
   async function createAiRoom(code: string, frame = 30, mode = 'forbidden'): Promise<void> {
-    await stubOf(code).fetch(`https://room/create?frame=${frame}&mode=${mode}&ai=1`, {
+    await stubOf(code).fetch(`https://room/create?frame=${frame}&mode=${mode}&ai=1&matched=1`, {
       method: 'POST',
     })
   }
@@ -888,7 +888,7 @@ describe('AI stand-in room', () => {
     expect(settled.state.phase).toBe('playing')
   })
 
-  it('declines a draw offer and later accepts a rematch, all without stats', async () => {
+  it('declines a draw offer, credits the human loss, and accepts a rematch', async () => {
     await createAiRoom('7103')
     const session = await sessionFor('stealth@example.com')
     const human = await connect('7103', 'key-h', session)
@@ -906,11 +906,11 @@ describe('AI stand-in room', () => {
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
     expect(settled.state.phase).toBe(`${await aiSeatOf('7103')}_won`)
 
-    // AI 顶替局不计战绩。
+    // 匹配来的 AI 顶替局照记战绩，ELO 按默认分虚拟对手单边结算。
     const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
     expect(
       await runInDurableObject(accounts, (_i, st) => st.storage.get('stats:stealth@example.com')),
-    ).toBeUndefined()
+    ).toEqual({ wins: 0, losses: 1, draws: 0, rating: 1180 })
 
     human.rematch()
     await fireAi('7103')
