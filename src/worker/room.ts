@@ -14,9 +14,10 @@ import {
   maskEmail,
   parseClientMessage,
   tournamentFrameSeconds,
+  type FrameMoves,
   type ServerMessage,
 } from '@/shared/protocol'
-import type { ArchivedGame, GameOutcome } from './accounts'
+import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -248,6 +249,7 @@ export class Room extends DurableObject<Env> {
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
+        ...(game.phase !== 'playing' && { history: await this.moveHistory() }),
       })
       for (const other of this.ctx.getWebSockets()) {
         if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
@@ -310,9 +312,14 @@ export class Room extends DurableObject<Env> {
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: null,
+        ...(game.phase !== 'playing' && { history: await this.moveHistory() }),
       })
     }
     return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  private async moveHistory(): Promise<FrameMoves[]> {
+    return (await this.ctx.storage.get<FrameMoves[]>('moves')) ?? []
   }
 
   private async accountEmail(auth: string | null): Promise<string | null> {
@@ -830,13 +837,14 @@ export class Room extends DurableObject<Env> {
   }
 
   private async settle(game: GameState, choices: Choices): Promise<void> {
+    const first = this.firstSubmitter(choices)
     const next = settleFrame(game, {
       black: choices.black?.point ?? null,
       white: choices.white?.point ?? null,
-      first: this.firstSubmitter(choices),
+      first,
     })
-    const moves = (await this.ctx.storage.get<ArchivedGame['moves']>('moves')) ?? []
-    moves.push([choices.black?.point ?? null, choices.white?.point ?? null])
+    const moves = (await this.ctx.storage.get<FrameMoves[]>('moves')) ?? []
+    moves.push([choices.black?.point ?? null, choices.white?.point ?? null, first])
     await this.ctx.storage.put('moves', moves)
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
@@ -859,7 +867,7 @@ export class Room extends DurableObject<Env> {
 
   // 终局把全帧落点归档到常驻 DO——房间关闭会 deleteAll，记录不能留在房里。
   private async archiveGame(game: GameState): Promise<void> {
-    const moves = (await this.ctx.storage.get<ArchivedGame['moves']>('moves')) ?? []
+    const moves = await this.moveHistory()
     if (!moves.length) return
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')

@@ -28,13 +28,16 @@ import { roomStatus, roomWsUrl, spectateWsUrl, tournamentWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
+import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
 import { MODE_LABELS } from '@gomoku/branding'
 import { ROOM_KEY_PREFIX } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 import {
+  createGame,
   FRAME_SECONDS,
   isLegalChoice,
+  settleFrame,
   type ClearedGroup,
   type GameMode,
   type GameState,
@@ -59,6 +62,15 @@ type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 const stage = ref<Stage>('connecting')
 const seat = ref<Seat>('black')
 const game = ref<GameState | null>(null)
+const {
+  state: reviewState,
+  atFirst: reviewAtFirst,
+  atLatest: reviewAtLatest,
+  available: reviewAvailable,
+  record: recordFrame,
+  reset: resetReview,
+  step: stepReview,
+} = useGameReview()
 const deadline = ref<number | null>(null)
 const frameStart = ref<number | null>(null)
 const selected = ref<Point | null>(null)
@@ -205,6 +217,15 @@ function handleMessage(msg: ServerMessage) {
       break
     }
     case 'start':
+      resetReview()
+      // 终局快照（刷新/重连）带全帧落点，用引擎逐帧重放复原复盘历史。
+      if (msg.history?.length) {
+        let replayed = createGame(msg.state.mode)
+        for (const [black, white, first] of msg.history) {
+          replayed = settleFrame(replayed, { black, white, first })
+          recordFrame(replayed)
+        }
+      }
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now() - msg.elapsed
@@ -230,6 +251,7 @@ function handleMessage(msg: ServerMessage) {
       if (!spectating && msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
         showToast('对方上一回合弃着')
       }
+      recordFrame(msg.state)
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
@@ -468,6 +490,19 @@ watch(stage, (s) => {
   if (s === 'over' && tournament.value) watchNextRound()
 })
 
+// 翻回合时顺带收起结果遮罩，露出棋盘。
+function review(delta: number) {
+  overlayDismissed.value = true
+  stepReview(delta)
+}
+
+// 对局中 frame 表示「正在下第 N 回合」；回放与终局态按已下完的回合数显示（引擎 +1 过）。
+const displayFrame = computed(() => {
+  const state = reviewState.value ?? game.value
+  if (!state) return null
+  return state.phase === 'playing' && !reviewState.value ? state.frame : state.frame - 1
+})
+
 const errorInfo = computed(() => {
   if (notFound.value)
     return { title: '房间不存在或已关闭', desc: '链接可能已失效，房主离开后房间会自动关闭' }
@@ -562,7 +597,7 @@ function exitRoom() {
         </div>
 
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
-          <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game?.frame }} 回合</span>
+          <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ displayFrame }} 回合</span>
           <span
             v-if="spectating"
             class="flex items-center gap-1.5 text-stone-500 dark:text-stone-400"
@@ -586,13 +621,13 @@ function exitRoom() {
 
         <div class="relative w-full">
           <Board
-            v-if="game"
-            :state="game"
+            v-if="reviewState ?? game"
+            :state="(reviewState ?? game)!"
             :seat="seat"
-            :selected="selected"
+            :selected="reviewState ? null : selected"
             :submitted="submitted"
-            :last-moves="lastMoves"
-            :vanishing="vanishing"
+            :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
+            :vanishing="reviewState ? [] : vanishing"
             :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
             @select="select"
           />
@@ -668,6 +703,15 @@ function exitRoom() {
           </AppButton>
           <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
         </template>
+
+        <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">
+          <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
+            上一回合
+          </AppButton>
+          <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
+            下一回合
+          </AppButton>
+        </div>
 
         <div v-if="spectating" class="flex justify-center">
           <button

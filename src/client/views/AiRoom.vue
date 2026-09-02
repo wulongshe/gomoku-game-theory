@@ -24,11 +24,13 @@ import {
 } from '@gomoku/engine/game'
 import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
+import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, clampExpertLevel, DIFFICULTY_OPTIONS, expertRead } from '@gomoku/config'
-import { AI_FRAME_START_KEY, AI_GAME_KEY } from '~/constants/storage'
+import { AI_FRAME_START_KEY, AI_GAME_KEY, AI_MOVES_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
+import type { FrameMoves } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
 const rawMode = params.get('mode') as GameMode
@@ -67,6 +69,37 @@ const savedFrameStart = savedGame ? Number(localStorage.getItem(AI_FRAME_START_K
 const selected = ref<Point | null>(null)
 const lastMoves = ref<Point[]>(savedGame?.lastMoves ?? [])
 const vanishing = ref<ClearedGroup[]>([])
+const {
+  state: reviewState,
+  atFirst: reviewAtFirst,
+  atLatest: reviewAtLatest,
+  available: reviewAvailable,
+  record: recordFrame,
+  reset: resetReview,
+  step: stepReview,
+} = useGameReview()
+
+// 全帧落点随局持久化；刷新续局时用引擎重放复原复盘历史（与存档局面对不上就放弃）。
+let movesLog: FrameMoves[] = []
+if (savedGame) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_MOVES_KEY) ?? '[]') as FrameMoves[]
+    let replayed = createGame(savedGame.mode)
+    for (const [black, white, first] of saved) {
+      replayed = settleFrame(replayed, { black, white, first })
+      recordFrame(replayed)
+    }
+    if (replayed.frame === savedGame.frame) movesLog = saved
+    else resetReview()
+  } catch {
+    resetReview()
+  }
+}
+
+function logMove(entry: FrameMoves) {
+  movesLog.push(entry)
+  localStorage.setItem(AI_MOVES_KEY, JSON.stringify(movesLog))
+}
 const overlayDismissed = ref(false)
 const showRules = ref(false)
 const confirmingExit = ref(false)
@@ -140,11 +173,10 @@ async function resolveFrame() {
     responds.value && draft
       ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft, false, engineRead.value))
       : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
-  const next = settleFrame(game.value, {
-    black: selected.value,
-    white: aiMove,
-    first: Math.random() < 0.5 ? 'black' : 'white',
-  })
+  const first = Math.random() < 0.5 ? 'black' : 'white'
+  const next = settleFrame(game.value, { black: selected.value, white: aiMove, first })
+  logMove([selected.value, aiMove, first])
+  recordFrame(next)
   lastMoves.value = next.lastMoves
   vanishing.value = next.cleared
   game.value = next
@@ -177,8 +209,23 @@ function submitChoice() {
   resolveFrame()
 }
 
+// 翻回合时顺带收起结果遮罩，露出棋盘。
+function review(delta: number) {
+  overlayDismissed.value = true
+  stepReview(delta)
+}
+
+// 对局中 frame 表示「正在下第 N 回合」；回放与终局态按已下完的回合数显示（引擎 +1 过）。
+const displayFrame = computed(() => {
+  const state = reviewState.value ?? game.value
+  return state.phase === 'playing' && !reviewState.value ? state.frame : state.frame - 1
+})
+
 function restart() {
   game.value = createGame(mode.value)
+  resetReview()
+  movesLog = []
+  localStorage.removeItem(AI_MOVES_KEY)
   selected.value = null
   lastMoves.value = []
   vanishing.value = []
@@ -192,6 +239,7 @@ function restart() {
 function exitRoom() {
   localStorage.removeItem(AI_GAME_KEY)
   localStorage.removeItem(AI_FRAME_START_KEY)
+  localStorage.removeItem(AI_MOVES_KEY)
   backOrReplace()
 }
 
@@ -256,7 +304,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       </div>
 
       <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
-        <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ game.frame }} 回合</span>
+        <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ displayFrame }} 回合</span>
         <span class="flex items-center gap-1.5" :class="aiStatus.cls">
           <span class="size-2 rounded-full" :class="aiStatus.dot" />
           {{ aiStatus.text }}
@@ -271,12 +319,12 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
       <div class="relative w-full">
         <Board
-          :state="game"
+          :state="reviewState ?? game"
           seat="black"
-          :selected="selected"
+          :selected="reviewState ? null : selected"
           :submitted="false"
-          :last-moves="lastMoves"
-          :vanishing="vanishing"
+          :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
+          :vanishing="reviewState ? [] : vanishing"
           :interactive="playing && !resolving"
           @select="select"
         />
@@ -295,6 +343,14 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       </template>
       <template v-else>
         <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
+        <div v-if="reviewAvailable" class="flex w-full gap-2">
+          <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
+            上一回合
+          </AppButton>
+          <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
+            下一回合
+          </AppButton>
+        </div>
       </template>
     </div>
 

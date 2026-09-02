@@ -378,7 +378,7 @@ describe('Room', () => {
         phase: string
         black: string | null
         white: string | null
-        moves: Array<[Point | null, Point | null]>
+        moves: Array<[Point | null, Point | null, 'black' | 'white']>
         tournament: unknown
       }>
     })
@@ -390,8 +390,17 @@ describe('Room', () => {
       tournament: null,
     })
     expect(record!.moves).toHaveLength(5)
-    expect(record!.moves[0]).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
-    expect(record!.moves[4]).toEqual([BLACK_WIN_LINE[3], WHITE_SIDE_MOVES[3]])
+    expect(record!.moves[0].slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
+    expect(record!.moves[4].slice(0, 2)).toEqual([BLACK_WIN_LINE[3], WHITE_SIDE_MOVES[3]])
+
+    // 终局后刷新重连：快照附带全帧历史，供客户端重放复盘。
+    const again = await connect('1030', 'key-a', token)
+    await again.next('joined')
+    const snapshot = await again.next('start')
+    if (snapshot.type !== 'start') throw new Error('unreachable')
+    expect(snapshot.state.phase).toBe('black_won')
+    expect(snapshot.history).toHaveLength(5)
+    expect(snapshot.history![0].slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
   })
 
   it('applies the proposed settings when a rematch is accepted', async () => {

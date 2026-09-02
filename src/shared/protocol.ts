@@ -47,6 +47,7 @@ export type ServerMessage =
       frameSeconds: number
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
+      history?: FrameMoves[] // 终局快照附带全帧落点，刷新后重建复盘历史
     }
   | { type: 'opponent_submitted'; submitted: boolean }
   | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number; passed: Seat[] }
@@ -59,6 +60,9 @@ export type ServerMessage =
   | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
+
+// 一帧的双方落点（null = 弃着）与先手方（race 撞子归属需要，重放才能复现）。
+export type FrameMoves = [Point | null, Point | null, Seat]
 
 export interface Standing {
   email: string

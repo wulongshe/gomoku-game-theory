@@ -41,6 +41,9 @@ const showConfig = ref(false)
 const playing = computed(() => game.value.phase === 'playing')
 const isExpert = computed(() => difficulty.value === 'expert')
 
+// 进行中 frame 表示「正在下第 N 回合」；终局态被引擎 +1 过，显示已下完的回合数。
+const displayFrame = computed(() => (playing.value ? game.value.frame : game.value.frame - 1))
+
 // 帧正计时（人机恒不限时，Ns/∞），随每帧重置。
 const now = ref(Date.now())
 const frameStart = ref(Date.now())
@@ -156,7 +159,7 @@ function exitGame(): void {
     </view>
 
     <view class="status">
-      <text class="frame">第 {{ game.frame }} 回合</text>
+      <text class="frame">第 {{ displayFrame }} 回合</text>
       <view class="ai-status" :class="aiStatus.cls">
         <view class="dot" :class="aiStatus.dot" />
         <text>{{ aiStatus.text }}</text>

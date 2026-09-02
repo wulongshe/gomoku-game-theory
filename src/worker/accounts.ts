@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
-import { maskEmail } from '@/shared/protocol'
+import { maskEmail, type FrameMoves } from '@/shared/protocol'
 import { parseBotPool } from './bots'
-import type { GameMode, GameState, Point } from '@gomoku/engine/game'
+import type { GameMode, GameState } from '@gomoku/engine/game'
 
 const CODE_TTL = 10 * 60_000
 const SEND_COOLDOWN = 60_000
@@ -29,14 +29,14 @@ export interface LeaderboardEntry {
   draws: number
 }
 
-// 每帧双方落点（null = 弃着）；终局由房间归档，房间关闭即清空自身存储。
+// 每帧双方落点与先手方；终局由房间归档，房间关闭即清空自身存储。
 export interface ArchivedGame {
   mode: GameMode
   phase: GameState['phase']
   frameSeconds: number
   black: string | null
   white: string | null
-  moves: Array<[Point | null, Point | null]>
+  moves: FrameMoves[]
   tournament: { round: number; code: string } | null
   endedAt: number
 }
