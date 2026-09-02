@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
+import { computed, onMounted, ref } from 'vue'
+import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
@@ -132,6 +132,16 @@ function closeMatchDialog() {
   }
   showMatch.value = false
 }
+
+// 小屏内容超出一屏时提示可下滑，滚到接近底部即淡出。
+const scrollHint = ref(false)
+function updateScrollHint() {
+  const doc = document.documentElement
+  scrollHint.value = doc.scrollHeight - window.innerHeight - window.scrollY > 48
+}
+onMounted(updateScrollHint)
+useEventListener(window, 'scroll', updateScrollHint, { passive: true })
+useEventListener(window, 'resize', updateScrollHint)
 
 </script>
 
@@ -272,6 +282,14 @@ function closeMatchDialog() {
         </button>
       </div>
       <p class="text-xs text-stone-400 dark:text-stone-500">免下载 · 免注册，10 秒开局</p>
+    </div>
+
+    <div
+      class="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-0.5 bg-gradient-to-t from-stone-200 via-stone-200/70 to-transparent pb-1.5 pt-10 text-stone-500 transition-opacity duration-300 dark:from-stone-950 dark:via-stone-950/70 dark:text-stone-400"
+      :class="scrollHint ? 'opacity-100' : 'opacity-0'"
+    >
+      <span class="text-xs">下滑查看更多</span>
+      <IconChevronRight class="size-4 rotate-90 animate-bounce" />
     </div>
 
     <div class="hidden"><SharePoster ref="sitePoster" :url="siteUrl" /></div>
