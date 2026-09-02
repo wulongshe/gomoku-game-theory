@@ -16,7 +16,7 @@ import {
   tournamentFrameSeconds,
   type ServerMessage,
 } from '@/shared/protocol'
-import type { GameOutcome } from './accounts'
+import type { ArchivedGame, GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -425,7 +425,7 @@ export class Room extends DurableObject<Env> {
   private async startGame(): Promise<void> {
     const game = createGame(await this.mode())
     const frameSeconds = await this.frameSeconds()
-    await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
+    await this.ctx.storage.delete(['choices', 'rematch', 'ready', 'moves'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament) {
@@ -637,6 +637,7 @@ export class Room extends DurableObject<Env> {
       'frameStart',
       'aiPlan',
       'aiArrive',
+      'moves',
     ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -834,6 +835,9 @@ export class Room extends DurableObject<Env> {
       white: choices.white?.point ?? null,
       first: this.firstSubmitter(choices),
     })
+    const moves = (await this.ctx.storage.get<ArchivedGame['moves']>('moves')) ?? []
+    moves.push([choices.black?.point ?? null, choices.white?.point ?? null])
+    await this.ctx.storage.put('moves', moves)
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
       await this.ctx.storage.delete('choices')
@@ -849,7 +853,28 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
+    await this.archiveGame(next)
     await this.recordResult(next.phase)
+  }
+
+  // 终局把全帧落点归档到常驻 DO——房间关闭会 deleteAll，记录不能留在房里。
+  private async archiveGame(game: GameState): Promise<void> {
+    const moves = (await this.ctx.storage.get<ArchivedGame['moves']>('moves')) ?? []
+    if (!moves.length) return
+    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
+    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
+    try {
+      await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).archiveGame({
+        mode: game.mode,
+        phase: game.phase,
+        frameSeconds: await this.frameSeconds(),
+        black: accounts.black ?? null,
+        white: accounts.white ?? null,
+        moves,
+        tournament: tournament ? { round: tournament.round, code: tournament.code } : null,
+        endedAt: Date.now(),
+      })
+    } catch {}
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {

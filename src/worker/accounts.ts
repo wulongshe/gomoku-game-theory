@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import { maskEmail } from '@/shared/protocol'
 import { parseBotPool } from './bots'
+import type { GameMode, GameState, Point } from '@gomoku/engine/game'
 
 const CODE_TTL = 10 * 60_000
 const SEND_COOLDOWN = 60_000
@@ -26,6 +27,18 @@ export interface LeaderboardEntry {
   wins: number
   losses: number
   draws: number
+}
+
+// 每帧双方落点（null = 弃着）；终局由房间归档，房间关闭即清空自身存储。
+export interface ArchivedGame {
+  mode: GameMode
+  phase: GameState['phase']
+  frameSeconds: number
+  black: string | null
+  white: string | null
+  moves: Array<[Point | null, Point | null]>
+  tournament: { round: number; code: string } | null
+  endedAt: number
 }
 
 interface UserRecord {
@@ -215,6 +228,14 @@ export class Accounts extends DurableObject<Env> {
       else stats.draws += 1
       await this.ctx.storage.put(`stats:${email}`, stats)
     }
+  }
+
+  async archiveGame(record: ArchivedGame): Promise<void> {
+    // endedAt 前缀让键按时间有序，随机后缀防同毫秒撞键。
+    await this.ctx.storage.put(
+      `game:${record.endedAt}:${crypto.randomUUID().slice(0, 8)}`,
+      record,
+    )
   }
 
   async matchRating(token: string): Promise<number> {

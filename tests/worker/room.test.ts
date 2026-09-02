@@ -356,6 +356,44 @@ describe('Room', () => {
     expect(await b.next('start')).toEqual(fresh)
   })
 
+  it('archives the full move list when a game ends', async () => {
+    const email = 'archive-black@example.com'
+    const token = await sessionFor(email)
+    await createRoom('1030')
+    const a = await connect('1030', 'key-a', token)
+    const b = await connect('1030', 'key-b')
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+    const settled = await playToBlackWin(a, b)
+    expect(settled.state.phase).toBe('black_won')
+    const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+    const archived = await runInDurableObject(accounts, async (_i, st) => {
+      const games = await st.storage.list({ prefix: 'game:' })
+      return [...games.values()] as Array<{
+        mode: string
+        phase: string
+        black: string | null
+        white: string | null
+        moves: Array<[Point | null, Point | null]>
+        tournament: unknown
+      }>
+    })
+    const record = archived.find((g) => g.black === email)
+    expect(record).toMatchObject({
+      mode: 'forbidden',
+      phase: 'black_won',
+      white: null,
+      tournament: null,
+    })
+    expect(record!.moves).toHaveLength(5)
+    expect(record!.moves[0]).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
+    expect(record!.moves[4]).toEqual([BLACK_WIN_LINE[3], WHITE_SIDE_MOVES[3]])
+  })
+
   it('applies the proposed settings when a rematch is accepted', async () => {
     const [a, b] = await startGame('1023')
     await playToBlackWin(a, b)
