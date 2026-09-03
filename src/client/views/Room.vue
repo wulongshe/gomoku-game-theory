@@ -31,7 +31,7 @@ import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
 import { MODE_LABELS } from '@gomoku/branding'
-import { ROOM_KEY_PREFIX } from '~/constants/storage'
+import { ROOM_KEY_PREFIX, ROOM_MOVES_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 import {
   createGame,
@@ -47,6 +47,7 @@ import {
 import {
   tournamentFrameSeconds,
   type ClientMessage,
+  type FrameMoves,
   type ServerMessage,
   type TournamentInfo,
 } from '@/shared/protocol'
@@ -122,6 +123,39 @@ refreshAuth()
 function forgetKey() {
   localStorage.removeItem(`${ROOM_KEY_PREFIX}${props.code}`)
 }
+
+// 全帧落点只存本地（不写 DO）：逐帧追加，刷新后重放复原复盘历史；退出/房间关闭即删。
+let movesLog: FrameMoves[] = []
+function logMove(entry: FrameMoves) {
+  movesLog.push(entry)
+  localStorage.setItem(ROOM_MOVES_KEY, JSON.stringify({ code: props.code, moves: movesLog }))
+}
+function clearMoves() {
+  movesLog = []
+  localStorage.removeItem(ROOM_MOVES_KEY)
+}
+// 存档与快照对不上（换房/再来一局/中途缺帧）就丢弃存档，从当前帧起重新记。
+function restoreMoves(state: GameState) {
+  movesLog = []
+  try {
+    const saved = JSON.parse(localStorage.getItem(ROOM_MOVES_KEY) ?? 'null') as {
+      code: string
+      moves: FrameMoves[]
+    } | null
+    if (!saved || saved.code !== props.code || !saved.moves.length) return
+    let replayed = createGame(state.mode)
+    for (const [black, white, first] of saved.moves) {
+      replayed = settleFrame(replayed, { black, white, first })
+      recordFrame(replayed)
+    }
+    if (replayed.frame === state.frame && replayed.phase === state.phase) {
+      movesLog = saved.moves
+      return
+    }
+  } catch {}
+  resetReview()
+  localStorage.removeItem(ROOM_MOVES_KEY)
+}
 let replaced = false
 let everOpened = false
 const {
@@ -151,6 +185,7 @@ const {
     if (event.reason === 'room closed') {
       roomClosed.value = true
       forgetKey()
+      clearMoves()
     }
     if (stage.value === 'over') return
     stage.value = replaced || roomClosed.value ? 'error' : 'connecting'
@@ -183,6 +218,7 @@ onMounted(async () => {
     notFound.value = true
     stage.value = 'error'
     forgetKey()
+    clearMoves()
     homeDeadline.value = Date.now() + 5000
   } else if (status.full) {
     roomFull.value = true
@@ -218,14 +254,7 @@ function handleMessage(msg: ServerMessage) {
     }
     case 'start':
       resetReview()
-      // 终局快照（刷新/重连）带全帧落点，用引擎逐帧重放复原复盘历史。
-      if (msg.history?.length) {
-        let replayed = createGame(msg.state.mode)
-        for (const [black, white, first] of msg.history) {
-          replayed = settleFrame(replayed, { black, white, first })
-          recordFrame(replayed)
-        }
-      }
+      if (!spectating) restoreMoves(msg.state)
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now() - msg.elapsed
@@ -251,7 +280,10 @@ function handleMessage(msg: ServerMessage) {
       if (!spectating && msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
         showToast('对方上一回合弃着')
       }
-      recordFrame(msg.state)
+      if (!spectating) {
+        recordFrame(msg.state)
+        if (msg.moves) logMove(msg.moves)
+      }
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
@@ -290,6 +322,7 @@ function handleMessage(msg: ServerMessage) {
     case 'room_closed':
       roomClosed.value = true
       forgetKey()
+      clearMoves()
       break
     case 'rematch_requested':
       rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
@@ -516,6 +549,7 @@ function reload() {
 
 function exitRoom() {
   if (spectating) return backOrReplace('/tournament')
+  clearMoves()
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
   forgetKey()
   setTimeout(() => backOrReplace(), 150)

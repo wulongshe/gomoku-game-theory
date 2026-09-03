@@ -47,10 +47,16 @@ export type ServerMessage =
       frameSeconds: number
       submitted: Record<Seat, boolean>
       yourChoice: Point | null
-      history?: FrameMoves[] // 终局快照附带全帧落点，刷新后重建复盘历史
     }
   | { type: 'opponent_submitted'; submitted: boolean }
-  | { type: 'frame_settled'; state: GameState; deadline: number | null; now: number; passed: Seat[] }
+  | {
+      type: 'frame_settled'
+      state: GameState
+      deadline: number | null
+      now: number
+      passed: Seat[]
+      moves?: FrameMoves // 本帧双方落点；判负/认输等非落子终局的广播不带
+    }
   | { type: 'opponent_left' }
   | { type: 'opponent_returned' }
   | { type: 'opponent_resigned'; left: boolean }

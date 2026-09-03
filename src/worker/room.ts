@@ -249,7 +249,6 @@ export class Room extends DurableObject<Env> {
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
-        ...(game.phase !== 'playing' && { history: await this.moveHistory() }),
       })
       for (const other of this.ctx.getWebSockets()) {
         if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
@@ -312,14 +311,9 @@ export class Room extends DurableObject<Env> {
         frameSeconds: await this.frameSeconds(),
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: null,
-        ...(game.phase !== 'playing' && { history: await this.moveHistory() }),
       })
     }
     return new Response(null, { status: 101, webSocket: pair[0] })
-  }
-
-  private async moveHistory(): Promise<FrameMoves[]> {
-    return (await this.ctx.storage.get<FrameMoves[]>('moves')) ?? []
   }
 
   private async accountEmail(auth: string | null): Promise<string | null> {
@@ -432,7 +426,7 @@ export class Room extends DurableObject<Env> {
   private async startGame(): Promise<void> {
     const game = createGame(await this.mode())
     const frameSeconds = await this.frameSeconds()
-    await this.ctx.storage.delete(['choices', 'rematch', 'ready', 'moves'])
+    await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament) {
@@ -644,7 +638,6 @@ export class Room extends DurableObject<Env> {
       'frameStart',
       'aiPlan',
       'aiArrive',
-      'moves',
     ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -843,46 +836,23 @@ export class Room extends DurableObject<Env> {
       white: choices.white?.point ?? null,
       first,
     })
-    const moves = (await this.ctx.storage.get<FrameMoves[]>('moves')) ?? []
-    moves.push([choices.black?.point ?? null, choices.white?.point ?? null, first])
-    await this.ctx.storage.put('moves', moves)
+    const moves: FrameMoves = [choices.black?.point ?? null, choices.white?.point ?? null, first]
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
       await this.ctx.storage.delete('choices')
       const deadline = await this.scheduleFrame(next, await this.frameSeconds())
-      this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed })
+      this.broadcast({ type: 'frame_settled', state: next, deadline, now: Date.now(), passed, moves })
     } else {
-      await this.endGame(next, passed)
+      await this.endGame(next, passed, moves)
     }
   }
 
-  private async endGame(next: GameState, passed: Seat[] = []): Promise<void> {
+  private async endGame(next: GameState, passed: Seat[] = [], moves?: FrameMoves): Promise<void> {
     await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
-    this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed })
-    await this.archiveGame(next)
+    this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed, moves })
     await this.recordResult(next.phase)
-  }
-
-  // 终局把全帧落点归档到常驻 DO——房间关闭会 deleteAll，记录不能留在房里。
-  private async archiveGame(game: GameState): Promise<void> {
-    const moves = await this.moveHistory()
-    if (!moves.length) return
-    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    try {
-      await this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromName('accounts')).archiveGame({
-        mode: game.mode,
-        phase: game.phase,
-        frameSeconds: await this.frameSeconds(),
-        black: accounts.black ?? null,
-        white: accounts.white ?? null,
-        moves,
-        tournament: tournament ? { round: tournament.round, code: tournament.code } : null,
-        endedAt: Date.now(),
-      })
-    } catch {}
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {

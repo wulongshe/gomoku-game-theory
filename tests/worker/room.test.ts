@@ -356,51 +356,13 @@ describe('Room', () => {
     expect(await b.next('start')).toEqual(fresh)
   })
 
-  it('archives the full move list when a game ends', async () => {
-    const email = 'archive-black@example.com'
-    const token = await sessionFor(email)
-    await createRoom('1030')
-    const a = await connect('1030', 'key-a', token)
-    const b = await connect('1030', 'key-b')
-    await a.next('joined')
-    await b.next('joined')
-    a.ready()
-    b.ready()
-    await a.next('start')
-    await b.next('start')
-    const settled = await playToBlackWin(a, b)
-    expect(settled.state.phase).toBe('black_won')
-    const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
-    const archived = await runInDurableObject(accounts, async (_i, st) => {
-      const games = await st.storage.list({ prefix: 'game:' })
-      return [...games.values()] as Array<{
-        mode: string
-        phase: string
-        black: string | null
-        white: string | null
-        moves: Array<[Point | null, Point | null, 'black' | 'white']>
-        tournament: unknown
-      }>
-    })
-    const record = archived.find((g) => g.black === email)
-    expect(record).toMatchObject({
-      mode: 'forbidden',
-      phase: 'black_won',
-      white: null,
-      tournament: null,
-    })
-    expect(record!.moves).toHaveLength(5)
-    expect(record!.moves[0].slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
-    expect(record!.moves[4].slice(0, 2)).toEqual([BLACK_WIN_LINE[3], WHITE_SIDE_MOVES[3]])
-
-    // 终局后刷新重连：快照附带全帧历史，供客户端重放复盘。
-    const again = await connect('1030', 'key-a', token)
-    await again.next('joined')
-    const snapshot = await again.next('start')
-    if (snapshot.type !== 'start') throw new Error('unreachable')
-    expect(snapshot.state.phase).toBe('black_won')
-    expect(snapshot.history).toHaveLength(5)
-    expect(snapshot.history![0].slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
+  it('broadcasts each settled frame with its moves for client-side logging', async () => {
+    const [a, b] = await startGame('1030')
+    a.submit(1, { x: 6, y: 7 })
+    b.submit(1, { x: 7, y: 8 })
+    const settled = await settledOnBoth(a, b)
+    expect(settled.moves!.slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
+    expect(['black', 'white']).toContain(settled.moves![2])
   })
 
   it('applies the proposed settings when a rematch is accepted', async () => {
