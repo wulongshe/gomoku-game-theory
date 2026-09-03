@@ -401,9 +401,11 @@ function onBoardTap(e: TapEvent): void {
 }
 .mark-forbidden {
   border: 3rpx solid #ef4444;
+  background: rgba(239, 68, 68, 0.32);
 }
 .mark-minus {
   border: 3rpx solid #7c3aed;
+  background: rgba(124, 58, 237, 0.32);
 }
 .bar {
   position: absolute;

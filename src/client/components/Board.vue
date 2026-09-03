@@ -261,7 +261,7 @@ function isLastMove(p: Point): boolean {
         stroke-linecap="round"
         class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
       >
-        <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+        <circle :r="FORBID_R" fill="#7c3aed" fill-opacity="0.32" stroke-width="2.5" />
         <line :x1="-FORBID_R * 0.45" y1="0" :x2="FORBID_R * 0.45" y2="0" stroke-width="3" />
       </g>
       <!-- 白色底衬遮住穿过中心的符号线，让圆点与棋子上的最后落点标识观感一致 -->
@@ -277,7 +277,7 @@ function isLastMove(p: Point): boolean {
         stroke-linecap="round"
         class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
       >
-        <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+        <circle :r="FORBID_R" fill="#ef4444" fill-opacity="0.32" stroke-width="2.5" />
         <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
         <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
       </g>
@@ -302,13 +302,13 @@ function isLastMove(p: Point): boolean {
         </template>
         <template v-else-if="v.cell === 'minus'">
           <g stroke="#7c3aed" stroke-linecap="round">
-            <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+            <circle :r="FORBID_R" fill="#7c3aed" fill-opacity="0.32" stroke-width="2.5" />
             <line :x1="-FORBID_R * 0.45" y1="0" :x2="FORBID_R * 0.45" y2="0" stroke-width="3" />
           </g>
         </template>
         <template v-else-if="v.cell === 'forbidden'">
           <g stroke="#ef4444" stroke-linecap="round">
-            <circle :r="FORBID_R" fill="#ffffff" fill-opacity="0.75" stroke-width="2.5" />
+            <circle :r="FORBID_R" fill="#ef4444" fill-opacity="0.32" stroke-width="2.5" />
             <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
             <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
           </g>

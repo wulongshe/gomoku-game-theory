@@ -133,10 +133,20 @@ function beginFrame(startAt: number = Date.now()) {
   pendingAiMove = ai.request(game.value, 'white', difficulty.value)
 }
 
+// AI 未出手期间可撤回提交；撤回后本次结算作废，selected 保留可改点重交。
+let submitSeq = 0
+function cancelChoice() {
+  if (!resolving.value) return
+  submitSeq++
+  resolving.value = false
+}
+
 async function resolveFrame() {
   if (resolving.value || !playing.value) return
   resolving.value = true
+  const seq = ++submitSeq
   const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
+  if (seq !== submitSeq) return
   const first = Math.random() < 0.5 ? 'black' : 'white'
   const next = settleFrame(game.value, { black: selected.value, white: aiMove, first })
   logMove([selected.value, aiMove, first])
@@ -286,8 +296,12 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       </div>
 
       <template v-if="playing">
-        <AppButton class="w-full" :disabled="!selected || resolving" @click="submitChoice">
-          {{ resolving ? 'AI 思考中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
+        <AppButton
+          class="w-full"
+          :disabled="!resolving && !selected"
+          @click="resolving ? cancelChoice() : submitChoice()"
+        >
+          {{ resolving ? '取消提交' : selected ? '确认提交' : '点击棋盘选择落点' }}
         </AppButton>
       </template>
       <template v-else>
