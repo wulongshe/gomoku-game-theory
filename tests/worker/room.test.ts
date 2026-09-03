@@ -258,6 +258,19 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
   })
 
+  it('clears the frame deadline at game end so review lingering cannot storm the alarm', async () => {
+    const [a, b] = await startGame('1034')
+    await playToBlackWin(a, b)
+    const room = env.ROOM.get(env.ROOM.idFromName('1034'))
+    const deadline = await runInDurableObject(room, (_i, st) => st.storage.get('deadline'))
+    expect(deadline).toBeUndefined()
+    // 双方仍连着复盘时敲响空闲闹钟：必须重挂到未来，而不是残留时点导致立即重响。
+    expect(await runDurableObjectAlarm(room)).toBe(true)
+    const next = await runInDurableObject(room, (_i, st) => st.storage.getAlarm())
+    expect(next).not.toBeNull()
+    expect(next!).toBeGreaterThan(Date.now() + 60_000)
+  })
+
   it('writes choices to storage only on the final submit', async () => {
     const [a] = await startGame('1031')
     a.submit(1, { x: 6, y: 6 }, false)

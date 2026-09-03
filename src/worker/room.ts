@@ -693,6 +693,8 @@ export class Room extends DurableObject<Env> {
       return this.close()
     }
     if (!game || game.phase !== 'playing' || (await this.frameSeconds()) === 0) {
+      // 终局房把残留 deadline 清掉（老版本 endGame 不删，存量房间靠这里自愈）。
+      if (game && game.phase !== 'playing') await this.ctx.storage.delete('deadline')
       // 不盲设空房 TTL：若还有待办的 AI 时点（如闹钟早到没判上），拨回去自愈。
       return this.armAlarm()
     }
@@ -867,7 +869,8 @@ export class Room extends DurableObject<Env> {
   }
 
   private async endGame(next: GameState, passed: Seat[] = [], moves?: FrameMoves): Promise<void> {
-    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered'])
+    // deadline 必须随终局清掉：残留的过期时点会被 armAlarm 当目标，闹钟立即重响进入风暴。
+    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered', 'deadline'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed, moves })
