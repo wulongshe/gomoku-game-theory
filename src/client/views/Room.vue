@@ -400,6 +400,13 @@ function submitChoice() {
   submitted.value = true
 }
 
+// 撤回提交：退回草稿（超时仍会自动提交该点），对方会收到「未提交」。
+function cancelChoice() {
+  if (!game.value || !selected.value || !submitted.value || oppSubmitted.value) return
+  sendChoice(selected.value, false)
+  submitted.value = false
+}
+
 watch(autoSubmit, (on) => {
   if (on && stage.value === 'playing') submitChoice()
 })
@@ -675,22 +682,26 @@ function exitRoom() {
 
         <template v-if="stage === 'playing' && !spectating">
           <AppButton
-            v-if="!autoSubmit"
             class="w-full"
-            :disabled="!selected || submitted"
-            @click="submitChoice"
+            :disabled="submitted ? oppSubmitted : !selected"
+            @click="submitted ? cancelChoice() : submitChoice()"
           >
-            {{ submitted ? '已提交，等待对方' : selected ? '确认提交' : '点击棋盘选择落点' }}
+            {{
+              submitted
+                ? '取消提交'
+                : selected
+                  ? '确认提交'
+                  : autoSubmit
+                    ? '点击棋盘落子即提交'
+                    : '点击棋盘选择落点'
+            }}
           </AppButton>
-          <p v-else class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
-            {{ submitted ? '已提交，等待对方' : '点击棋盘落子即提交' }}
-          </p>
           <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
             <template v-if="errorNotice">{{ errorNotice }}</template>
             <template v-else-if="frameSeconds > 0 && selected && !submitted">
               倒计时结束将自动提交已选落点
             </template>
-            <template v-else-if="submitted && !oppSubmitted">对方提交前仍可变更落点</template>
+            <template v-else-if="submitted && !oppSubmitted">对方提交前可取消或变更落点</template>
           </p>
           <div class="grid grid-cols-[1fr_auto_1fr] items-center">
             <span />

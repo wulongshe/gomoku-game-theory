@@ -271,6 +271,19 @@ describe('Room', () => {
     expect(next!).toBeGreaterThan(Date.now() + 60_000)
   })
 
+  it('cancels a final submit back to a draft that still auto-submits on timeout', async () => {
+    const [a, b] = await startGame('1035')
+    a.submit(1, { x: 6, y: 7 })
+    expect(await b.next('opponent_submitted')).toMatchObject({ submitted: true })
+    a.submit(1, { x: 6, y: 7 }, false)
+    expect(await b.next('opponent_submitted')).toMatchObject({ submitted: false })
+    b.submit(1, { x: 8, y: 8 })
+    expect(await runDurableObjectAlarm(env.ROOM.get(env.ROOM.idFromName('1035')))).toBe(true)
+    const settled = await settledOnBoth(a, b)
+    expect(cellAt(settled.state, { x: 6, y: 7 })).toBe('black')
+    expect(cellAt(settled.state, { x: 8, y: 8 })).toBe('white')
+  })
+
   it('writes choices to storage only on the final submit', async () => {
     const [a] = await startGame('1031')
     a.submit(1, { x: 6, y: 6 }, false)
