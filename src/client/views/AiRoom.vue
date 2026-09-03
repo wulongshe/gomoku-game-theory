@@ -120,8 +120,6 @@ const { secondsLeft, urgency, elapsedSeconds } = useFrameClock(
 const aiStatus = computed(() => {
   if (!playing.value)
     return { text: '对局结束', dot: 'bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
-  if (resolving.value)
-    return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
   if (ai.thinking.value)
     return { text: 'AI 思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
   return { text: 'AI 已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700 dark:text-emerald-400' }
@@ -289,7 +287,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
       <template v-if="playing">
         <AppButton class="w-full" :disabled="!selected || resolving" @click="submitChoice">
-          {{ resolving ? '结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
+          {{ resolving ? 'AI 思考中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
         </AppButton>
       </template>
       <template v-else>

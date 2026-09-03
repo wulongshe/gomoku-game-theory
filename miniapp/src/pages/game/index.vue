@@ -45,21 +45,13 @@ const elapsedSeconds = computed(() =>
   playing.value ? Math.max(0, Math.floor((now.value - frameStart.value) / 1000)) : 0,
 )
 
-// AI 实际在提交时才结算，这里按帧初起一段随机「思考」窗口，与 web 端观感一致。
-const showThinking = ref(false)
-let thinkTimer: ReturnType<typeof setTimeout> | undefined
-
 function beginFrame(): void {
   frameStart.value = Date.now()
-  clearTimeout(thinkTimer)
-  showThinking.value = true
-  thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
 }
 beginFrame()
 
 onUnmounted(() => {
   clearInterval(clock)
-  clearTimeout(thinkTimer)
 })
 
 const result = computed(() => {
@@ -75,11 +67,11 @@ const result = computed(() => {
   }
 })
 
+// 小程序端 AI 在提交后才同步搜索，如实显示：resolving 即思考中。
 const aiStatus = computed(() => {
   if (!playing.value) return { text: '对局结束', dot: 'dot-idle', cls: 'st-muted' }
-  if (resolving.value) return { text: '结算中…', dot: 'dot-idle dot-pulse', cls: 'st-muted' }
-  if (showThinking.value) return { text: 'AI 思考中', dot: 'dot-think', cls: 'st-muted' }
-  return { text: 'AI 已提交', dot: 'dot-ready', cls: 'st-ready' }
+  if (resolving.value) return { text: 'AI 思考中', dot: 'dot-think', cls: 'st-muted' }
+  return { text: 'AI 已提交', dot: 'dot-idle', cls: 'st-muted' }
 })
 
 function onSelect(point: Point): void {
@@ -94,8 +86,6 @@ function nextTickPaint(): Promise<void> {
 async function submit(): Promise<void> {
   if (!playing.value || !selected.value || resolving.value) return
   resolving.value = true
-  clearTimeout(thinkTimer)
-  showThinking.value = false
   await nextTickPaint()
   const white = aiMove(game.value, difficulty.value)
   const next = settleFrame(game.value, {
@@ -165,7 +155,7 @@ function exitGame(): void {
         :class="{ 'btn-disabled': !selected || resolving }"
         @tap="submit"
       >
-        {{ resolving ? '结算中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
+        {{ resolving ? 'AI 思考中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
       </view>
     </view>
     <view v-else class="actions">
@@ -243,9 +233,6 @@ function exitGame(): void {
 .st-muted {
   color: #78716c;
 }
-.st-ready {
-  color: #047857;
-}
 .dot {
   width: 14rpx;
   height: 14rpx;
@@ -256,17 +243,6 @@ function exitGame(): void {
 }
 .dot-think {
   background: #fbbf24;
-}
-.dot-ready {
-  background: #10b981;
-}
-.dot-pulse {
-  animation: dot-pulse 1.6s ease-in-out infinite;
-}
-@keyframes dot-pulse {
-  50% {
-    opacity: 0.4;
-  }
 }
 .timer {
   justify-self: end;
