@@ -668,7 +668,7 @@ function exitRoom() {
             :selected="reviewState ? null : selected"
             :submitted="submitted"
             :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
-            :vanishing="reviewState ? [] : vanishing"
+            :vanishing="reviewState ? reviewState.cleared : vanishing"
             :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
             @select="select"
           />

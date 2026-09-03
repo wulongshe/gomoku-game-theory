@@ -281,9 +281,9 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
           :state="reviewState ?? game"
           seat="black"
           :selected="reviewState ? null : selected"
-          :submitted="false"
+          :submitted="resolving"
           :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
-          :vanishing="reviewState ? [] : vanishing"
+          :vanishing="reviewState ? reviewState.cleared : vanishing"
           :interactive="playing && !resolving"
           @select="select"
         />
