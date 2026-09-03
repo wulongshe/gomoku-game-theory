@@ -112,6 +112,14 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('playing')
   })
 
+  it('wins on five in a row despite a minus cell just outside the run', () => {
+    const game = withStones({ black: [1, 3, 4, 5].map((i) => ({ x: i, y: 5 })) }, 'minus')
+    game.board[5 * BOARD_SIZE + 0] = 'minus'
+    const next = settleFrame(game, { black: { x: 2, y: 5 }, white: { x: 8, y: 8 } })
+    expect(next.phase).toBe('black_won')
+    expect(next.winningLines).toEqual([[1, 2, 3, 4, 5].map((i) => ({ x: i, y: 5 }))])
+  })
+
   it('wins through a minus cell once the net count reaches five', () => {
     const game = withStones({ black: [1, 2, 3, 5, 6].map((i) => ({ x: i, y: 5 })) }, 'minus')
     game.board[5 * BOARD_SIZE + 4] = 'minus'

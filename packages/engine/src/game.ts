@@ -99,38 +99,51 @@ function winningLines(board: CellState[], seat: Seat, point: Point): number[][] 
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
       let y = point.y + dy * sign
+      // 连线可在负子前截断：每侧取加权和最大的前缀，段尾的负子不计入（如 负1111_ 补空成五连即胜）。
+      const walk: number[] = []
+      let sum = 0
+      let best = 0
+      let bestLen = 0
       while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
         const value = cellValue(board[y * BOARD_SIZE + x], seat)
         if (value === 0) break
-        score += value
-        halves[sign].push(y * BOARD_SIZE + x)
+        sum += value
+        walk.push(y * BOARD_SIZE + x)
+        if (sum > best) {
+          best = sum
+          bestLen = walk.length
+        }
         x += dx * sign
         y += dy * sign
       }
+      halves[sign] = walk.slice(0, bestLen)
+      score += best
     }
     if (score >= WIN_SCORE) lines.push([...halves[-1].reverse(), start, ...halves[1]])
   }
   return lines
 }
 
-// 五连需要一段纯己方棋子，故只要存在一段长 5 的直线全落在 {空, 己方, 禁点} 内，
-// 该方就仍有夺胜可能（禁点会因成排清空而复位，作可复用处理，判定偏保守不会误判平局）。
+// 仍有夺胜可能 ⇔ 某条直线上存在不含对方棋子、加权和可达 5 的连续段（负子 −1，
+// 空点与禁点都按可成己子计 +1——禁点会因成排清空而复位，判定偏保守不会误判平局）。
 function canStillWin(board: CellState[], seat: Seat): boolean {
+  const opp = seat === 'black' ? 'white' : 'black'
   for (const [dx, dy] of DIRECTIONS) {
     for (let y = 0; y < BOARD_SIZE; y++) {
       for (let x = 0; x < BOARD_SIZE; x++) {
-        const ex = x + dx * (WIN_SCORE - 1)
-        const ey = y + dy * (WIN_SCORE - 1)
-        if (ex < 0 || ex >= BOARD_SIZE || ey < 0 || ey >= BOARD_SIZE) continue
-        let open = true
-        for (let k = 0; k < WIN_SCORE; k++) {
-          const cell = board[(y + dy * k) * BOARD_SIZE + (x + dx * k)]
-          if (cell !== 'empty' && cell !== seat && cell !== 'forbidden') {
-            open = false
-            break
-          }
+        const px = x - dx
+        const py = y - dy
+        if (px >= 0 && px < BOARD_SIZE && py >= 0 && py < BOARD_SIZE) continue
+        let run = 0
+        let cx = x
+        let cy = y
+        while (cx >= 0 && cx < BOARD_SIZE && cy >= 0 && cy < BOARD_SIZE) {
+          const cell = board[cy * BOARD_SIZE + cx]
+          run = cell === opp ? 0 : Math.max(0, run + (cell === 'minus' ? -1 : 1))
+          if (run >= WIN_SCORE) return true
+          cx += dx
+          cy += dy
         }
-        if (open) return true
       }
     }
   }

@@ -48,6 +48,9 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
       let y = point.y + dy * sign
+      // 与判胜同口径：每侧取加权和最大的前缀，段尾负子不摊薄连线。
+      let run = 0
+      let best = 0
       while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
         const cell = state.board[y * BOARD_SIZE + x]
         const value = cellValue(cell, seat)
@@ -55,10 +58,12 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
           if (cell === 'empty') openEnds++
           break
         }
-        sum += value
+        run += value
+        if (run > best) best = run
         x += dx * sign
         y += dy * sign
       }
+      sum += best
     }
     total += lineScore(sum, openEnds)
   }
