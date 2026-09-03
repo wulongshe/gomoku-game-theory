@@ -55,6 +55,8 @@ interface Attachment {
   seat: Seat
   spectator?: true
   replaced?: boolean
+  // 真人草稿挂在连接附件上（不占存储行、熬过 DO 休眠），帧超时并入自动提交；连接断开草稿即弃。
+  draft?: { frame: number; point: Point | null }
 }
 
 type Players = Partial<Record<Seat, string>>
@@ -557,18 +559,29 @@ export class Room extends DurableObject<Env> {
     }
 
     const wasFinal = !!choices[seat]?.final
-    choices[seat] = {
-      point: msg.point,
-      final: msg.final,
-      ...(msg.final && { finalAt: Date.now() }),
+    if (!msg.final) {
+      const attachment = ws.deserializeAttachment() as Attachment
+      ws.serializeAttachment({
+        ...attachment,
+        draft: { frame: msg.frame, point: msg.point },
+      } satisfies Attachment)
+      if (wasFinal) {
+        delete choices[seat]
+        await this.ctx.storage.put('choices', choices)
+        for (const other of this.ctx.getWebSockets()) {
+          if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: false })
+        }
+      }
+      return
     }
+    choices[seat] = { point: msg.point, final: true, finalAt: Date.now() }
     await this.ctx.storage.put('choices', choices)
-    if (msg.final !== wasFinal) {
+    if (!wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: msg.final })
+        if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: true })
       }
     }
-    if (msg.final && choices.black?.final && choices.white?.final) {
+    if (choices.black?.final && choices.white?.final) {
       await this.settle(game, choices)
     }
   }
@@ -684,6 +697,12 @@ export class Room extends DurableObject<Env> {
       return this.armAlarm()
     }
     const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
+    for (const socket of this.playerSockets()) {
+      const { seat, draft } = socket.deserializeAttachment() as Attachment
+      if (draft?.frame === game.frame && !choices[seat]?.final) {
+        choices[seat] = { point: draft.point, final: false }
+      }
+    }
     await this.settle(game, choices)
   }
 

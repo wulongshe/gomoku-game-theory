@@ -258,6 +258,21 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 7, y: 6 })).toBe('black')
   })
 
+  it('writes choices to storage only on the final submit', async () => {
+    const [a] = await startGame('1031')
+    a.submit(1, { x: 6, y: 6 }, false)
+    a.submit(99, { x: 0, y: 0 }, false)
+    expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
+    const room = env.ROOM.get(env.ROOM.idFromName('1031'))
+    const afterDraft = await runInDurableObject(room, (_i, st) => st.storage.get('choices'))
+    expect(afterDraft).toBeUndefined()
+    a.submit(1, { x: 6, y: 6 })
+    a.submit(99, { x: 0, y: 0 }, false)
+    expect(await a.next('error')).toMatchObject({ message: 'stale frame' })
+    const afterFinal = await runInDurableObject(room, (_i, st) => st.storage.get('choices'))
+    expect(afterFinal).toMatchObject({ black: { point: { x: 6, y: 6 }, final: true } })
+  })
+
   it('rejects stale frames and illegal points', async () => {
     const [a, b] = await startGame('1006')
     a.submit(2, { x: 0, y: 0 })
