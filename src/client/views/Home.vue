@@ -288,7 +288,7 @@ useEventListener(window, 'resize', updateScrollHint)
       :class="scrollHint ? 'opacity-100' : 'opacity-0'"
     >
       <span class="text-xs">下滑查看更多</span>
-      <IconChevronRight class="size-4 rotate-90 animate-bounce" />
+      <span class="animate-bounce"><IconChevronRight class="size-4 rotate-90" /></span>
     </div>
 
     <div class="hidden"><SharePoster ref="sitePoster" :url="siteUrl" /></div>
