@@ -2,7 +2,7 @@ import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare
 import { describe, expect, it } from 'vitest'
 import { tournamentFrameSeconds } from '@/shared/protocol'
 import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
-import { botRegistrations, dailyBots, parityBot, parseBotPool } from '@/worker/bots'
+import { botRegistrations, dailyBots, parseBotPool } from '@/worker/bots'
 
 const NEUTRAL = () => 0.5
 
@@ -548,8 +548,8 @@ describe('tournament bots', () => {
   it('picks a deterministic daily lineup with identity-bound strength', () => {
     const lineup = dailyBots('2026-08-31', POOL)
     expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
-    expect(lineup.length).toBeGreaterThanOrEqual(4)
-    expect(lineup.length).toBeLessThanOrEqual(6)
+    expect(lineup.length).toBeGreaterThanOrEqual(3)
+    expect(lineup.length).toBeLessThanOrEqual(7)
     expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
 
     const nextDay = dailyBots('2026-09-01', POOL)
@@ -576,15 +576,9 @@ describe('tournament bots', () => {
     }
   })
 
-  it('keeps the parity filler outside the daily lineup', () => {
-    const emails = dailyBots('2026-08-31', POOL).map((b) => b.email)
-    expect(emails).not.toContain(parityBot('2026-08-31', POOL)!.email)
-  })
-
   it('scales the lineup down for a tiny pool', () => {
-    expect(dailyBots('2026-08-31', ['only@x'])).toHaveLength(0)
-    expect(parityBot('2026-08-31', ['only@x'])!.email).toBe('only@x')
-    expect(parityBot('2026-08-31', [])).toBeNull()
+    expect(dailyBots('2026-08-31', ['only@x'])).toHaveLength(1)
+    expect(dailyBots('2026-08-31', [])).toHaveLength(0)
   })
 
   it('fills the field with bots to an even total when enabled', async () => {
@@ -597,14 +591,14 @@ describe('tournament bots', () => {
     expect(s.state).toBe('active')
     const emails = Object.keys(s.players)
     expect(emails).toContain('solo@x')
-    expect(emails.length).toBeGreaterThanOrEqual(6)
-    expect(emails.length % 2).toBe(0)
+    expect(emails.length).toBeGreaterThanOrEqual(4)
     const bots = (s as TState & { bots: Record<string, string> }).bots
     expect(Object.keys(bots).sort()).toEqual(emails.filter((e) => e !== 'solo@x').sort())
-    // 凑成偶数 → 无轮空，全部配上房间
+    // 不凑偶数：奇数人数恰好产生一个轮空，其余全部配上房间
+    const byes = s.pairings.filter((p) => p.players[1] === null)
+    expect(byes).toHaveLength(emails.length % 2)
     for (const p of s.pairings) {
-      expect(p.players[1]).not.toBeNull()
-      expect(p.code).toBeTruthy()
+      if (p.players[1] !== null) expect(p.code).toBeTruthy()
     }
   })
 })

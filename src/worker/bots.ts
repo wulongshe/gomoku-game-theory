@@ -48,9 +48,9 @@ function shuffled(dateKey: string, pool: string[]): { order: string[]; rand: () 
   return { order, rand }
 }
 
-// 留一个名额给补位 bot。
+// 3~7 人逐日波动，真人稀少时终局人数（奇偶皆可）也随之变化。
 function lineupSize(rand: () => number, poolSize: number): number {
-  return Math.max(0, Math.min(4 + Math.floor(rand() * 3), poolSize - 1))
+  return Math.max(0, Math.min(3 + Math.floor(rand() * 5), poolSize))
 }
 
 export function dailyBots(dateKey: string, pool: string[]): TournamentBot[] {
@@ -61,13 +61,6 @@ export function dailyBots(dateKey: string, pool: string[]): TournamentBot[] {
     difficulty: botDifficulty(email),
     leadMs: Math.floor(rand() * REG_WINDOW_MS),
   }))
-}
-
-// 凑偶数用的补位 bot：不参与赛前注水，开赛瞬间才出现（像压哨报名的真人）。
-export function parityBot(dateKey: string, pool: string[]): TournamentBot | null {
-  const { order, rand } = shuffled(dateKey, pool)
-  const email = order[lineupSize(rand, order.length)]
-  return email ? { email, difficulty: botDifficulty(email), leadMs: 0 } : null
 }
 
 export function botRegistrations(

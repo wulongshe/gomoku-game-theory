@@ -8,7 +8,7 @@ import {
   type TournamentInfo,
 } from '@/shared/protocol'
 import { allocateRoom } from './roomCode'
-import { botRegistrations, dailyBots, parityBot, parseBotPool } from './bots'
+import { botRegistrations, dailyBots, parseBotPool } from './bots'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ROUND_MS = 10 * 60_000
@@ -280,13 +280,8 @@ export class Tournament extends DurableObject<Env> {
     s.bots = {}
     const pool = this.botPool()
     if (pool.length) {
-      // 凑成偶数免得轮空送运气分。
-      const dateKey = beijingDate(Date.now())
-      const bots = dailyBots(dateKey, pool)
-      if ((emails.length + bots.length) % 2 === 1) {
-        const filler = parityBot(dateKey, pool)
-        if (filler) bots.push(filler)
-      }
+      // 不凑偶数：奇数场次由瑞士轮轮空机制消化，人数更自然。
+      const bots = dailyBots(beijingDate(Date.now()), pool)
       for (const bot of bots) {
         if (emails.includes(bot.email)) continue
         emails.push(bot.email)
