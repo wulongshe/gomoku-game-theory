@@ -7,7 +7,7 @@ import RulesDialog from '@/components/RulesDialog.vue'
 import { aiMove } from '@/game/ai'
 import { saveConfig, type GameConfig } from '@/game/config'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, clampExpertLevel, DIFFICULTY_OPTIONS, expertRead } from '@gomoku/config'
+import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
 import { createGame, isLegalChoice, settleFrame, type GameMode, type Point } from '@gomoku/engine/game'
 
@@ -20,15 +20,10 @@ const difficulty = ref<Difficulty>(
   DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
 )
 
-// level 是专家难度等级（1~20，仅专家难度生效），非法则回落默认；
-// 引擎读心置信度 read = (level - 1) / 20（1 级纯盲搜）。
-const level = ref(clampExpertLevel(Number(params.level)))
-const engineRead = computed(() => expertRead(level.value))
-
 // 分享当前配置，接收方直达同难度对局。
 useShareAppMessage(() => ({
   title: `敢来挑战${DIFFICULTY_LABELS[difficulty.value]} AI 吗？｜博弈五子棋`,
-  path: `/pages/game/index?mode=${mode.value}&difficulty=${difficulty.value}&level=${level.value}`,
+  path: `/pages/game/index?mode=${mode.value}&difficulty=${difficulty.value}`,
 }))
 
 // 每次进入对战页都是新对局；退出即弃，避免换难度后还续上一局。
@@ -39,8 +34,6 @@ const showRules = ref(false)
 const showConfig = ref(false)
 
 const playing = computed(() => game.value.phase === 'playing')
-const isExpert = computed(() => difficulty.value === 'expert')
-
 // 进行中 frame 表示「正在下第 N 回合」；终局态被引擎 +1 过，显示已下完的回合数。
 const displayFrame = computed(() => (playing.value ? game.value.frame : game.value.frame - 1))
 
@@ -104,12 +97,7 @@ async function submit(): Promise<void> {
   clearTimeout(thinkTimer)
   showThinking.value = false
   await nextTickPaint()
-  const white = aiMove(
-    game.value,
-    difficulty.value,
-    isExpert.value ? selected.value : null,
-    isExpert.value ? engineRead.value : 0,
-  )
+  const white = aiMove(game.value, difficulty.value)
   const next = settleFrame(game.value, {
     black: selected.value,
     white,
@@ -132,7 +120,6 @@ function applyConfig(config: GameConfig): void {
   showConfig.value = false
   mode.value = config.mode
   difficulty.value = config.difficulty
-  level.value = config.level
   saveConfig(config)
   restart()
 }
@@ -151,10 +138,7 @@ function exitGame(): void {
         <view class="mini-stone" />
         <text>你执黑</text>
       </view>
-      <text class="vs">
-        AI · {{ DIFFICULTY_LABELS[difficulty]
-        }}<text v-if="isExpert"> · {{ level }}级</text>
-      </text>
+      <text class="vs">AI · {{ DIFFICULTY_LABELS[difficulty] }}</text>
       <text class="mode" @tap="showRules = true">{{ MODE_LABELS[mode] }}模式 ?</text>
     </view>
 
@@ -196,7 +180,6 @@ function exitGame(): void {
       v-if="showConfig"
       :mode="mode"
       :difficulty="difficulty"
-      :level="level"
       @cancel="showConfig = false"
       @confirm="applyConfig"
     />

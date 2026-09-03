@@ -64,15 +64,12 @@ export function useAiOpponent() {
     }
   }
 
-  // 给定 oppMove 时把它带给引擎，按 read 置信度对该手读心应对；否则照常搜索。read 逐局覆盖难度默认。
   // silent 的请求在后台预算、不点亮思考指示（供提前预算复用，命中即零等待）。
   function request(
     state: GameState,
     seat: Seat,
     difficulty: Difficulty,
-    oppMove: Point | null = null,
     silent = false,
-    read?: number,
   ): Promise<Point | null> {
     ensureWorker()
     const id = ++seq
@@ -92,8 +89,7 @@ export function useAiOpponent() {
     }
     return new Promise<Point | null>((resolve) => {
       pending.set(id, { resolve, state, seat, difficulty })
-      const move = oppMove ? { x: oppMove.x, y: oppMove.y } : null
-      worker!.postMessage({ id, state: snapshot(state), seat, difficulty, oppMove: move, read })
+      worker!.postMessage({ id, state: snapshot(state), seat, difficulty })
     }).then(done)
   }
 

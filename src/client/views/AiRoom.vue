@@ -27,7 +27,7 @@ import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, clampExpertLevel, DIFFICULTY_OPTIONS, expertRead } from '@gomoku/config'
+import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import { AI_FRAME_START_KEY, AI_GAME_KEY, AI_MOVES_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 import type { FrameMoves } from '@/shared/protocol'
@@ -42,11 +42,6 @@ const frameSeconds = 0
 const difficulty = ref<Difficulty>(
   DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
 )
-
-// level 是专家难度等级（1~20，仅专家难度生效），取 URL 参数，非法则回落默认；
-// 引擎读心置信度 read = (level - 1) / 20：1 级纯盲搜（AI 本就有自然命中率），20 级置信 0.95。
-const level = ref(clampExpertLevel(Number(params.get('level'))))
-const engineRead = computed(() => expertRead(level.value))
 
 // 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
@@ -109,18 +104,11 @@ const resolving = ref(false)
 
 const ai = useAiOpponent()
 let pendingAiMove: Promise<Point | null> | null = null
-let pendingResponse: Promise<Point | null> | null = null
-let responseFor: Point | null = null
-let responseTimer: ReturnType<typeof setTimeout> | undefined
 
 const showConfig = ref(false)
 const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
-const configLevel = ref(level.value)
 
-const responds = computed(() => difficulty.value === 'expert')
-const showThinking = ref(false)
-let thinkTimer: ReturnType<typeof setTimeout> | undefined
 const playing = computed(() => game.value.phase === 'playing')
 const { secondsLeft, urgency, elapsedSeconds } = useFrameClock(
   deadline,
@@ -134,7 +122,7 @@ const aiStatus = computed(() => {
     return { text: '对局结束', dot: 'bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
   if (resolving.value)
     return { text: '结算中…', dot: 'animate-pulse bg-stone-400', cls: 'text-stone-500 dark:text-stone-400' }
-  if (ai.thinking.value || showThinking.value)
+  if (ai.thinking.value)
     return { text: 'AI 思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
   return { text: 'AI 已提交', dot: 'bg-emerald-500', cls: 'text-emerald-700 dark:text-emerald-400' }
 })
@@ -144,35 +132,13 @@ const aiStatus = computed(() => {
 function beginFrame(startAt: number = Date.now()) {
   frameStart.value = startAt
   localStorage.setItem(AI_FRAME_START_KEY, String(startAt))
-  clearTimeout(thinkTimer)
-  clearTimeout(responseTimer)
-  pendingResponse = null
-  responseFor = null
-  if (responds.value) {
-    // 读心档：本帧手依赖人类落点，等 draft 后由 scheduleResponse 后台预算；无 draft 时结算兜底盲搜。
-    pendingAiMove = null
-    showThinking.value = true
-    thinkTimer = setTimeout(() => (showThinking.value = false), 800 + Math.random() * 2200)
-  } else {
-    pendingAiMove = ai.request(game.value, 'white', difficulty.value)
-  }
+  pendingAiMove = ai.request(game.value, 'white', difficulty.value)
 }
 
 async function resolveFrame() {
   if (resolving.value || !playing.value) return
   resolving.value = true
-  clearTimeout(thinkTimer)
-  clearTimeout(responseTimer)
-  showThinking.value = false
-  const draft = selected.value
-  const ready =
-    draft && responseFor && responseFor.x === draft.x && responseFor.y === draft.y
-      ? pendingResponse
-      : null
-  const aiMove =
-    responds.value && draft
-      ? await (ready ?? ai.request(game.value, 'white', difficulty.value, draft, false, engineRead.value))
-      : await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
+  const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   const first = Math.random() < 0.5 ? 'black' : 'white'
   const next = settleFrame(game.value, { black: selected.value, white: aiMove, first })
   logMove([selected.value, aiMove, first])
@@ -189,19 +155,6 @@ async function resolveFrame() {
 function select(point: Point) {
   if (!playing.value || resolving.value || !isLegalChoice(game.value, point)) return
   selected.value = point
-  if (responds.value) scheduleResponse(point)
-}
-
-// 选点稳定后即在后台预算，提交时多半已就绪、零等待；改点则重排（旧结果作废）。
-function scheduleResponse(point: Point) {
-  if (responseFor && responseFor.x === point.x && responseFor.y === point.y) return
-  responseFor = point
-  pendingResponse = null
-  clearTimeout(responseTimer)
-  const target = point
-  responseTimer = setTimeout(() => {
-    pendingResponse = ai.request(game.value, 'white', difficulty.value, target, true, engineRead.value)
-  }, 200)
 }
 
 function submitChoice() {
@@ -246,7 +199,6 @@ function exitRoom() {
 function openConfig() {
   configMode.value = mode.value
   configDifficulty.value = difficulty.value
-  configLevel.value = level.value
   showConfig.value = true
 }
 
@@ -254,8 +206,7 @@ function confirmConfig() {
   showConfig.value = false
   mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  level.value = configLevel.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&difficulty=${difficulty.value}&level=${level.value}`)
+  history.replaceState(null, '', `/ai?mode=${mode.value}&difficulty=${difficulty.value}`)
   restart()
 }
 
@@ -285,7 +236,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </span>
         <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
           <IconHome class="size-3.5" />
-          AI · {{ DIFFICULTY_LABELS[difficulty] }}<template v-if="responds"> · {{ level }}级</template>
+          AI · {{ DIFFICULTY_LABELS[difficulty] }}
           <button
             class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
             aria-label="退出对局"
@@ -358,7 +309,6 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
       v-if="showConfig"
       v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
-      v-model:level="configLevel"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

@@ -1,49 +1,26 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type { Difficulty } from '@gomoku/engine/ai'
 import type { GameMode } from '@gomoku/engine/game'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import {
-  AI_MODE_OPTIONS,
-  DEFAULT_EXPERT_LEVEL,
-  DIFFICULTY_OPTIONS,
-  EXPERT_LEVEL_MAX,
-  EXPERT_LEVEL_MIN,
-} from '@gomoku/config'
+import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { GameConfig } from '@/game/config'
 
 const props = withDefaults(
   defineProps<{
     mode?: GameMode
     difficulty?: Difficulty
-    level?: number
   }>(),
-  { mode: 'forbidden', difficulty: 'normal', level: DEFAULT_EXPERT_LEVEL },
+  { mode: 'forbidden', difficulty: 'normal' },
 )
 
 const emit = defineEmits<{ cancel: []; confirm: [config: GameConfig] }>()
 
 const mode = ref<GameMode>(props.mode)
 const difficulty = ref<Difficulty>(props.difficulty)
-const level = ref(props.level)
-
-// 低等级偏绿、高等级偏红，与 web 端等级滑条一致。
-const fillColor = computed(
-  () =>
-    `hsl(${Math.round((1 - (level.value - EXPERT_LEVEL_MIN) / (EXPERT_LEVEL_MAX - EXPERT_LEVEL_MIN)) * 130)}, 68%, 45%)`,
-)
-
-type SliderEvent = { detail: { value: number } }
-function onLevel(e: SliderEvent): void {
-  level.value = e.detail.value
-}
 
 function confirm(): void {
-  emit('confirm', {
-    mode: mode.value,
-    difficulty: difficulty.value,
-    level: level.value,
-  })
+  emit('confirm', { mode: mode.value, difficulty: difficulty.value })
 }
 </script>
 
@@ -83,23 +60,6 @@ function confirm(): void {
             {{ DIFFICULTY_LABELS[d] }}
           </view>
         </view>
-      </view>
-
-      <view v-if="difficulty === 'expert'" class="field">
-        <text class="field-label">{{ level }} 级</text>
-        <slider
-          class="slider"
-          :min="EXPERT_LEVEL_MIN"
-          :max="EXPERT_LEVEL_MAX"
-          :step="1"
-          :value="level"
-          :active-color="fillColor"
-          background-color="#e7e5e4"
-          block-size="18"
-          block-color="#ffffff"
-          @changing="onLevel"
-          @change="onLevel"
-        />
       </view>
 
       <view class="dialog-btn" @tap="confirm">开始对战</view>
@@ -177,10 +137,6 @@ function confirm(): void {
   background: #ffffff;
   color: #292524;
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.08);
-}
-.slider {
-  width: 100%;
-  margin: 0;
 }
 .dialog-btn {
   display: flex;

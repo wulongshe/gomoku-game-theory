@@ -19,7 +19,7 @@ import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, matchWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, DEFAULT_EXPERT_LEVEL, DIFFICULTY_OPTIONS } from '@gomoku/config'
+import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import {
   FRAME_OPTIONS,
   MODE_OPTIONS,
@@ -77,13 +77,12 @@ if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
 const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
-const aiLevel = useStorage('ai-level', DEFAULT_EXPERT_LEVEL)
 if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 // 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&difficulty=${aiDifficulty.value}&level=${aiLevel.value}`)
+  location.assign(`/ai?mode=${aiMode.value}&difficulty=${aiDifficulty.value}`)
 }
 
 async function create() {
@@ -310,7 +309,6 @@ useEventListener(window, 'resize', updateScrollHint)
       v-if="showAi"
       v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
-      v-model:level="aiLevel"
       :show-frame="false"
       :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"

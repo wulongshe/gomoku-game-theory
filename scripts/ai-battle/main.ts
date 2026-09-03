@@ -6,23 +6,18 @@ import { type SideConfig } from './search'
 // ===== 修改这里的参数 =====
 const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / race 竞速 / minus 负子
 const ROUNDS = Number(process.env.ROUNDS ?? 20)
-const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 4) // 并行对局数，每局占 2 个线程；8 核可开到 4
+const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 10) // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）
-// 每方独立指定核心搜索算法（绕过难度预设，便于同预算公平对比）：
-// 黑方盲搜进攻，白方 respond 每帧先看黑方本帧手再应（root 按 read 置信度押注对手真实点）。
+// 每方独立指定搜索参数（绕过难度预设，便于同预算公平对比）。
 const BLACK: SideConfig = {
-  policy: 'duct',
-  candidates:  Number(process.env.CAND_BLACK ?? 7),
+  candidates:  Number(process.env.CAND_BLACK ?? 9),
   explore: Number(process.env.EXPLORE_BLACK ?? 0),
-  budgetMs: Number(process.env.BUDGET_BLACK ?? 800)
+  budgetMs: Number(process.env.BUDGET_BLACK ?? 3200)
 }
 const WHITE: SideConfig = {
-  policy: 'respond',
-  candidates:  Number(process.env.CAND_WHITE ?? 6),
-  explore: Number(process.env.EXPLORE_WHITE ?? 0.22),
-  budgetMs: Number(process.env.BUDGET_WHITE ?? 450),
-  // 专家方读心置信度：root 押注对手真实点的概率（越高越强，1=满血读心）
-  read: Number(process.env.EXPERT_READ ?? 0.75)
+  candidates:  Number(process.env.CAND_WHITE ?? 10),
+  explore: Number(process.env.EXPLORE_WHITE ?? 0),
+  budgetMs: Number(process.env.BUDGET_WHITE ?? 3200),
 }
 // ==========================
 
@@ -51,12 +46,7 @@ type FrameObserver = (
   next: GameState,
 ) => void
 
-type SearchFn = (
-  state: GameState,
-  seat: Seat,
-  side: SideConfig,
-  oppMove?: Point | null,
-) => Promise<Point | null>
+type SearchFn = (state: GameState, seat: Seat, side: SideConfig) => Promise<Point | null>
 
 interface WorkerPool {
   search: SearchFn
@@ -86,11 +76,11 @@ function createWorkerPool(workerFile: URL, size: number, handler: { module: stri
     })
   }
   return {
-    search(state, seat, side, oppMove = null) {
+    search(state, seat, side) {
       return new Promise((resolve) => {
         const id = nextId++
         pending.set(id, resolve)
-        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side, oppMove] })
+        workers[turn++ % workers.length].postMessage({ id, args: [state, seat, side] })
       })
     },
     close() {
@@ -142,23 +132,11 @@ function frameChoices(
   return { black, white }
 }
 
-// 恰好一方为 respond（地狱）时，先算盲搜方，再让应手方以其手为 oppMove 应对（避免双方互等的死锁）；
-// 其余情形（都不应手 / 都应手）按同时搜索处理。
-async function frameMoves(
+function frameMoves(
   view: GameState,
   config: MatchConfig,
   search: SearchFn,
 ): Promise<[Point | null, Point | null]> {
-  const blackResponds = config.black.policy === 'respond'
-  const whiteResponds = config.white.policy === 'respond'
-  if (whiteResponds && !blackResponds) {
-    const black = await search(view, 'black', config.black)
-    return [black, await search(view, 'white', config.white, black)]
-  }
-  if (blackResponds && !whiteResponds) {
-    const white = await search(view, 'white', config.white)
-    return [await search(view, 'black', config.black, white), white]
-  }
   return Promise.all([search(view, 'black', config.black), search(view, 'white', config.white)])
 }
 
@@ -198,9 +176,6 @@ function isMutualFive(black: Point | null, white: Point | null, next: GameState)
 }
 
 function formatSide(side: SideConfig): string {
-  if (side.policy === 'rm') return `rm(候选${side.candidates}·${side.budgetMs}ms)`
-  if (side.policy === 'respond')
-    return `respond(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms${side.read !== undefined ? `·read${side.read}` : ''})`
   return `duct(候选${side.candidates}·探索${side.explore}·${side.budgetMs}ms)`
 }
 

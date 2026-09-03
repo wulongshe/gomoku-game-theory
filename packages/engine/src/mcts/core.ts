@@ -20,7 +20,7 @@ export function joint(seat: Seat, ai: Point, opp: Point): FrameChoices {
   return seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
 }
 
-// 节点静态部分（两种策略共用）：双方候选、首展评估值、是否可再展开（两侧都有候选）。
+// 节点静态部分：双方候选、首展评估值、是否可再展开（两侧都有候选）。
 export interface Core {
   state: GameState
   aiMoves: Point[]

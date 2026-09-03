@@ -14,18 +14,13 @@ interface DuctNode extends Core {
   visits: number
 }
 
-// oppMove 非空时启用「读心置信」：在 root 以概率 read 让对手走该真实点、其余按对抗性 min 探索。
-// read=1 等价于固定该手求最优应手（满血读心），read=0 等价于盲搜；根以下人类未来手未知，仍常规同时落子搜索。
 export function ductSearch(
   state: GameState,
   seat: Seat,
   candidates: number,
   explore: number,
   budget: number,
-  oppMove: Point | null = null,
-  read = 1,
 ): Point | null {
-  let rootOppIdx = -1
   function makeNode(s: GameState): DuctNode {
     const core = expand(s, seat, candidates)
     const size = core.expandable ? core.aiMoves.length * core.oppMoves.length : 0
@@ -75,7 +70,7 @@ export function ductSearch(
   function simulate(node: DuctNode, depth: number): number {
     if (!node.expandable || depth >= MAX_DEPTH) return node.value0
     const i = selectAi(node)
-    const j = depth === 0 && rootOppIdx >= 0 && Math.random() < read ? rootOppIdx : selectOpp(node)
+    const j = selectOpp(node)
     const idx = i * node.oppMoves.length + j
     let child = node.children[idx]
     let value: number
@@ -95,17 +90,6 @@ export function ductSearch(
   }
 
   const root = makeNode(state)
-  if (oppMove) {
-    rootOppIdx = root.oppMoves.findIndex((p) => p.x === oppMove.x && p.y === oppMove.y)
-    if (rootOppIdx === -1) {
-      root.oppMoves.push(oppMove)
-      root.oppSum.push(0)
-      root.oppCnt.push(0)
-      rootOppIdx = root.oppMoves.length - 1
-      root.children = new Array(root.aiMoves.length * root.oppMoves.length)
-    }
-    root.expandable = root.aiMoves.length > 0 && root.oppMoves.length > 0
-  }
   if (!root.expandable) return root.aiMoves[0] ?? null
   if (root.aiMoves.length === 1) return root.aiMoves[0]
 
