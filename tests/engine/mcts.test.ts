@@ -68,7 +68,7 @@ describe('searchBestMove', () => {
   // 白活四（4~7）两端皆可成五，任一端都是取胜手。
   it('takes its own win when one is available', () => {
     const game = withStones({ white: row(7, [4, 5, 6, 7]) })
-    const move = searchBestMove(game, 'white', 'expert', 150)
+    const move = searchBestMove(game, 'white', 'master', 150)
     expect(move?.y).toBe(7)
     expect([3, 8]).toContain(move?.x)
   })

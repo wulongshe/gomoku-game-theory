@@ -15,7 +15,7 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
   normal: '普通',
   hard: '困难',
-  expert: '专家',
+  master: '大师',
 }
 
 export function rules(audience: RuleAudience = 'pvp') {
