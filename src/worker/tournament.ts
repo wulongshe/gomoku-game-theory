@@ -457,7 +457,10 @@ export class Tournament extends DurableObject<Env> {
     else if (s.pairings.some((p) => p.result === null)) {
       targets.push(Math.min(now + POLL_MS, close + WRAPUP_MS))
     }
-    if (targets.length) await this.ctx.storage.setAlarm(Math.min(...targets))
+    // 已到期目标钳到严格未来：线上把设在过去的闹钟归并到平台约 60s 一轮的补扫（见 Room.armAlarm）。
+    if (targets.length) {
+      await this.ctx.storage.setAlarm(Math.max(Math.min(...targets), now + 100))
+    }
   }
 
   private matchCloseAt(s: TournamentState): number {

@@ -367,7 +367,11 @@ export class Room extends DurableObject<Env> {
     const targets = [...Object.values(plan), ...Object.values(arrive), deadline].filter(
       (t): t is number => t !== undefined,
     )
-    await this.ctx.storage.setAlarm(targets.length ? Math.min(...targets) : Date.now() + IDLE_TTL_MS)
+    if (!targets.length) return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    // 已到期的目标不能原样回设：线上把设在过去/与刚响时点相同的闹钟归并到平台约 60s
+    // 一轮的补扫才触发（wrangler tail 实测 lag≈59s，本地 workerd 则立即补发），表现为
+    // 倒计时归零后整帧卡住。钳到严格未来的时点，平台才视为新闹钟立即排期。
+    await this.ctx.storage.setAlarm(Math.max(Math.min(...targets), Date.now() + 100))
   }
 
   private async planAi(seat: Seat, delayMs: number): Promise<void> {

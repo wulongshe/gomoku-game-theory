@@ -583,6 +583,21 @@ describe('Room', () => {
     expect(start.deadline).toBeGreaterThan(Date.now())
   })
 
+  // 线上把设在过去/等于刚响时点的闹钟归并到平台约 60s 一轮的补扫才触发（本地 workerd 会立即补发，
+  // 故此处只能钉住「回设值被钳到未来」这一约定本身）。
+  it('never re-arms the alarm to a past-due target', async () => {
+    const [a] = await startGame('1031')
+    const stub = env.ROOM.get(env.ROOM.idFromName('1031'))
+    const alarm = await runInDurableObject(stub, async (instance, state) => {
+      await state.storage.put('aiPlan', { black: Date.now() - 5000 })
+      await (instance as unknown as { armAlarm(): Promise<void> }).armAlarm()
+      return state.storage.getAlarm()
+    })
+    expect(alarm).not.toBeNull()
+    expect(alarm!).toBeGreaterThanOrEqual(Date.now())
+    a.ws.close()
+  })
+
   it('answers a ping frame with pong without touching the message handler', async () => {
     await createRoom('1030')
     const res = await SELF.fetch('https://example.com/api/rooms/1030/ws?key=key-a', {
