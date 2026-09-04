@@ -15,7 +15,7 @@ const STATUS_META: Record<PlayerStatus, { label: string; dot: string }> = {
   matching: { label: '匹配中', dot: 'bg-amber-400' },
   readying: { label: '准备中', dot: 'bg-sky-400' },
   playing: { label: '对局中', dot: 'bg-emerald-500' },
-  cooldown: { label: '冷却中', dot: 'bg-purple-500' },
+  left: { label: '已离开', dot: 'bg-stone-300 dark:bg-stone-600' },
 }
 
 // 仅实时积分带状态（上届排名不带），有状态才显示图例与着色。

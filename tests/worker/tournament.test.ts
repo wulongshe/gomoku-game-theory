@@ -1,6 +1,6 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
-import { tournamentFrameSeconds } from '@/shared/protocol'
+import { maskEmail, tournamentFrameSeconds, type TournamentInfo } from '@/shared/protocol'
 import { beijingDate, nextDailyStart } from '@/worker/tournament'
 import {
   botRegistrations,
@@ -24,7 +24,6 @@ interface TState {
   players: Record<string, TPlayer>
   bots: Record<string, string>
   queue: string[]
-  cooldowns: Record<string, number>
   botSeekAt: Record<string, number>
   pairings: Array<{
     code: string
@@ -49,7 +48,6 @@ function full(partial: Partial<TState>): TState {
     players: {},
     bots: {},
     queue: [],
-    cooldowns: {},
     botSeekAt: {},
     pairings: [],
     lastStandings: [],
@@ -184,20 +182,11 @@ describe('Arena tournament DO', () => {
     expect(s.queue).toEqual(['b@x'])
   })
 
-  it('blocks seeking during cooldown, an unresolved game, or after close', async () => {
+  it('blocks seeking during an unresolved game or after close', async () => {
     const e = 'cool@example.com'
     const t = await sessionFor(e)
     await seedActive([e, 'b@x'])
-    await patch((s) => {
-      s.cooldowns[e] = Date.now() + 30_000
-    })
-    const cooling = await stub().seekMatch(t)
-    expect(cooling.my?.status).toBe('cooldown')
-    expect((await read()).queue).toEqual([])
 
-    await patch((s) => {
-      s.cooldowns[e] = Date.now() - 1
-    })
     const ok = await stub().seekMatch(t)
     expect(ok.my?.status).toBe('matching')
 
@@ -220,7 +209,7 @@ describe('Arena tournament DO', () => {
     expect((await read()).queue).toEqual([])
   })
 
-  it('scores a win, sets both cooldowns, and ignores duplicates and strangers', async () => {
+  it('scores a win and ignores duplicates and strangers', async () => {
     await seedActive(['a@x', 'b@x', 'c@x'], {
       pairings: [
         { code: '0021', players: ['a@x', 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
@@ -234,8 +223,6 @@ describe('Arena tournament DO', () => {
     expect(s.pairings[0].result).toBe('a')
     expect(s.players['a@x']).toMatchObject({ score: 1, wins: 1, games: 1 })
     expect(s.players['b@x']).toMatchObject({ score: 0, wins: 0, games: 1 })
-    expect(s.cooldowns['a@x']).toBeGreaterThan(Date.now())
-    expect(s.cooldowns['b@x']).toBeGreaterThan(Date.now())
     expect(s.state).toBe('active')
   })
 
@@ -380,7 +367,7 @@ describe('Arena tournament DO', () => {
     })
     await stub().reportResult({ code: '0081', winnerEmail: 'h@x', moves: 40 })
     const s = await read()
-    expect(s.botSeekAt[b0]).toBeGreaterThan(s.cooldowns[b0])
+    expect(s.botSeekAt[b0]).toBeGreaterThan(Date.now())
   })
 })
 
@@ -390,7 +377,6 @@ describe('arena statuses and spectate gating', () => {
     const token = await sessionFor(me)
     await seedActive([me, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x'], {
       queue: ['b@x'],
-      cooldowns: { 'g@x': Date.now() + 20_000 },
       pairings: [
         {
           code: '0301',
@@ -417,7 +403,8 @@ describe('arena statuses and spectate gating', () => {
     expect(byEmail['c***@x']).toBe('playing')
     expect(byEmail['d***@x']).toBe('playing')
     expect(byEmail['e***@x']).toBe('readying')
-    expect(byEmail['g***@x']).toBe('cooldown')
+    // g@x 空闲但没连着大厅 WS（本人不是请求者）→ 已离开
+    expect(byEmail['g***@x']).toBe('left')
     // 我不在对局中 → 进行中的桌下发观战房号；已结束的不带
     expect(info.games.find((m) => m.status === 'playing')?.code).toBe('0301')
     expect(info.games.find((m) => m.status === 'done')?.code).toBeNull()
@@ -546,6 +533,27 @@ describe('websocket push', () => {
     const guestPushed = await guest.next()
     expect(guestPushed.registered).toBe(false)
     expect(guestPushed.playerCount).toBe(1)
+  })
+
+  it('shows a participant with no lobby connection as left, reviving on reconnect', async () => {
+    const p1 = 'am-pres@example.com'
+    const p2 = 'zo-pres@example.com'
+    const t1 = await sessionFor(p1)
+    const t2 = await sessionFor(p2)
+    await seedActive([p1, p2])
+    const statusOf = (info: TournamentInfo, email: string) =>
+      info.standings.find((r) => r.email === maskEmail(email))?.status
+
+    const c1 = await connectWs(t1)
+    const first = (await c1.next()) as unknown as TournamentInfo
+    // p1 是请求者本人 → idle；p2 没连大厅 WS → 已离开
+    expect(first.my?.status).toBe('idle')
+    expect(statusOf(first, p2)).toBe('left')
+
+    // p2 连上大厅 → 广播，p1 看到 p2 由「已离开」变回「空闲」
+    await connectWs(t2)
+    const revived = (await c1.next()) as unknown as TournamentInfo
+    expect(statusOf(revived, p2)).toBe('idle')
   })
 
   it('rejects non-websocket requests', async () => {

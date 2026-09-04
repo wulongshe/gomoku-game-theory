@@ -18,7 +18,6 @@ import {
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ARENA_MS = 30 * 60_000 // 配新对局的窗口；已开局的照常打完，超过窗口收官也计分
-const COOLDOWN_MS = 60_000
 const PAIR_TTL_MS = 2 * 60_000 // 配上后迟迟未开局的裁决时限
 const WRAPUP_MS = 20 * 60_000 // 窗口关闭后仍未决对局（房间悄悄死掉等）的硬兜底
 const POLL_MS = 60_000
@@ -54,7 +53,6 @@ interface TournamentState {
   players: Record<string, Player>
   bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 基准棋力档（每局在 ±1 档内浮动）
   queue: string[] // 匹配中（先到先配）
-  cooldowns: Record<string, number> // email → 冷却结束时点
   botSeekAt: Record<string, number> // bot → 下次「点匹配」的时点
   pairings: Pairing[]
   lastStandings: Standing[]
@@ -69,7 +67,6 @@ function defaultState(): TournamentState {
     players: {},
     bots: {},
     queue: [],
-    cooldowns: {},
     botSeekAt: {},
     pairings: [],
     lastStandings: [],
@@ -107,15 +104,28 @@ export class Tournament extends DurableObject<Env> {
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
     pair[1].serializeAttachment({ email } satisfies SocketTag)
-    const info = await this.ctx.blockConcurrencyWhile(async () => {
+    await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
       await this.armIfNeeded(s)
-      return this.toInfo(s, email)
+      // 参赛者（重）上线可能把自己从「已离开」变回在场：一次 broadcast 覆盖本人与其他人；
+      // 其余情形（游客/赛前）只给新连接推一帧即可。
+      if (s.state === 'active' && email !== null && email in s.players) {
+        await this.broadcast(s)
+      } else {
+        try {
+          pair[1].send(JSON.stringify(await this.toInfo(s, email)))
+        } catch {}
+      }
     })
-    try {
-      pair[1].send(JSON.stringify(info))
-    } catch {}
     return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  // 大厅连接断开：参赛者可能变「已离开」，重算在场状态推给其余连接。
+  async webSocketClose(): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const s = await this.load()
+      if (s.state === 'active') await this.broadcast(s)
+    })
   }
 
   private async broadcast(s: TournamentState): Promise<void> {
@@ -173,7 +183,7 @@ export class Tournament extends DurableObject<Env> {
     })
   }
 
-  // 「匹配对手」：第一局与冷却结束后都由玩家手动触发，绝不自动排队。
+  // 「匹配对手」：每一局都由玩家手动触发，绝不自动排队。
   async seekMatch(token: string): Promise<TournamentInfo> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const email = await this.email(token)
@@ -185,7 +195,6 @@ export class Tournament extends DurableObject<Env> {
         email in s.players &&
         now < this.matchCloseAt(s) &&
         !s.queue.includes(email) &&
-        (s.cooldowns[email] ?? 0) <= now &&
         !this.unresolvedOf(s, email)
       ) {
         s.queue.push(email)
@@ -297,7 +306,6 @@ export class Tournament extends DurableObject<Env> {
     s.registrations = []
     s.pairings = []
     s.queue = []
-    s.cooldowns = {}
     s.botSeekAt = {}
     s.startedAt = Date.now()
     s.state = 'active'
@@ -315,12 +323,7 @@ export class Tournament extends DurableObject<Env> {
       if (now < s.botSeekAt[email] - SKEW_MS) continue
       delete s.botSeekAt[email]
       if (now >= close) continue
-      if (
-        email in s.players &&
-        !s.queue.includes(email) &&
-        (s.cooldowns[email] ?? 0) <= now + SKEW_MS &&
-        !this.unresolvedOf(s, email)
-      ) {
+      if (email in s.players && !s.queue.includes(email) && !this.unresolvedOf(s, email)) {
         s.queue.push(email)
       }
     }
@@ -410,14 +413,13 @@ export class Tournament extends DurableObject<Env> {
     // void → 双方 0 分
   }
 
-  // 冷却：冷却期内可观战，结束后要自己再点匹配；bot 在冷却后隔一小段随机时间「点」。
+  // 一局打完：真人回到空闲、随时可再点匹配；bot 隔一小段随机时间自动「点」下一局。
   private afterResult(s: TournamentState, p: Pairing): void {
     const now = Date.now()
     for (const email of p.players) {
       if (!(email in s.players)) continue
-      s.cooldowns[email] = now + COOLDOWN_MS
-      if (email in s.bots && now + COOLDOWN_MS < this.matchCloseAt(s)) {
-        s.botSeekAt[email] = now + COOLDOWN_MS + 3_000 + Math.random() * 27_000
+      if (email in s.bots && now < this.matchCloseAt(s)) {
+        s.botSeekAt[email] = now + 3_000 + Math.random() * 27_000
       }
     }
   }
@@ -438,7 +440,6 @@ export class Tournament extends DurableObject<Env> {
     s.players = {}
     s.bots = {}
     s.queue = []
-    s.cooldowns = {}
     s.botSeekAt = {}
     s.pairings = []
     await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
@@ -471,11 +472,24 @@ export class Tournament extends DurableObject<Env> {
     return s.pairings.find((p) => p.result === null && p.players.includes(email))
   }
 
-  private statuses(s: TournamentState): Map<string, PlayerStatus> {
-    const now = Date.now()
+  // 当前连着大厅 WebSocket 的账号（游客 email 为 null，不计）。bot 无连接，靠 s.bots 豁免。
+  private connectedEmails(): Set<string> {
+    const set = new Set<string>()
+    for (const ws of this.ctx.getWebSockets()) {
+      const { email } = ws.deserializeAttachment() as SocketTag
+      if (email) set.add(email)
+    }
+    return set
+  }
+
+  private statuses(s: TournamentState, viewer: string | null): Map<string, PlayerStatus> {
+    const connected = this.connectedEmails()
+    if (viewer) connected.add(viewer) // 请求者本人必然在场，不会把自己看成「已离开」
     const map = new Map<string, PlayerStatus>()
     for (const email of Object.keys(s.players)) {
       const pairing = this.unresolvedOf(s, email)
+      // 对局中/待进房的席位由 pairing 判定（此时真人已离开大厅去房间，不算「已离开」）；
+      // 其余空闲席位里，真人若断开了大厅连接即「已离开」，bot 永远视为在场。
       map.set(
         email,
         pairing
@@ -484,9 +498,9 @@ export class Tournament extends DurableObject<Env> {
             : 'readying'
           : s.queue.includes(email)
             ? 'matching'
-            : (s.cooldowns[email] ?? 0) > now
-              ? 'cooldown'
-              : 'idle',
+            : email in s.bots || connected.has(email)
+              ? 'idle'
+              : 'left',
       )
     }
     return map
@@ -515,7 +529,7 @@ export class Tournament extends DurableObject<Env> {
     const now = Date.now()
     const participating = s.state === 'active' && email !== null && email in s.players
     const registered = email !== null && s.registrations.includes(email)
-    const statuses = s.state === 'active' ? this.statuses(s) : null
+    const statuses = s.state === 'active' ? this.statuses(s, email) : null
     const myPairing = participating ? this.unresolvedOf(s, email!) : undefined
     // 观战不设门槛：进行中的桌对所有人（含游客）下发房号；帧内选点本就要结算后才可见。
     const games = [...s.pairings].reverse().map((p) => this.toMatch(p, s.state === 'active'))
@@ -536,7 +550,6 @@ export class Tournament extends DurableObject<Env> {
       ? botRegistrations(beijingDate(startsAt), pool, startsAt, now, this.prevRankedBots(s, pool))
           .length
       : 0
-    const cooldownUntil = email !== null && (s.cooldowns[email] ?? 0) > now ? s.cooldowns[email] : null
     return {
       state: s.state,
       now,
@@ -549,9 +562,7 @@ export class Tournament extends DurableObject<Env> {
       participating,
       myGame: myPairing ? { code: myPairing.code } : null,
       matchCloseAt: s.state === 'active' ? this.matchCloseAt(s) : null,
-      my: participating
-        ? { status: statuses!.get(email!) ?? 'idle', cooldownUntil }
-        : null,
+      my: participating ? { status: statuses!.get(email!) ?? 'idle' } : null,
       standings: standings.map((row) => ({
         ...row,
         email: shown(row.email),
@@ -608,7 +619,6 @@ export class Tournament extends DurableObject<Env> {
     const s = (await this.ctx.storage.get<TournamentState>('t')) ?? defaultState()
     s.bots ??= {}
     s.queue ??= []
-    s.cooldowns ??= {}
     s.botSeekAt ??= {}
     s.pairings ??= []
     return s

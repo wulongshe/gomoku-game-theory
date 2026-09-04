@@ -1,8 +1,8 @@
 // 由 Node 原生运行 TypeScript（同 ai:battle）：给本地 dev 的每日大赛注入演示数据。
 // 用法：pnpm seed:tournament [active|idle|prestart|spectate] [--url http://localhost:5173]
-//  - active（默认）：竞技场进行中，五种状态齐全（空闲/匹配中/准备中/对局中/冷却中）
+//  - active（默认）：竞技场进行中，多种状态齐全（空闲/匹配中/准备中/对局中/已离开）
 //  - idle：只写一份「上届排名」
-//  - prestart：shewulong@outlook.com 已报名、2 分钟后开赛（走真实 start：bot 注水补位、真打）
+//  - prestart：test1@outlook.com 已报名、2 分钟后开赛（走真实 start：bot 注水补位、真打）
 //  - spectate：同 active，但「对局中」那桌换成真房 + 双 AI 自动对弈，outlook 空闲可观战
 // 数据经 worker 的 dev 专用注入口（仅 vite dev 存在）写进活着的 Tournament DO 并即时广播。
 // 形状对齐 src/worker/tournament.ts 的 TournamentState/Pairing（不直接 import，避免把
@@ -23,7 +23,6 @@ interface SeedState {
   players: Record<string, { score: number; wins: number; games: number; opponents: string[] }>
   bots?: Record<string, string>
   queue?: string[]
-  cooldowns?: Record<string, number>
   botSeekAt?: Record<string, number>
   pairings: Pairing[]
   lastStandings?: Array<{ email: string; score: number; played: number }>
@@ -31,9 +30,9 @@ interface SeedState {
 }
 
 const KOBA = 'kobayashi@example.com'
-const OUTLOOK = 'shewulong@outlook.com'
+const OUTLOOK = 'test1@outlook.com'
 const ZHANG = 'zhangwei@example.com'
-const GMAIL = 'shewulong@gmail.com'
+const GMAIL = 'test1@gmail.com'
 const LIU = 'liuyang@example.com'
 const WANG = 'wangfang@example.com'
 const CHEN = 'chenjing@example.com'
@@ -51,7 +50,7 @@ function player(
 }
 
 // 竞技场开赛 10 分钟：outlook 空闲（可点匹配/观战）、test1 匹配中、zhangwei vs gmail 对局中、
-// test2 vs koba 准备中、liuyang 冷却中，wang 已和 liu 打完一局。
+// test2 vs koba 准备中、liuyang 空闲，wang 已和 liu 打完一局。
 const ACTIVE: SeedState = {
   state: 'active',
   startedAt: Date.now() - 10 * 60_000,
@@ -66,7 +65,6 @@ const ACTIVE: SeedState = {
     [TEST2]: player(0, 0, 0, []),
   },
   queue: [TEST1],
-  cooldowns: { [LIU]: Date.now() + 25_000 },
   pairings: [
     { code: '9101', players: [OUTLOOK, KOBA], checkedIn: [OUTLOOK, KOBA], result: 'a', createdAt: Date.now() - 9 * 60_000 },
     { code: '9102', players: [ZHANG, WANG], checkedIn: [ZHANG, WANG], result: 'a', createdAt: Date.now() - 8 * 60_000 },
