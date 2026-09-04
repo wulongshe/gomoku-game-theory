@@ -18,7 +18,7 @@ import {
   type ServerMessage,
 } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
-import { botPersona, type BotPersona } from './bots'
+import { botPersona, gameDifficulty, type BotPersona } from './bots'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -113,7 +113,9 @@ export class Room extends DurableObject<Env> {
       if (url.searchParams.get('ai') === '1') {
         // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
         const seat: Seat = Math.random() < 0.5 ? 'black' : 'white'
-        entries.aiSeats = { [seat]: { email: null, difficulty: AI_DIFFICULTY } } satisfies AiSeats
+        // 棋力像真人般起伏：在基准档 ±1 内随机浮动，而非每局都同一档。
+        const difficulty = gameDifficulty(AI_DIFFICULTY)
+        entries.aiSeats = { [seat]: { email: null, difficulty } } satisfies AiSeats
         entries.players = { [seat]: crypto.randomUUID() } satisfies Players
       }
       if (url.searchParams.get('tournament') === '1') {
