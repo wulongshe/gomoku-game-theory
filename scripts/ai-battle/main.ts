@@ -99,7 +99,6 @@ function snapshotState(state: GameState): GameState {
     cleared: [],
     lastMoves: [],
     winningLines: [],
-    contested: null,
   }
 }
 
@@ -117,19 +116,6 @@ function recordOutcome(summary: MatchSummary, outcome: MatchOutcome): MatchSumma
   if (outcome === 'black') return { ...summary, blackWins: summary.blackWins + 1 }
   if (outcome === 'white') return { ...summary, whiteWins: summary.whiteWins + 1 }
   return { ...summary, draws: summary.draws + 1 }
-}
-
-// race 模式撞子时先手掷硬币归属（与引擎评估的两种先手各半口径一致）；其余模式不需要 first。
-function frameChoices(
-  mode: GameMode,
-  black: Point | null,
-  white: Point | null,
-): { black: Point | null; white: Point | null; first?: Seat } {
-  const collided = black !== null && white !== null && black.x === white.x && black.y === white.y
-  if (mode === 'race' && collided) {
-    return { black, white, first: Math.random() < 0.5 ? 'black' : 'white' }
-  }
-  return { black, white }
 }
 
 function frameMoves(
@@ -151,7 +137,7 @@ async function playSingleGame(
     const [black, white] = await frameMoves(view, config, search)
     if (!black && !white) return 'draw' // 双方都无合法手，判平
     const frame = state.frame
-    state = settleFrame(state, frameChoices(config.mode, black, white))
+    state = settleFrame(state, { black, white })
     onFrame?.(frame, black, white, state)
   }
   return outcomeFromPhase(state.phase) // 帧数超限仍未分胜负 → draw

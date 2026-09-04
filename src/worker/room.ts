@@ -69,7 +69,7 @@ interface Attachment {
 
 type Players = Partial<Record<Seat, string>>
 
-type Choices = Partial<Record<Seat, { point: Point | null; final: boolean; finalAt?: number }>>
+type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
 type SeatFlags = Partial<Record<Seat, boolean>>
 
@@ -572,7 +572,7 @@ export class Room extends DurableObject<Env> {
       }
       return
     }
-    choices[seat] = { point: msg.point, final: true, finalAt: Date.now() }
+    choices[seat] = { point: msg.point, final: true }
     await this.ctx.storage.put('choices', choices)
     if (!wasFinal) {
       for (const other of this.ctx.getWebSockets()) {
@@ -765,7 +765,7 @@ export class Room extends DurableObject<Env> {
       const deadline = await this.ctx.storage.get<number>('deadline')
       const left = deadline !== undefined ? deadline - Date.now() : Infinity
       const submit = async (point: Point | null) => {
-        choices[seat] = { point, final: true, finalAt: Date.now() }
+        choices[seat] = { point, final: true }
         await this.ctx.storage.put('choices', choices)
         this.broadcast({ type: 'opponent_submitted', submitted: true })
         const other: Seat = seat === 'black' ? 'white' : 'black'
@@ -872,22 +872,12 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private firstSubmitter(choices: Choices): Seat {
-    const black = choices.black?.finalAt
-    const white = choices.white?.finalAt
-    if (black !== undefined && (white === undefined || black < white)) return 'black'
-    if (white !== undefined && (black === undefined || white < black)) return 'white'
-    return Math.random() < 0.5 ? 'black' : 'white'
-  }
-
   private async settle(game: GameState, choices: Choices): Promise<void> {
-    const first = this.firstSubmitter(choices)
     const next = settleFrame(game, {
       black: choices.black?.point ?? null,
       white: choices.white?.point ?? null,
-      first,
     })
-    const moves: FrameMoves = [choices.black?.point ?? null, choices.white?.point ?? null, first]
+    const moves: FrameMoves = [choices.black?.point ?? null, choices.white?.point ?? null]
     const passed = (['black', 'white'] as const).filter((seat) => !choices[seat]?.point)
     if (next.phase === 'playing') {
       await this.ctx.storage.delete('choices')

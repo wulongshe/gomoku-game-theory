@@ -16,17 +16,9 @@ export const DIFFICULTY_SETTINGS: Record<
 
 const FICTITIOUS_ITERATIONS = 300
 
-// 「AI 下 ai、对手下 opp」这一格的收益（AI 视角）。抢点撞同点时先手随机，取两种先手的均值。
+// 「AI 下 ai、对手下 opp」这一格的收益（AI 视角）。
 function payoff(state: GameState, seat: Seat, ai: Point, opp: Point): number {
-  const choices =
-    seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
-  if (state.mode === 'race' && ai.x === opp.x && ai.y === opp.y) {
-    return (
-      (evaluateState(settleFrame(state, { ...choices, first: 'black' }), seat) +
-        evaluateState(settleFrame(state, { ...choices, first: 'white' }), seat)) /
-      2
-    )
-  }
+  const choices = seat === 'black' ? { black: ai, white: opp } : { black: opp, white: ai }
   return evaluateState(settleFrame(state, choices), seat)
 }
 

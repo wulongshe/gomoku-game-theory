@@ -22,7 +22,6 @@ export const TERMINAL = 1_000_000_000
 const CONTEST_FACTOR: Record<GameMode, number> = {
   forbidden: 0.9, // 撞子 → 死点，免费封杀
   minus: 0.9, // 撞子 → 负子，封杀且反噬对方连线
-  race: 0.45, // 撞子 → 按提交顺序归属，本地是掷硬币，倾向减半
 }
 
 export function other(seat: Seat): Seat {

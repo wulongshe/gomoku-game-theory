@@ -4,7 +4,7 @@ export const FRAME_SECONDS = 30
 export type Seat = 'black' | 'white'
 export type CellState = 'empty' | 'black' | 'white' | 'forbidden' | 'minus'
 export type Phase = 'playing' | 'black_won' | 'white_won' | 'draw'
-export type GameMode = 'forbidden' | 'race' | 'minus'
+export type GameMode = 'forbidden' | 'minus'
 
 export interface Point {
   x: number
@@ -28,13 +28,11 @@ export interface GameState {
   cleared: ClearedGroup[]
   lastMoves: Point[]
   winningLines: Point[][]
-  contested: Point | null
 }
 
 export interface FrameChoices {
   black: Point | null
   white: Point | null
-  first?: Seat
 }
 
 export function createGame(mode: GameMode = 'forbidden'): GameState {
@@ -46,7 +44,6 @@ export function createGame(mode: GameMode = 'forbidden'): GameState {
     cleared: [],
     lastMoves: [],
     winningLines: [],
-    contested: null,
   }
 }
 
@@ -191,12 +188,7 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
   const { black, white } = choices
 
   if (black && white && black.x === white.x && black.y === white.y) {
-    board[black.y * BOARD_SIZE + black.x] =
-      state.mode === 'minus'
-        ? 'minus'
-        : state.mode === 'race'
-          ? (choices.first ?? 'forbidden')
-          : 'forbidden'
+    board[black.y * BOARD_SIZE + black.x] = state.mode === 'minus' ? 'minus' : 'forbidden'
   } else {
     if (black) board[black.y * BOARD_SIZE + black.x] = 'black'
     if (white) board[white.y * BOARD_SIZE + white.x] = 'white'
@@ -251,15 +243,6 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       ['black', 'white', 'minus', 'forbidden'].includes(board[p.y * BOARD_SIZE + p.x]),
   )
 
-  // 抢点撞子由掷币定归属：留存的那颗子先以太极呈现，再翻出先手方棋色。
-  const contested =
-    state.mode === 'race' &&
-    collided &&
-    choices.first &&
-    board[black!.y * BOARD_SIZE + black!.x] === choices.first
-      ? { x: black!.x, y: black!.y }
-      : null
-
   return {
     board,
     phase,
@@ -268,6 +251,5 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
     cleared,
     lastMoves,
     winningLines: winning.map((line) => line.map(toPoint)),
-    contested,
   }
 }

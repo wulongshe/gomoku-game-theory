@@ -350,8 +350,8 @@ describe('Room', () => {
     expect(cellAt(settled.state, { x: 7, y: 8 })).toBe('white')
   })
 
-  it('awards a race-mode collision to the earlier final submission', async () => {
-    await createRoom('1026', 30, 'race')
+  it('turns a collision into a forbidden point', async () => {
+    await createRoom('1026', 30, 'forbidden')
     const a = await connect('1026', 'key-a')
     const b = await connect('1026', 'key-b')
     await a.next('joined')
@@ -363,11 +363,10 @@ describe('Room', () => {
 
     b.submit(1, { x: 6, y: 6 })
     await a.next('opponent_submitted')
-    await new Promise((resolve) => setTimeout(resolve, 5))
     a.submit(1, { x: 6, y: 6 })
     const settled = await a.next('frame_settled')
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
-    expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('white')
+    expect(cellAt(settled.state, { x: 6, y: 6 })).toBe('forbidden')
   })
 
   it('notifies the opponent when a player leaves', async () => {
@@ -402,8 +401,7 @@ describe('Room', () => {
     a.submit(1, { x: 6, y: 7 })
     b.submit(1, { x: 7, y: 8 })
     const settled = await settledOnBoth(a, b)
-    expect(settled.moves!.slice(0, 2)).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
-    expect(['black', 'white']).toContain(settled.moves![2])
+    expect(settled.moves).toEqual([{ x: 6, y: 7 }, { x: 7, y: 8 }])
   })
 
   it('applies the proposed settings when a rematch is accepted', async () => {

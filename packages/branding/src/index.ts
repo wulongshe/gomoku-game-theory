@@ -6,7 +6,6 @@ export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
 
 export const MODE_LABELS: Record<GameMode, string> = {
-  race: '抢点',
   forbidden: '禁点',
   minus: '负子',
 }
@@ -18,8 +17,7 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   master: '大师',
 }
 
-export function rules(audience: RuleAudience = 'pvp') {
-  const pvp = audience === 'pvp'
+export function rules() {
   return [
     {
       icon: '⚡',
@@ -29,7 +27,7 @@ export function rules(audience: RuleAudience = 'pvp') {
     {
       icon: '🧠',
       title: '撞子博弈，读心制胜',
-      text: pvp ? '双方落同一点，该点变为禁点、负子或归先下者' : '双方落同一点，该点变为禁点或负子',
+      text: '双方落同一点，该点变为禁点或负子',
     },
     {
       icon: '⭐',
@@ -41,14 +39,14 @@ export function rules(audience: RuleAudience = 'pvp') {
 
 export type RuleAudience = 'pvp' | 'ai'
 
-// 完整规则按受众过滤：联机（pvp）含限时/草稿/变更/退出判负/抢点等条目，
-// 人机（ai）恒不限时、单步提交即结算、无抢点模式，换用对应表述。
+// 完整规则按受众过滤：联机（pvp）含限时/草稿/变更/退出判负等条目，
+// 人机（ai）恒不限时、单步提交即结算，换用对应表述。
 const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience }[] }[] = [
   {
     title: '⚡ 同时落子',
     items: [
       {
-        text: '每回合限时 30/60/120 秒或不限时，双方各自秘密选点，双方都提交或时间到后同时落子',
+        text: '每回合限时 30/60 秒或不限时，双方各自秘密选点，双方都提交或时间到后同时落子',
         only: 'pvp',
       },
       { text: '你与 AI 各自秘密选点，提交后同时落子', only: 'ai' },
@@ -64,7 +62,6 @@ const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience
       { text: '双方落在同一点即为撞子，按开局时选择的模式处理' },
       { text: '禁点模式：该点变为禁点，双方都无法再落子' },
       { text: '负子模式：化作负子，双方连线时都减 1' },
-      { text: '抢点模式：先提交的一方得到该点，成为其棋子', only: 'pvp' },
       { text: '禁点连成五：整条禁点线清除，位置重新可用' },
     ],
   },

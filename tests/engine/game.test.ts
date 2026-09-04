@@ -127,27 +127,6 @@ describe('settleFrame', () => {
     expect(next.phase).toBe('black_won')
   })
 
-  it('awards a race-mode collision to the first submitter', () => {
-    const black = settleFrame(createGame('race'), {
-      black: { x: 6, y: 6 },
-      white: { x: 6, y: 6 },
-      first: 'black',
-    })
-    expect(cellAt(black, { x: 6, y: 6 })).toBe('black')
-    const white = settleFrame(createGame('race'), {
-      black: { x: 6, y: 6 },
-      white: { x: 6, y: 6 },
-      first: 'white',
-    })
-    expect(cellAt(white, { x: 6, y: 6 })).toBe('white')
-  })
-
-  it('wins when a race-mode collision completes five for the winner', () => {
-    const game = withStones({ black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'race')
-    const next = settleFrame(game, { black: { x: 4, y: 5 }, white: { x: 4, y: 5 }, first: 'black' })
-    expect(next.phase).toBe('black_won')
-  })
-
   it('treats null as a pass, placing only the other stone', () => {
     const next = settleFrame(createGame(), { black: null, white: { x: 6, y: 6 } })
     expect(cellAt(next, { x: 6, y: 6 })).toBe('white')

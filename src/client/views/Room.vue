@@ -143,8 +143,8 @@ function restoreMoves(state: GameState) {
     } | null
     if (!saved || saved.code !== props.code || !saved.moves.length) return
     let replayed = createGame(state.mode)
-    for (const [black, white, first] of saved.moves) {
-      replayed = settleFrame(replayed, { black, white, first })
+    for (const [black, white] of saved.moves) {
+      replayed = settleFrame(replayed, { black, white })
       recordFrame(replayed)
     }
     if (replayed.frame === state.frame && replayed.phase === state.phase) {

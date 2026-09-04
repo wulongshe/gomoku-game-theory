@@ -1,7 +1,7 @@
 import type { GameMode, GameState, Point, Seat } from '@gomoku/engine/game'
 
-export const FRAME_OPTIONS = [30, 60, 120, 0]
-export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus', 'race']
+export const FRAME_OPTIONS = [30, 60, 0]
+export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus']
 
 // 房号纯数字、优先 4 位好记；同长度接连撞车（房间多）才升到 6、8 位。
 export const ROOM_CODE_LENGTHS = [4, 6, 8]
@@ -67,8 +67,8 @@ export type ServerMessage =
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
 
-// 一帧的双方落点（null = 弃着）与先手方（race 撞子归属需要，重放才能复现）。
-export type FrameMoves = [Point | null, Point | null, Seat]
+// 一帧的双方落点（null = 弃着），用于复盘重放。
+export type FrameMoves = [Point | null, Point | null]
 
 export interface Standing {
   email: string

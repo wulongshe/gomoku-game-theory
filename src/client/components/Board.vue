@@ -70,17 +70,6 @@ const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p)
 
 const minuses = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'minus'))
 
-// 抢点撞子留存的棋子：先叠一枚太极旋转揭示，再淡出露出下方先手方棋色。
-const TAICHI_R = STONE_R
-const TAICHI_PATH = `M 0 ${-TAICHI_R} a ${TAICHI_R} ${TAICHI_R} 0 0 0 0 ${TAICHI_R * 2} a ${TAICHI_R / 2} ${TAICHI_R / 2} 0 0 0 0 ${-TAICHI_R} a ${TAICHI_R / 2} ${TAICHI_R / 2} 0 0 1 0 ${-TAICHI_R} z`
-const TAICHI_DOT = TAICHI_R * 0.16
-const contested = computed(() => {
-  const c = props.state.contested
-  if (!c) return null
-  const cell = cellAt(props.state, c)
-  return cell === 'black' || cell === 'white' ? c : null
-})
-
 const VANISH_BASE_MS = 280
 const VANISH_STEP_MS = 90
 
@@ -240,19 +229,6 @@ function isLastMove(p: Point): boolean {
         :fill="stone.cell === 'black' ? '#ffffff' : '#1c1917'"
         opacity="0.85"
       />
-    </g>
-
-    <g
-      v-if="contested"
-      :key="`tc${state.frame},${contested.x},${contested.y}`"
-      :transform="`translate(${pos(contested.x)}, ${pos(contested.y)})`"
-    >
-      <g class="origin-center animate-[taichi-reveal_0.9s_ease-out_both] [transform-box:fill-box]">
-        <circle :r="TAICHI_R" fill="#fafaf9" stroke="#a8a29e" stroke-width="1" />
-        <path :d="TAICHI_PATH" fill="#1c1917" />
-        <circle :cx="0" :cy="-TAICHI_R / 2" :r="TAICHI_DOT" fill="#1c1917" />
-        <circle :cx="0" :cy="TAICHI_R / 2" :r="TAICHI_DOT" fill="#fafaf9" />
-      </g>
     </g>
 
     <g v-for="p in minuses" :key="`m${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">

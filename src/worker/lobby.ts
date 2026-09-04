@@ -36,22 +36,13 @@ export function parseMatchOptions(params: URLSearchParams): MatchOptions | null 
   return { frames, modes, rating }
 }
 
-const UNTIMED_RACE_WEIGHT = 2
-
 export function pickSettings(
   frames: number[],
   modes: GameMode[],
   rng: () => number = Math.random,
 ): { frame: number; mode: GameMode } {
   const combos = frames.flatMap((frame) => modes.map((mode) => ({ frame, mode })))
-  const weight = (c: { frame: number; mode: GameMode }) =>
-    c.frame === 0 && c.mode === 'race' ? UNTIMED_RACE_WEIGHT : 1
-  let roll = rng() * combos.reduce((sum, c) => sum + weight(c), 0)
-  for (const combo of combos) {
-    roll -= weight(combo)
-    if (roll < 0) return combo
-  }
-  return combos[combos.length - 1]
+  return combos[Math.min(combos.length - 1, Math.floor(rng() * combos.length))]
 }
 
 export function tolerance(waitedMs: number): number {

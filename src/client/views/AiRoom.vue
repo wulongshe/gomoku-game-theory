@@ -80,8 +80,8 @@ if (savedGame) {
   try {
     const saved = JSON.parse(localStorage.getItem(AI_MOVES_KEY) ?? '[]') as FrameMoves[]
     let replayed = createGame(savedGame.mode)
-    for (const [black, white, first] of saved) {
-      replayed = settleFrame(replayed, { black, white, first })
+    for (const [black, white] of saved) {
+      replayed = settleFrame(replayed, { black, white })
       recordFrame(replayed)
     }
     if (replayed.frame === savedGame.frame) movesLog = saved
@@ -147,9 +147,8 @@ async function resolveFrame() {
   const seq = ++submitSeq
   const aiMove = await (pendingAiMove ?? ai.request(game.value, 'white', difficulty.value))
   if (seq !== submitSeq) return
-  const first = Math.random() < 0.5 ? 'black' : 'white'
-  const next = settleFrame(game.value, { black: selected.value, white: aiMove, first })
-  logMove([selected.value, aiMove, first])
+  const next = settleFrame(game.value, { black: selected.value, white: aiMove })
+  logMove([selected.value, aiMove])
   recordFrame(next)
   lastMoves.value = next.lastMoves
   vanishing.value = next.cleared
