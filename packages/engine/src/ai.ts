@@ -1,5 +1,5 @@
 import { settleFrame, type GameState, type Point, type Seat } from './game'
-import { analyzeBoard, evaluateState, sampleIndex } from './eval'
+import { analyzeBoard, evaluateState, sampleIndex, WIN_SCORE } from './eval'
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
 
@@ -64,19 +64,73 @@ function solveMaximin(matrix: number[][]): number[] {
   return rowCount.map((c) => c / FICTITIOUS_ITERATIONS)
 }
 
-// 第三层：top-K 收益矩阵 → 虚拟对弈极大极小混合策略 → 采样；也作为无 Worker 时 MCTS 的同步兜底。
-export function chooseAiMove(
+export interface PositionAssessment {
+  // 对手已形成己方无法全挡的多重胜点（叉），基本已负。
+  losing: boolean
+  // 己方已形成对手无法招架的多重胜点，稳占上风。
+  commanding: boolean
+}
+
+export interface AiDecision extends PositionAssessment {
+  point: Point | null
+  // 局面紧迫度：0 = 唯一手/必应/可直接取胜（宜秒下），1 = 均势宽阔的真岔路口（可长考）。
+  criticality: number
+}
+
+// threatValue 对 ≥2 个胜点额外加满一个 WIN_SCORE，故 ≥2·WIN_SCORE ⟺ 已成叉（单胜点可挡）。
+function assess(threatSelf: number, threatOpp: number) {
+  const canWin = threatSelf >= WIN_SCORE
+  const mustRespond = threatOpp >= WIN_SCORE
+  return {
+    canWin,
+    mustRespond,
+    losing: threatOpp >= 2 * WIN_SCORE && !canWin,
+    commanding: threatSelf >= 2 * WIN_SCORE && !mustRespond,
+  }
+}
+
+// 仅研判胜负态势（一次全盘扫描，不做虚拟对弈）：供只关心和/降决策、无需选点的场景。
+export function assessPosition(
   state: GameState,
   seat: Seat,
   difficulty: Difficulty = 'normal',
-): Point | null {
+): PositionAssessment {
+  const { candidates } = DIFFICULTY_SETTINGS[difficulty]
+  const { threatSelf, threatOpp } = analyzeBoard(state, seat, candidates)
+  const { losing, commanding } = assess(threatSelf, threatOpp)
+  return { losing, commanding }
+}
+
+// 第三层：top-K 收益矩阵 → 虚拟对弈极大极小混合策略 → 采样；也作为无 Worker 时 MCTS 的同步兜底。
+// 顺带给出局面研判（紧迫度/胜负态势），供上层拟人调度思考时长与和/降决策。
+export function decideAiMove(
+  state: GameState,
+  seat: Seat,
+  difficulty: Difficulty = 'normal',
+): AiDecision {
   const { candidates, explore } = DIFFICULTY_SETTINGS[difficulty]
-  const { aiMoves, oppMoves } = analyzeBoard(state, seat, candidates)
-  if (aiMoves.length <= 1) return aiMoves[0] ?? null
+  const { aiMoves, oppMoves, threatSelf, threatOpp } = analyzeBoard(state, seat, candidates)
+  const { canWin, mustRespond, losing, commanding } = assess(threatSelf, threatOpp)
+  if (aiMoves.length <= 1) {
+    return { point: aiMoves[0] ?? null, criticality: 0, losing, commanding }
+  }
 
   const matrix = aiMoves.map((ai) => oppMoves.map((opp) => payoff(state, seat, ai, opp)))
   const equilibrium = solveMaximin(matrix)
   const n = aiMoves.length
   const dist = equilibrium.map((p) => (1 - explore) * p + explore / n)
-  return aiMoves[sampleIndex(dist)]
+  const point = aiMoves[sampleIndex(dist)]
+  // 均衡越集中在一手 → 最优手越清晰 → 越该快下；防守手选择余地小，也压低紧迫度。
+  let criticality = 1 - Math.max(...equilibrium)
+  if (mustRespond) criticality *= 0.4
+  if (canWin) criticality = 0
+  return { point, criticality, losing, commanding }
+}
+
+export function chooseAiMove(
+  state: GameState,
+  seat: Seat,
+  difficulty: Difficulty = 'normal',
+): Point | null {
+  return decideAiMove(state, seat, difficulty).point
 }

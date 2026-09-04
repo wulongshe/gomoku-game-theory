@@ -9,7 +9,7 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import { chooseAiMove, type Difficulty } from '@gomoku/engine/ai'
+import { assessPosition, decideAiMove, type Difficulty } from '@gomoku/engine/ai'
 import {
   maskEmail,
   parseClientMessage,
@@ -18,6 +18,7 @@ import {
   type ServerMessage,
 } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
+import { botPersona, type BotPersona } from './bots'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -34,11 +35,16 @@ function lateness(frame: number): number {
   return Math.min(1, (frame - 1) / 30)
 }
 
-// 拟人思考时长：限时局压在时限的六成与 10.5s 之内，不限时局也别让对面干等；
-// 开局出手快，越到中后盘想得越久。
-function aiThinkDelay(frameSeconds: number, late: number): number {
-  const cap = frameSeconds ? Math.min(frameSeconds * 600, 9000) : 8000
-  return 1500 + Math.random() * cap * (0.35 + 0.65 * late)
+// 开帧后的「反应」延时：先扫一眼再动，避免 0ms 秒回；真正的思考长短在 aiThinkTime 里按局面定。
+function aiReaction(): number {
+  return 280 + Math.random() * 500
+}
+
+// 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下；
+// 再乘 bot 手速性格。上限始终由调用处按 budget 与帧长 10% 余量收口，绝不磨到超时。
+function aiThinkTime(criticality: number, late: number, speed: number): number {
+  const base = 250 + criticality * (2200 + 3500 * late)
+  return base * (0.65 + Math.random() * 0.7) * speed
 }
 
 // 提交时限随手数放宽，越往后可以长考。
@@ -456,10 +462,7 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.setAlarm(deadline)
     }
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
-      await this.planAi(
-        seat,
-        Math.min(aiThinkDelay(frameSeconds, lateness(game.frame)), aiSubmitCap(game.frame) - 4000),
-      )
+      await this.planAi(seat, aiReaction())
     }
     return deadline
   }
@@ -749,10 +752,10 @@ export class Room extends DurableObject<Env> {
     tournament: TournamentTag | undefined,
   ): Promise<void> {
     if (game.phase === 'playing') {
+      const persona = botPersona(this.env.TOURNAMENT_BOTS, info.email)
       if (await this.ctx.storage.get<boolean>('aiDrawOffered')) {
         await this.ctx.storage.delete('aiDrawOffered')
-        this.broadcast({ type: 'draw_declined' })
-        return this.planAi(seat, 1200 + Math.random() * 2500)
+        return this.aiRespondDraw(seat, info, game, tournament, persona)
       }
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
       const current = choices[seat]
@@ -767,22 +770,26 @@ export class Room extends DurableObject<Env> {
         if (choices[other]?.final) return this.settle(game, choices)
         return this.armAlarm()
       }
-      // 节奏随对局推进变化：开局多半选完就直接提交，中后盘更常犹豫一阵才交——像真人
-      // 越下越谨慎。总耗时压在 aiSubmitCap 内，且至少留出帧长 10% 的余量提交，绝不磨到超时。
+      // 思考时长随局面而定：必应/唯一手/可取胜近乎秒下，均势岔路口才犹豫长考；再乘手速性格。
+      // 总耗时压在 aiSubmitCap 内，且至少留出帧长 10% 的余量提交，绝不磨到超时。
       const late = lateness(game.frame)
       const frameStart = (await this.ctx.storage.get<number>('frameStart')) ?? Date.now()
       const budget = aiSubmitCap(game.frame) - (Date.now() - frameStart)
       const slack =
         deadline !== undefined ? left - (deadline - frameStart) * 0.1 : Infinity
       if (!current) {
-        const point = chooseAiMove(game, seat, info.difficulty)
-        if (left < 3500 || budget < 4000 || slack < 1000 || Math.random() < 0.55 - 0.4 * late) {
-          return submit(point)
+        const decision = decideAiMove(game, seat, info.difficulty)
+        // 绝望局（对手已成己方挡不全的叉）按性格小概率认输——真人不会每盘都磨到底。
+        if (decision.losing && Math.random() < (1 - persona.grit) * 0.3) {
+          return this.aiResign(seat, game)
         }
+        const point = decision.point
+        if (left < 3500 || budget < 4000 || slack < 1000) return submit(point)
+        const think = aiThinkTime(decision.criticality, late, persona.speed)
+        if (think <= 600) return submit(point) // 明显手：略一思忖即交（≈秒下）
         choices[seat] = { point, final: false }
         await this.ctx.storage.put('choices', choices)
-        const dwell = Math.random() < 0.7 ? 500 + Math.random() * 2500 : 3000 + Math.random() * 5000
-        return this.planAi(seat, Math.min(dwell, Math.max(500, budget), slack))
+        return this.planAi(seat, Math.min(think, Math.max(500, budget), slack))
       }
       return submit(current.point)
     }
@@ -794,6 +801,45 @@ export class Room extends DurableObject<Env> {
       return this.scheduleAiArrivals(await this.aiSeats(), 800 + Math.random() * 2000)
     }
     return this.armAlarm()
+  }
+
+  // 真人求和时的回应：长局且己方未占上风才按性格概率接受，落后时更愿意握手言和；否则婉拒后照常出手。
+  private async aiRespondDraw(
+    seat: Seat,
+    info: AiSeatInfo,
+    game: GameState,
+    tournament: TournamentTag | undefined,
+    persona: BotPersona,
+  ): Promise<void> {
+    // 只需胜负态势判断，走轻量研判（不做选点的虚拟对弈）。
+    const { commanding, losing } = assessPosition(game, seat, info.difficulty)
+    const drawFloor = tournament ? 30 : 12 // 和棋计分下限：大赛需 ≥30 手，否则判无效
+    const accept =
+      !commanding &&
+      game.frame >= drawFloor &&
+      Math.random() < persona.drawish + (losing ? 0.35 : 0)
+    if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
+    this.broadcast({ type: 'draw_declined' })
+    // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
+    const deadline = await this.ctx.storage.get<number>('deadline')
+    const frameStart = (await this.ctx.storage.get<number>('frameStart')) ?? Date.now()
+    let delay = 1200 + Math.random() * 2500
+    if (deadline !== undefined) {
+      delay = Math.min(delay, deadline - Date.now() - (deadline - frameStart) * 0.1)
+    }
+    return this.planAi(seat, Math.max(0, delay))
+  }
+
+  private async aiResign(seat: Seat, game: GameState): Promise<void> {
+    // 只通知在场的对手（不含观战者，否则观战方会误弹「本局你获胜」）。
+    for (const ws of this.playerSockets()) {
+      this.send(ws, { type: 'opponent_resigned', left: false })
+    }
+    await this.endGame({
+      ...game,
+      phase: seat === 'black' ? 'white_won' : 'black_won',
+      cleared: [],
+    })
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {

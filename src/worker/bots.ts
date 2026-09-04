@@ -1,7 +1,68 @@
 import type { Difficulty } from '@gomoku/engine/ai'
 
+// 拟人「性格」：影响对局中的墙钟节奏与和/降决策。与名单同放 env（TOURNAMENT_BOTS），代码解析、不落库。
+export interface BotPersona {
+  speed: number // 想手墙钟倍率：~0.7 快手 .. ~1.4 慢性子
+  drawish: number // 0..1 长局均势时接受和棋的倾向
+  grit: number // 0..1 顽强度：越高越死不认输
+}
+
+// TOURNAMENT_BOTS 格式：分号（或换行）分隔各 bot；单个 bot 内部用逗号分隔，首项为邮箱、其余为 `key:val` 性格项，
+// 例：`a@x.com,speed:0.7,grit:0.95;b@x.com;c@x.com,speed:1.4,drawish:0.3`。
+interface RosterEntry {
+  email: string
+  persona: Partial<BotPersona>
+}
+
+// env 名单极少变动，按原始串缓存解析结果，避免每步 AI 出手都重扫一遍整份名单。
+let rosterCache: { raw: string | undefined; entries: RosterEntry[] } | null = null
+
+function parseRoster(raw: string | undefined): RosterEntry[] {
+  if (rosterCache && rosterCache.raw === raw) return rosterCache.entries
+  const out: RosterEntry[] = []
+  const seen = new Set<string>()
+  for (const chunk of (raw ?? '').split(/[;\n]/)) {
+    const [emailRaw, ...tokens] = chunk.split(',')
+    const email = emailRaw?.trim()
+    if (!email || seen.has(email)) continue
+    seen.add(email)
+    const persona: Partial<BotPersona> = {}
+    for (const token of tokens) {
+      const [k, v] = token.split(':').map((s) => s.trim())
+      const num = Number(v)
+      if ((k === 'speed' || k === 'drawish' || k === 'grit') && Number.isFinite(num)) {
+        persona[k] = num
+      }
+    }
+    out.push({ email, persona })
+  }
+  rosterCache = { raw, entries: out }
+  return out
+}
+
 export function parseBotPool(raw: string | undefined): string[] {
-  return [...new Set((raw ?? '').split(',').map((s) => s.trim()).filter(Boolean))]
+  return parseRoster(raw).map((e) => e.email)
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v))
+}
+
+// 无 env 配置时按身份哈希派生稳定的个体差异（兜底匿名 AI 取中性）。
+function defaultPersona(email: string | null): BotPersona {
+  if (!email) return { speed: 1, drawish: 0.12, grit: 0.82 }
+  const r = mulberry32(hashString(`persona:${email}`))
+  return { speed: 0.7 + r() * 0.7, drawish: 0.05 + r() * 0.35, grit: 0.6 + r() * 0.35 }
+}
+
+export function botPersona(raw: string | undefined, email: string | null): BotPersona {
+  const override = email ? parseRoster(raw).find((e) => e.email === email)?.persona : undefined
+  const merged = { ...defaultPersona(email), ...override }
+  return {
+    speed: clamp(merged.speed, 0.3, 2.5),
+    drawish: clamp(merged.drawish, 0, 1),
+    grit: clamp(merged.grit, 0, 1),
+  }
 }
 
 // 开赛前这段时间内 bot 按种子时间表陆续「报名」。

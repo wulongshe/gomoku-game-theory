@@ -118,7 +118,7 @@ describe('login and sessions', () => {
     await createUser('realuser@example.com', 'secret123')
     await runInDurableObject(accountsStub(), (instance) => {
       ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS =
-        'ghost1@bots.example,ghost2@bots.example'
+        'ghost1@bots.example,speed:0.7;ghost2@bots.example'
     })
     const res = await SELF.fetch('https://example.com/api/leaderboard')
     const board = await res.json<{

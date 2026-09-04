@@ -557,8 +557,8 @@ describe('websocket push', () => {
 describe('tournament bots', () => {
   const POOL = Array.from({ length: 10 }, (_, i) => `bot${i}@pool.example`)
 
-  it('parses the comma-separated pool from the environment value', () => {
-    expect(parseBotPool(' a@x , b@y ,,a@x,')).toEqual(['a@x', 'b@y'])
+  it('parses the semicolon-separated pool from the environment value', () => {
+    expect(parseBotPool(' a@x , speed:0.7 ; b@y ;;a@x;')).toEqual(['a@x', 'b@y'])
     expect(parseBotPool('')).toEqual([])
     expect(parseBotPool(undefined)).toEqual([])
   })

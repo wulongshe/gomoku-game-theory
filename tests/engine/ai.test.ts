@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseAiMove } from '@gomoku/engine/ai'
+import { assessPosition, chooseAiMove, decideAiMove } from '@gomoku/engine/ai'
 import { evaluateState } from '@gomoku/engine/eval'
 import {
   BOARD_SIZE,
@@ -119,5 +119,46 @@ describe('chooseAiMove', () => {
     const doubleThreat = withStones({ white: row(7, [4, 5, 6, 7]) })
     const singleThreat = withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] })
     expect(evaluateState(doubleThreat, 'white')).toBeGreaterThan(evaluateState(singleThreat, 'white'))
+  })
+})
+
+describe('decideAiMove', () => {
+  it('reports zero criticality and a commanding stance when it can win', () => {
+    const d = decideAiMove(withStones({ black: row(7, [4, 5, 6, 7]) }), 'black', 'hard')
+    expect(d.criticality).toBe(0)
+    expect(d.commanding).toBe(true)
+    expect(d.losing).toBe(false)
+  })
+
+  it('flags a losing fork but not a single blockable threat', () => {
+    const fork = decideAiMove(withStones({ white: row(7, [4, 5, 6, 7]) }), 'black', 'hard')
+    expect(fork.losing).toBe(true)
+    const single = decideAiMove(
+      withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] }),
+      'black',
+      'hard',
+    )
+    expect(single.losing).toBe(false)
+  })
+
+  it('assessPosition reports the same stance without picking a move', () => {
+    expect(assessPosition(withStones({ white: row(7, [4, 5, 6, 7]) }), 'black', 'hard')).toEqual({
+      losing: true,
+      commanding: false,
+    })
+    expect(assessPosition(withStones({ black: row(7, [4, 5, 6, 7]) }), 'black', 'hard')).toEqual({
+      losing: false,
+      commanding: true,
+    })
+  })
+
+  it('keeps a forced block far less critical than an open position', () => {
+    const forced = decideAiMove(
+      withStones({ white: row(7, [4, 5, 6, 7]), black: [{ x: 3, y: 7 }] }),
+      'black',
+      'hard',
+    )
+    const open = decideAiMove(withStones({ black: [{ x: 7, y: 7 }], white: [{ x: 8, y: 8 }] }), 'white', 'hard')
+    expect(open.criticality).toBeGreaterThan(forced.criticality)
   })
 })
