@@ -121,32 +121,6 @@ function winningLines(board: CellState[], seat: Seat, point: Point): number[][] 
   return lines
 }
 
-// 仍有夺胜可能 ⇔ 某条直线上存在不含对方棋子、加权和可达 5 的连续段（负子 −1，
-// 空点与禁点都按可成己子计 +1——禁点会因成排清空而复位，判定偏保守不会误判平局）。
-function canStillWin(board: CellState[], seat: Seat): boolean {
-  const opp = seat === 'black' ? 'white' : 'black'
-  for (const [dx, dy] of DIRECTIONS) {
-    for (let y = 0; y < BOARD_SIZE; y++) {
-      for (let x = 0; x < BOARD_SIZE; x++) {
-        const px = x - dx
-        const py = y - dy
-        if (px >= 0 && px < BOARD_SIZE && py >= 0 && py < BOARD_SIZE) continue
-        let run = 0
-        let cx = x
-        let cy = y
-        while (cx >= 0 && cx < BOARD_SIZE && cy >= 0 && cy < BOARD_SIZE) {
-          const cell = board[cy * BOARD_SIZE + cx]
-          run = cell === opp ? 0 : Math.max(0, run + (cell === 'minus' ? -1 : 1))
-          if (run >= WIN_SCORE) return true
-          cx += dx
-          cy += dy
-        }
-      }
-    }
-  }
-  return false
-}
-
 function forbiddenRuns(board: CellState[]): number[][] {
   const runs: number[][] = []
   for (let y = 0; y < BOARD_SIZE; y++) {
@@ -232,8 +206,8 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       cleared.push({ origin: toCell(origin), cells: run.map(toCell) })
     }
     for (const i of runs.flat()) board[i] = 'empty'
-    if (!board.includes('empty') || (!canStillWin(board, 'black') && !canStillWin(board, 'white')))
-      phase = 'draw'
+    // 只有棋盘再无空点才判和：禁点可成排清空复位、腾出新空点，据当前局面提前判和会误判。
+    if (!board.includes('empty')) phase = 'draw'
   }
 
   const collided = black && white && black.x === white.x && black.y === white.y
