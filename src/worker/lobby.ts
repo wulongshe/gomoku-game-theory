@@ -94,7 +94,6 @@ export class Lobby extends DurableObject<Env> {
       opts: ws.deserializeAttachment() as Waiter,
     }))
 
-    // 只有选项能撮合的两人才可能成局；分差合规的记为 inBand，可立即成局。
     const pairs: Array<{
       i: number
       j: number

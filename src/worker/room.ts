@@ -25,8 +25,8 @@ const IDLE_TTL_MS = 10 * 60 * 1000
 // 严格 >= 判定落空 → 闹钟被改挂 10 分钟 → AI 行动点孤儿化）。判定一律容忍该偏差。
 const ALARM_SKEW_MS = 1500
 
-// 顶替真人的 AI（匹配久等兜底 / 大赛陪打 bot）：启发式单步走子（免费层 10ms CPU 限制内），
-// 行为节奏拟人（见各处随机延时）。
+// 顶替真人的 AI（匹配久等兜底 / 大赛陪打 bot）走启发式单步（免费层 10ms CPU 限制内），
+// 节奏拟人（见各处随机延时）。棋力：兜底 AI 固定此档，大赛 bot 用建房传入的浮动档。
 const AI_DIFFICULTY: Difficulty = 'normal'
 
 // 拟人节奏的对局进度插值：越下越慢、越犹豫。
@@ -41,7 +41,7 @@ function aiThinkDelay(frameSeconds: number, late: number): number {
   return 1500 + Math.random() * cap * (0.35 + 0.65 * late)
 }
 
-// 提交时限随手数放宽：前 5 手 10s 内交、5~10 手 15s，依次类推，越往后可以长考。
+// 提交时限随手数放宽，越往后可以长考。
 function aiSubmitCap(frame: number): number {
   return 10_000 + Math.floor((frame - 1) / 5) * 5_000
 }
@@ -482,7 +482,7 @@ export class Room extends DurableObject<Env> {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
     const { seat, spectator } = ws.deserializeAttachment() as Attachment
-    if (spectator) return // 观战者只读
+    if (spectator) return
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(ws, seat, game)

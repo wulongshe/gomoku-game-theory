@@ -33,30 +33,70 @@ function mulberry32(seed: number): () => number {
   }
 }
 
+const TIERS: Difficulty[] = ['easy', 'normal', 'hard', 'master']
+
+// 身份绑定的基准档：跨届稳定，代表这名「玩家」的常态水平。
 function botDifficulty(email: string): Difficulty {
-  const tiers: Difficulty[] = ['easy', 'normal', 'normal', 'hard']
-  return tiers[hashString(`diff:${email}`) % tiers.length]
+  const spread = [0, 1, 1, 2]
+  return TIERS[spread[hashString(`diff:${email}`) % spread.length]]
 }
 
-function shuffled(dateKey: string, pool: string[]): { order: string[]; rand: () => number } {
-  const rand = mulberry32(hashString(dateKey))
-  const order = [...pool]
+// 每局实际棋力在基准 ±1 档内浮动（0.6 基准、上下各 0.2，越界收回），像真人的状态起伏。
+export function gameDifficulty(base: Difficulty, rand: () => number = Math.random): Difficulty {
+  const i = TIERS.indexOf(base)
+  const r = rand()
+  const j = r < 0.6 ? i : r < 0.8 ? i - 1 : i + 1
+  return TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]
+}
+
+// bot 对 bot 同档极易和棋：撞档时把 b 挪到其浮动范围内的另一档，保证两侧不同。
+export function pairedBotDifficulties(
+  baseA: Difficulty,
+  baseB: Difficulty,
+  rand: () => number = Math.random,
+): [Difficulty, Difficulty] {
+  const a = gameDifficulty(baseA, rand)
+  let b = gameDifficulty(baseB, rand)
+  if (b === a) {
+    const i = TIERS.indexOf(baseB)
+    const band = [i - 1, i, i + 1]
+      .filter((j) => j >= 0 && j < TIERS.length)
+      .map((j) => TIERS[j])
+      .filter((d) => d !== a)
+    b = band[Math.floor(rand() * band.length)]
+  }
+  return [a, b]
+}
+
+function shuffle(items: string[], rand: () => number): string[] {
+  const order = [...items]
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1))
     ;[order[i], order[j]] = [order[j], order[i]]
   }
-  return { order, rand }
+  return order
 }
 
-// 3~7 人逐日波动，真人稀少时终局人数（奇偶皆可）也随之变化。
-function lineupSize(rand: () => number, poolSize: number): number {
-  return Math.max(0, Math.min(3 + Math.floor(rand() * 5), poolSize))
+// 阵容逐日演化：上一届成员大概率留任（名次靠前留任概率稍高），人数在 3~7 间 ±1 随机游走
+// （奇偶皆可），缺口从池中未在场者随机补——整体只做少量替换，不整套换血。
+function evolveLineup(rand: () => number, pool: string[], prevRanked: string[]): string[] {
+  const cap = Math.min(7, pool.length)
+  const prev = prevRanked.filter((e) => pool.includes(e))
+  if (prev.length === 0) return shuffle(pool, rand).slice(0, Math.min(3 + Math.floor(rand() * 5), cap))
+  const stay = prev.filter(
+    (_, i) => rand() < 0.85 - (prev.length > 1 ? (0.25 * i) / (prev.length - 1) : 0),
+  )
+  const target = Math.max(Math.min(3, cap), Math.min(prev.length + Math.floor(rand() * 3) - 1, cap))
+  const lineup = stay.slice(0, target)
+  const fresh = shuffle(pool.filter((e) => !lineup.includes(e)), rand)
+  while (lineup.length < target && fresh.length) lineup.push(fresh.pop()!)
+  return lineup
 }
 
-export function dailyBots(dateKey: string, pool: string[]): TournamentBot[] {
-  const { order, rand } = shuffled(dateKey, pool)
-  const count = lineupSize(rand, order.length)
-  return order.slice(0, count).map((email) => ({
+// prevRanked：上一届按名次排列的池内邮箱（榜单 ∩ 池），空 = 首届全随机。
+export function dailyBots(dateKey: string, pool: string[], prevRanked: string[] = []): TournamentBot[] {
+  const rand = mulberry32(hashString(dateKey))
+  return evolveLineup(rand, pool, prevRanked).map((email) => ({
     email,
     difficulty: botDifficulty(email),
     leadMs: Math.floor(rand() * REG_WINDOW_MS),
@@ -68,6 +108,7 @@ export function botRegistrations(
   pool: string[],
   startsAt: number,
   now: number,
+  prevRanked: string[] = [],
 ): TournamentBot[] {
-  return dailyBots(dateKey, pool).filter((b) => startsAt - b.leadMs <= now)
+  return dailyBots(dateKey, pool, prevRanked).filter((b) => startsAt - b.leadMs <= now)
 }

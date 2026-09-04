@@ -2,7 +2,13 @@ import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare
 import { describe, expect, it } from 'vitest'
 import { tournamentFrameSeconds } from '@/shared/protocol'
 import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
-import { botRegistrations, dailyBots, parseBotPool } from '@/worker/bots'
+import {
+  botRegistrations,
+  dailyBots,
+  gameDifficulty,
+  pairedBotDifficulties,
+  parseBotPool,
+} from '@/worker/bots'
 
 const NEUTRAL = () => 0.5
 
@@ -581,7 +587,64 @@ describe('tournament bots', () => {
     expect(dailyBots('2026-08-31', [])).toHaveLength(0)
   })
 
-  it('fills the field with bots to an even total when enabled', async () => {
+  const dateKey = (i: number) =>
+    new Date(Date.UTC(2026, 8, 1) + i * 86_400_000).toISOString().slice(0, 10)
+
+  it('evolves the lineup day by day with few replacements and varied odd/even sizes', () => {
+    let prev: string[] = []
+    const sizes = new Set<number>()
+    let retained = 0
+    let carried = 0
+    for (let i = 0; i < 60; i++) {
+      const next = dailyBots(dateKey(i), POOL, prev).map((b) => b.email)
+      expect(next.length).toBeGreaterThanOrEqual(3)
+      expect(next.length).toBeLessThanOrEqual(7)
+      sizes.add(next.length)
+      if (prev.length) {
+        retained += prev.filter((e) => next.includes(e)).length
+        carried += prev.length
+      }
+      prev = next
+    }
+    expect(sizes.size).toBeGreaterThanOrEqual(3)
+    expect([...sizes].some((n) => n % 2 === 1)).toBe(true)
+    // 少量替换：平均留任率过半
+    expect(retained / carried).toBeGreaterThan(0.5)
+  })
+
+  it('lets higher-ranked bots return more often than lower-ranked ones', () => {
+    const prevRanked = POOL.slice(0, 6)
+    let top = 0
+    let bottom = 0
+    for (let i = 0; i < 300; i++) {
+      const emails = dailyBots(dateKey(i), POOL, prevRanked).map((b) => b.email)
+      if (emails.includes(prevRanked[0])) top++
+      if (emails.includes(prevRanked[5])) bottom++
+    }
+    expect(top).toBeGreaterThan(bottom)
+  })
+
+  it('floats per-game difficulty within one tier of the base', () => {
+    const tiers = ['easy', 'normal', 'hard', 'master']
+    for (const base of ['easy', 'normal', 'hard'] as const) {
+      const seen = new Set<string>()
+      for (let i = 0; i < 1000; i++) seen.add(gameDifficulty(base))
+      const idx = tiers.indexOf(base)
+      for (const d of seen) expect(Math.abs(tiers.indexOf(d) - idx)).toBeLessThanOrEqual(1)
+      expect(seen.size).toBeGreaterThan(1)
+    }
+  })
+
+  it('never gives two bots in one game the same difficulty', () => {
+    for (let i = 0; i < 500; i++) {
+      const [a, b] = pairedBotDifficulties('normal', 'normal')
+      expect(a).not.toBe(b)
+      const [c, d] = pairedBotDifficulties('easy', 'hard')
+      expect(c).not.toBe(d)
+    }
+  })
+
+  it('fills the field with bots when enabled', async () => {
     await seed({ registrations: ['solo@x'] })
     await runInDurableObject(stub(), (instance) => {
       ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS = POOL.join(',')

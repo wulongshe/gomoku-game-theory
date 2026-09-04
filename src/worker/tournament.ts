@@ -8,7 +8,13 @@ import {
   type TournamentInfo,
 } from '@/shared/protocol'
 import { allocateRoom } from './roomCode'
-import { botRegistrations, dailyBots, parseBotPool } from './bots'
+import {
+  botRegistrations,
+  dailyBots,
+  gameDifficulty,
+  pairedBotDifficulties,
+  parseBotPool,
+} from './bots'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ROUND_MS = 10 * 60_000
@@ -51,7 +57,7 @@ interface TournamentState {
   roundDeadline: number | null
   registrations: string[]
   players: Record<string, Player>
-  bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 棋力
+  bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 基准棋力档（每局在 ±1 档内浮动）
   pairings: Pairing[] // 当前轮
   past: Pairing[][] // 已结束的各轮
   lastStandings: Standing[]
@@ -281,7 +287,7 @@ export class Tournament extends DurableObject<Env> {
     const pool = this.botPool()
     if (pool.length) {
       // 不凑偶数：奇数场次由瑞士轮轮空机制消化，人数更自然。
-      const bots = dailyBots(beijingDate(Date.now()), pool)
+      const bots = dailyBots(beijingDate(Date.now()), pool, this.prevRankedBots(s, pool))
       for (const bot of bots) {
         if (emails.includes(bot.email)) continue
         emails.push(bot.email)
@@ -367,12 +373,19 @@ export class Tournament extends DurableObject<Env> {
       if (p.result === 'bye') {
         this.applyResult(s, p)
       } else {
+        // 双 bot 强制异档：同档互搏极易和棋。
+        const baseA = s.bots[p.players[0]] ?? null
+        const baseB = s.bots[p.players[1]!] ?? null
+        const bots: [Difficulty | null, Difficulty | null] =
+          baseA && baseB
+            ? pairedBotDifficulties(baseA, baseB)
+            : [baseA && gameDifficulty(baseA), baseB && gameDifficulty(baseB)]
         try {
           p.code = await allocateRoom(this.env, TFRAME, TMODE, {
             tournament: {
               round: s.round,
               players: [p.players[0], p.players[1]!],
-              bots: [s.bots[p.players[0]] ?? null, s.bots[p.players[1]!] ?? null],
+              bots,
             },
           })
         } catch {
@@ -490,7 +503,8 @@ export class Tournament extends DurableObject<Env> {
     // 报名注水：开赛前的报名人数惰性叠加当日 bot 时间表里已「报名」的数量。
     const pool = this.botPool()
     const virtualCount = pool.length
-      ? botRegistrations(beijingDate(startsAt), pool, startsAt, now).length
+      ? botRegistrations(beijingDate(startsAt), pool, startsAt, now, this.prevRankedBots(s, pool))
+          .length
       : 0
     return {
       state: s.state,
@@ -571,6 +585,12 @@ export class Tournament extends DurableObject<Env> {
 
   private botPool(): string[] {
     return parseBotPool(this.env.TOURNAMENT_BOTS)
+  }
+
+  // 上一届 bot 按名次排列（榜单 ∩ 池），供阵容逐日演化：池启用后每天必开赛，
+  // 上一届终榜必含当届全部 bot，无需另存阵容。
+  private prevRankedBots(s: TournamentState, pool: string[]): string[] {
+    return s.lastStandings.map((row) => row.email).filter((e) => pool.includes(e))
   }
 
   private async load(): Promise<TournamentState> {
