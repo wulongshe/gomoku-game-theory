@@ -35,9 +35,11 @@ function lateness(frame: number): number {
   return Math.min(1, (frame - 1) / 30)
 }
 
-// 开帧后的「反应」延时：先扫一眼再动，避免 0ms 秒回；真正的思考长短在 aiThinkTime 里按局面定。
-function aiReaction(): number {
-  return 280 + Math.random() * 500
+// 开帧后的「反应」延时：先看棋再落子，取帧长的一段（封顶 6s），避免秒下——这是明显手的主要耗时；
+// 均势岔路口的额外长考再由 aiThinkTime 按局面加码。无限时帧按一个较长的名义帧长取值。
+function aiReaction(frameMs: number): number {
+  const span = Math.min(frameMs * 0.5, 6000)
+  return span * (0.4 + Math.random() * 0.5)
 }
 
 // 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下；
@@ -472,8 +474,9 @@ export class Room extends DurableObject<Env> {
       await this.ctx.storage.put({ game, frameStart, deadline })
       await this.ctx.storage.setAlarm(deadline)
     }
+    const reactionFrameMs = frameSeconds > 0 ? frameSeconds * 1000 : 40_000
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
-      await this.planAi(seat, aiReaction())
+      await this.planAi(seat, aiReaction(reactionFrameMs))
     }
     return deadline
   }
