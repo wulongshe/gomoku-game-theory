@@ -567,7 +567,7 @@ describe('tournament bots', () => {
     const lineup = dailyBots('2026-08-31', POOL)
     expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
     expect(lineup.length).toBeGreaterThanOrEqual(1)
-    expect(lineup.length).toBeLessThanOrEqual(4)
+    expect(lineup.length).toBeLessThanOrEqual(3)
     expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
 
     const nextDay = dailyBots('2026-09-01', POOL)
@@ -609,7 +609,7 @@ describe('tournament bots', () => {
     for (let i = 0; i < 60; i++) {
       const next = dailyBots(dateKey(i), POOL, prev).map((b) => b.email)
       expect(next.length).toBeGreaterThanOrEqual(1)
-      expect(next.length).toBeLessThanOrEqual(4)
+      expect(next.length).toBeLessThanOrEqual(3)
       sizes.add(next.length)
       if (prev.length) {
         retained += prev.filter((e) => next.includes(e)).length
@@ -655,7 +655,7 @@ describe('tournament bots', () => {
     }
   })
 
-  it('fills the field with 1-4 bots and schedules their first seeks', async () => {
+  it('fills the field with 1-3 bots and schedules their first seeks', async () => {
     await seed({ registrations: ['solo@x'] })
     await runInDurableObject(stub(), (instance) => {
       ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS = POOL.join(',')
@@ -667,7 +667,7 @@ describe('tournament bots', () => {
     expect(emails).toContain('solo@x')
     const botEmails = Object.keys(s.bots)
     expect(botEmails.length).toBeGreaterThanOrEqual(1)
-    expect(botEmails.length).toBeLessThanOrEqual(4)
+    expect(botEmails.length).toBeLessThanOrEqual(3)
     // 竞技场不发牌：开赛时无配对，bot 各自排了首次「点匹配」的时点
     expect(s.pairings).toEqual([])
     for (const bot of botEmails) {

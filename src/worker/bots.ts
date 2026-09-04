@@ -68,6 +68,9 @@ export function botPersona(raw: string | undefined, email: string | null): BotPe
 // 开赛前这段时间内 bot 按种子时间表陆续「报名」。
 const REG_WINDOW_MS = 3 * 3600_000
 
+// 每届陪打 bot 人数上限。
+const MAX_BOTS = 3
+
 export interface TournamentBot {
   email: string
   difficulty: Difficulty
@@ -138,12 +141,14 @@ function shuffle(items: string[], rand: () => number): string[] {
   return order
 }
 
-// 阵容逐日演化：上一届成员大概率留任（名次靠前留任概率稍高），人数在 1~4 间 ±1 随机游走
+// 阵容逐日演化：上一届成员大概率留任（名次靠前留任概率稍高），人数在 1~MAX_BOTS 间 ±1 随机游走
 // （与真人报名数无关），缺口从池中未在场者随机补——整体只做少量替换，不整套换血。
 function evolveLineup(rand: () => number, pool: string[], prevRanked: string[]): string[] {
-  const cap = Math.min(4, pool.length)
+  const cap = Math.min(MAX_BOTS, pool.length)
   const prev = prevRanked.filter((e) => pool.includes(e))
-  if (prev.length === 0) return shuffle(pool, rand).slice(0, Math.min(1 + Math.floor(rand() * 4), cap))
+  if (prev.length === 0) {
+    return shuffle(pool, rand).slice(0, Math.min(1 + Math.floor(rand() * MAX_BOTS), cap))
+  }
   const stay = prev.filter(
     (_, i) => rand() < 0.85 - (prev.length > 1 ? (0.25 * i) / (prev.length - 1) : 0),
   )
