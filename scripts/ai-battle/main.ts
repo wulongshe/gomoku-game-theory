@@ -10,14 +10,14 @@ const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 10) // 并行对局数，
 const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）
 // 每方独立指定搜索参数（绕过难度预设，便于同预算公平对比）。
 const BLACK: SideConfig = {
-  candidates:  Number(process.env.CAND_BLACK ?? 9),
+  candidates:  Number(process.env.CAND_BLACK ?? 7),
   explore: Number(process.env.EXPLORE_BLACK ?? 0),
-  budgetMs: Number(process.env.BUDGET_BLACK ?? 3200)
+  budgetMs: Number(process.env.BUDGET_BLACK ?? 800),
 }
 const WHITE: SideConfig = {
-  candidates:  Number(process.env.CAND_WHITE ?? 10),
+  candidates:  Number(process.env.CAND_WHITE ?? 7),
   explore: Number(process.env.EXPLORE_WHITE ?? 0),
-  budgetMs: Number(process.env.BUDGET_WHITE ?? 3200),
+  budgetMs: Number(process.env.BUDGET_WHITE ?? 800),
 }
 // ==========================
 
