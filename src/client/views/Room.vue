@@ -584,7 +584,7 @@ function exitRoom() {
     />
 
     <template v-else-if="stage === 'playing' || stage === 'over'">
-      <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
+      <div class="flex w-full max-w-md flex-1 flex-col gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
             <IconStones v-if="spectating" class="h-4" />
@@ -640,27 +640,36 @@ function exitRoom() {
 
         <FrameBar v-if="frameSeconds > 0" :remaining-ratio="remainingRatio" :urgency="urgency" />
 
-        <div class="relative w-full">
-          <Board
-            v-if="reviewState ?? game"
-            :state="(reviewState ?? game)!"
-            :seat="seat"
-            :selected="reviewState ? null : selected"
-            :submitted="submitted"
-            :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
-            :vanishing="reviewState ? reviewState.cleared : vanishing"
-            :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
-            @select="select"
-          />
-          <ResultOverlay
-            v-if="stage === 'over' && !overlayDismissed && !spectating"
-            :char="resultChar"
-            :colors="resultColors"
-            @dismiss="overlayDismissed = true"
-          />
+        <div class="flex flex-1 items-center">
+          <div class="relative w-full">
+            <Board
+              v-if="reviewState ?? game"
+              :state="(reviewState ?? game)!"
+              :seat="seat"
+              :selected="reviewState ? null : selected"
+              :submitted="submitted"
+              :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
+              :vanishing="reviewState ? reviewState.cleared : vanishing"
+              :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
+              @select="select"
+            />
+            <ResultOverlay
+              v-if="stage === 'over' && !overlayDismissed && !spectating"
+              :char="resultChar"
+              :colors="resultColors"
+              @dismiss="overlayDismissed = true"
+            />
+          </div>
         </div>
 
         <template v-if="stage === 'playing' && !spectating">
+          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
+            <template v-if="errorNotice">{{ errorNotice }}</template>
+            <template v-else-if="frameSeconds > 0 && selected && !submitted">
+              倒计时结束将自动提交已选落点
+            </template>
+            <template v-else-if="submitted && !oppSubmitted">对方提交前可取消或变更落点</template>
+          </p>
           <AppButton
             class="w-full"
             :disabled="submitted ? oppSubmitted : !selected"
@@ -676,13 +685,6 @@ function exitRoom() {
                     : '点击棋盘选择落点'
             }}
           </AppButton>
-          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
-            <template v-if="errorNotice">{{ errorNotice }}</template>
-            <template v-else-if="frameSeconds > 0 && selected && !submitted">
-              倒计时结束将自动提交已选落点
-            </template>
-            <template v-else-if="submitted && !oppSubmitted">对方提交前可取消或变更落点</template>
-          </p>
           <div class="grid grid-cols-[1fr_auto_1fr] items-center">
             <span />
             <div class="flex items-center justify-center gap-1">
@@ -711,43 +713,50 @@ function exitRoom() {
           </div>
         </template>
 
-        <template v-else-if="tournament">
-          <AppButton class="w-full" @click="backOrReplace('/tournament')">返回每日大赛</AppButton>
-        </template>
-
         <template v-else>
-          <AppButton
-            v-if="!roomClosed && !oppLeft"
-            class="w-full"
-            :disabled="rematchAsked"
-            @click="openRematchConfig"
-          >
-            {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
-          </AppButton>
-          <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
-            {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
-          </p>
+          <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">
+            <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
+              上一回合
+            </AppButton>
+            <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
+              下一回合
+            </AppButton>
+          </div>
+
+          <template v-if="!tournament">
+            <AppButton
+              v-if="!roomClosed && !oppLeft"
+              class="w-full"
+              :disabled="rematchAsked"
+              @click="openRematchConfig"
+            >
+              {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
+            </AppButton>
+            <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
+              {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
+            </p>
+          </template>
+
+          <div v-if="seatAccounts.black || seatAccounts.white" class="flex justify-center">
+            <button
+              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+              aria-label="玩家信息"
+              @click="showPlayers = true"
+            >
+              <IconUsers class="size-5" />
+            </button>
+          </div>
         </template>
-
-        <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">
-          <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
-            上一回合
-          </AppButton>
-          <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
-            下一回合
-          </AppButton>
-        </div>
-
-        <div v-if="spectating" class="flex justify-center">
-          <button
-            class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-            aria-label="玩家信息"
-            @click="showPlayers = true"
-          >
-            <IconUsers class="size-5" />
-          </button>
-        </div>
       </div>
+
+      <button
+        v-if="spectating || (stage === 'over' && tournament)"
+        type="button"
+        class="shrink-0 cursor-pointer pt-2 text-xs text-stone-400 transition-colors hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+        @click="backOrReplace('/tournament')"
+      >
+        返回每日大赛
+      </button>
     </template>
 
     <template v-else>

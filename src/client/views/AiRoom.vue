@@ -232,7 +232,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
   <main
     class="flex min-h-dvh flex-col items-center bg-gradient-to-b from-stone-100 to-stone-200 p-4 dark:from-stone-900 dark:to-stone-950"
   >
-    <div class="flex w-full max-w-md flex-1 flex-col justify-center gap-3">
+    <div class="flex w-full max-w-md flex-1 flex-col gap-3">
       <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
         <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
           <IconStone seat="black" class="size-3.5" />
@@ -276,23 +276,25 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         />
       </div>
 
-      <div class="relative w-full">
-        <Board
-          :state="reviewState ?? game"
-          seat="black"
-          :selected="reviewState ? null : selected"
-          :submitted="resolving"
-          :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
-          :vanishing="reviewState ? reviewState.cleared : vanishing"
-          :interactive="playing && !resolving"
-          @select="select"
-        />
-        <ResultOverlay
-          v-if="!playing && !overlayDismissed"
-          :char="resultChar"
-          :colors="resultColors"
-          @dismiss="overlayDismissed = true"
-        />
+      <div class="flex flex-1 items-center">
+        <div class="relative w-full">
+          <Board
+            :state="reviewState ?? game"
+            seat="black"
+            :selected="reviewState ? null : selected"
+            :submitted="resolving"
+            :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
+            :vanishing="reviewState ? reviewState.cleared : vanishing"
+            :interactive="playing && !resolving"
+            @select="select"
+          />
+          <ResultOverlay
+            v-if="!playing && !overlayDismissed"
+            :char="resultChar"
+            :colors="resultColors"
+            @dismiss="overlayDismissed = true"
+          />
+        </div>
       </div>
 
       <template v-if="playing">
@@ -305,7 +307,6 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </AppButton>
       </template>
       <template v-else>
-        <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
         <div v-if="reviewAvailable" class="flex w-full gap-2">
           <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
             上一回合
@@ -314,6 +315,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
             下一回合
           </AppButton>
         </div>
+        <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
       </template>
     </div>
 
