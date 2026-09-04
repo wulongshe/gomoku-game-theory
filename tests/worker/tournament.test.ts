@@ -1,7 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { tournamentFrameSeconds } from '@/shared/protocol'
-import { beijingDate, nextDailyStart, pairRound, type SwissPlayer } from '@/worker/tournament'
+import { beijingDate, nextDailyStart } from '@/worker/tournament'
 import {
   botRegistrations,
   dailyBots,
@@ -10,36 +10,30 @@ import {
   parseBotPool,
 } from '@/worker/bots'
 
-const NEUTRAL = () => 0.5
-
-function player(email: string, over: Partial<SwissPlayer> = {}): SwissPlayer {
-  return { email, score: 0, opponents: [], byes: 0, ...over }
+interface TPlayer {
+  score: number
+  wins: number
+  games: number
+  opponents: string[]
 }
 
 interface TState {
   state: string
-  startedAt?: number
-  round: number
-  totalRounds: number
-  roundDeadline: number | null
+  startedAt: number
   registrations: string[]
-  players: Record<string, { score: number; opponents: string[]; byes: number }>
+  players: Record<string, TPlayer>
+  bots: Record<string, string>
+  queue: string[]
+  cooldowns: Record<string, number>
+  botSeekAt: Record<string, number>
   pairings: Array<{
-    code: string | null
-    players: [string, string | null]
+    code: string
+    players: [string, string]
     checkedIn: string[]
     started?: true
     result: string | null
+    createdAt: number
   }>
-  past: Array<
-    Array<{
-      code: string | null
-      players: [string, string | null]
-      checkedIn: string[]
-      started?: true
-      result: string | null
-    }>
-  >
   lastStandings: Array<{ email: string; score: number; played: number }>
 }
 
@@ -50,37 +44,46 @@ function stub() {
 function full(partial: Partial<TState>): TState {
   return {
     state: 'idle',
-    round: 0,
-    totalRounds: 0,
-    roundDeadline: null,
+    startedAt: 0,
     registrations: [],
     players: {},
+    bots: {},
+    queue: [],
+    cooldowns: {},
+    botSeekAt: {},
     pairings: [],
-    past: [],
     lastStandings: [],
     ...partial,
   }
+}
+
+function zeroed(emails: string[]): Record<string, TPlayer> {
+  return Object.fromEntries(emails.map((e) => [e, { score: 0, wins: 0, games: 0, opponents: [] }]))
 }
 
 function seed(partial: Partial<TState>): Promise<void> {
   return runInDurableObject(stub(), (_i, state) => state.storage.put('t', full(partial)))
 }
 
+function seedActive(emails: string[], over: Partial<TState> = {}): Promise<void> {
+  return seed({ state: 'active', startedAt: Date.now() - 60_000, players: zeroed(emails), ...over })
+}
+
 function read(): Promise<TState> {
   return runInDurableObject(stub(), (_i, state) => state.storage.get<TState>('t')) as Promise<TState>
 }
 
-async function fireStart(): Promise<void> {
-  await runInDurableObject(stub(), (_i, state) => state.storage.setAlarm(Date.now() - 1))
-  await runDurableObjectAlarm(stub())
+function patch(fn: (s: TState) => void): Promise<void> {
+  return runInDurableObject(stub(), async (_i, state) => {
+    const s = (await state.storage.get<TState>('t'))!
+    fn(s)
+    await state.storage.put('t', s)
+  })
 }
 
-async function resolveRound(round: number): Promise<void> {
-  const s = await read()
-  for (const p of s.pairings) {
-    if (p.result !== null || !p.code) continue
-    await stub().reportResult({ code: p.code, round, winnerEmail: p.players[0], moves: 40 })
-  }
+async function fireAlarm(): Promise<void> {
+  await runInDurableObject(stub(), (_i, state) => state.storage.setAlarm(Date.now() - 1))
+  await runDurableObjectAlarm(stub())
 }
 
 async function sessionFor(email: string): Promise<string> {
@@ -92,74 +95,13 @@ async function sessionFor(email: string): Promise<string> {
   return ver.token
 }
 
-describe('pairRound', () => {
-  it('pairs an even field top-to-bottom by score', () => {
-    const ps = pairRound(
-      [
-        player('a', { score: 3 }),
-        player('b', { score: 2 }),
-        player('c', { score: 1 }),
-        player('d', { score: 0 }),
-      ],
-      NEUTRAL,
-    )
-    expect(ps.map((p) => p.players)).toEqual([
-      ['a', 'b'],
-      ['c', 'd'],
-    ])
-    expect(ps.every((p) => p.result === null)).toBe(true)
-  })
-
-  it('gives a bye to the lowest scorer without one', () => {
-    const ps = pairRound(
-      [player('a', { score: 2 }), player('b', { score: 1 }), player('c', { score: 0 })],
-      NEUTRAL,
-    )
-    expect(ps.find((p) => p.result === 'bye')?.players).toEqual(['c', null])
-    expect(ps.find((p) => p.result === null)?.players).toEqual(['a', 'b'])
-  })
-
-  it('skips a player who already had a bye when assigning the next', () => {
-    const ps = pairRound(
-      [player('a', { score: 2 }), player('b', { score: 1 }), player('c', { score: 0, byes: 1 })],
-      NEUTRAL,
-    )
-    expect(ps.find((p) => p.result === 'bye')?.players).toEqual(['b', null])
-  })
-
-  it('avoids an immediate rematch when a fresh opponent exists', () => {
-    const ps = pairRound(
-      [
-        player('a', { score: 3, opponents: ['b'] }),
-        player('b', { score: 2, opponents: ['a'] }),
-        player('c', { score: 1 }),
-        player('d', { score: 0 }),
-      ],
-      NEUTRAL,
-    )
-    expect(ps.map((p) => p.players)).toEqual([
-      ['a', 'c'],
-      ['b', 'd'],
-    ])
-  })
-
-  it('falls back to a rematch when everyone has already met', () => {
-    const ps = pairRound(
-      [player('a', { opponents: ['b'] }), player('b', { opponents: ['a'] })],
-      NEUTRAL,
-    )
-    expect(ps).toHaveLength(1)
-    expect(ps[0].players).toEqual(['a', 'b'])
-  })
-})
-
 describe('tournamentFrameSeconds', () => {
-  it('starts at 10s, ramps 1s per frame after frame 5, caps at 30s', () => {
+  it('starts at 10s, ramps 1s per frame after frame 5, caps at 45s', () => {
     expect(tournamentFrameSeconds(1)).toBe(10)
     expect(tournamentFrameSeconds(5)).toBe(10)
     expect(tournamentFrameSeconds(6)).toBe(11)
-    expect(tournamentFrameSeconds(25)).toBe(30)
-    expect(tournamentFrameSeconds(45)).toBe(30)
+    expect(tournamentFrameSeconds(40)).toBe(45)
+    expect(tournamentFrameSeconds(60)).toBe(45)
   })
 })
 
@@ -171,149 +113,359 @@ describe('nextDailyStart', () => {
   })
 })
 
-describe('Tournament DO', () => {
-  it('starts a four-player event and pairs round one into rooms', async () => {
+describe('Arena tournament DO', () => {
+  it('starts the arena without auto-pairing anyone', async () => {
     await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
+    await fireAlarm()
     const s = await read()
     expect(s.state).toBe('active')
-    expect(s.round).toBe(1)
-    expect(s.totalRounds).toBe(2)
-    expect(s.pairings).toHaveLength(2)
-    expect(s.pairings.every((p) => p.code && p.result === null)).toBe(true)
+    expect(s.pairings).toEqual([])
+    expect(s.queue).toEqual([])
+    expect(Object.keys(s.players)).toHaveLength(4)
+    expect(s.players['a@x']).toEqual({ score: 0, wins: 0, games: 0, opponents: [] })
   })
 
-  it('runs every round then returns to idle with final standings', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    await resolveRound(1)
-    await resolveRound(2)
+  it('does not start with fewer than two players', async () => {
+    await seed({ registrations: ['solo@x'] })
+    await fireAlarm()
     const s = await read()
     expect(s.state).toBe('idle')
-    expect(s.lastStandings).toHaveLength(4)
-    expect(s.lastStandings[0].score).toBeGreaterThanOrEqual(s.lastStandings[3].score)
-    // 终榜按北京时间日期永久归档。
+    expect(s.registrations).toEqual(['solo@x'])
+  })
+
+  it('pairs two seekers into a room and clears the queue', async () => {
+    const ea = 'seek-a@example.com'
+    const eb = 'seek-b@example.com'
+    const ta = await sessionFor(ea)
+    const tb = await sessionFor(eb)
+    await seedActive([ea, eb])
+    const first = await stub().seekMatch(ta)
+    expect(first.my?.status).toBe('matching')
+    const second = await stub().seekMatch(tb)
+    expect(second.myGame?.code).toBeTruthy()
+    expect(second.my?.status).toBe('readying')
+    const s = await read()
+    expect(s.queue).toEqual([])
+    expect(s.pairings).toHaveLength(1)
+    expect([...s.pairings[0].players].sort()).toEqual([ea, eb])
+    expect(s.players[ea].opponents).toEqual([eb])
+    expect(s.players[eb].opponents).toEqual([ea])
+  })
+
+  it('cancels a pending seek and no-ops once already paired', async () => {
+    const e = 'unseek@example.com'
+    const t = await sessionFor(e)
+    await seedActive([e, 'b@x'])
+    await stub().seekMatch(t)
+    const cancelled = await stub().cancelSeek(t)
+    expect(cancelled.my?.status).toBe('idle')
+    expect((await read()).queue).toEqual([])
+
+    await patch((s) => {
+      s.pairings = [
+        { code: '0011', players: [e, 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
+      ]
+    })
+    const paired = await stub().cancelSeek(t)
+    expect(paired.my?.status).toBe('readying')
+    expect(paired.myGame).toEqual({ code: '0011' })
+  })
+
+  it('prefers a fresh opponent over an immediate rematch', async () => {
+    await seedActive(['a@x', 'b@x', 'c@x'], { queue: ['a@x', 'b@x', 'c@x'] })
+    await patch((s) => {
+      s.players['a@x'].opponents = ['b@x']
+      s.players['b@x'].opponents = ['a@x']
+    })
+    await fireAlarm()
+    const s = await read()
+    expect(s.pairings).toHaveLength(1)
+    expect([...s.pairings[0].players].sort()).toEqual(['a@x', 'c@x'])
+    expect(s.queue).toEqual(['b@x'])
+  })
+
+  it('blocks seeking during cooldown, an unresolved game, or after close', async () => {
+    const e = 'cool@example.com'
+    const t = await sessionFor(e)
+    await seedActive([e, 'b@x'])
+    await patch((s) => {
+      s.cooldowns[e] = Date.now() + 30_000
+    })
+    const cooling = await stub().seekMatch(t)
+    expect(cooling.my?.status).toBe('cooldown')
+    expect((await read()).queue).toEqual([])
+
+    await patch((s) => {
+      s.cooldowns[e] = Date.now() - 1
+    })
+    const ok = await stub().seekMatch(t)
+    expect(ok.my?.status).toBe('matching')
+
+    await patch((s) => {
+      s.queue = []
+      s.pairings = [
+        { code: '0009', players: [e, 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
+      ]
+    })
+    const busy = await stub().seekMatch(t)
+    expect(busy.my?.status).toBe('readying')
+    expect((await read()).queue).toEqual([])
+
+    await patch((s) => {
+      s.pairings = []
+      s.startedAt = Date.now() - 31 * 60_000
+    })
+    const late = await stub().seekMatch(t)
+    expect(late.my?.status).toBe('idle')
+    expect((await read()).queue).toEqual([])
+  })
+
+  it('scores a win, sets both cooldowns, and ignores duplicates and strangers', async () => {
+    await seedActive(['a@x', 'b@x', 'c@x'], {
+      pairings: [
+        { code: '0021', players: ['a@x', 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
+      ],
+    })
+    await stub().reportResult({ code: '0021', winnerEmail: 'ghost@x', moves: 40 })
+    expect((await read()).pairings[0].result).toBeNull()
+    await stub().reportResult({ code: '0021', winnerEmail: 'a@x', moves: 40 })
+    await stub().reportResult({ code: '0021', winnerEmail: 'b@x', moves: 40 })
+    const s = await read()
+    expect(s.pairings[0].result).toBe('a')
+    expect(s.players['a@x']).toMatchObject({ score: 1, wins: 1, games: 1 })
+    expect(s.players['b@x']).toMatchObject({ score: 0, wins: 0, games: 1 })
+    expect(s.cooldowns['a@x']).toBeGreaterThan(Date.now())
+    expect(s.cooldowns['b@x']).toBeGreaterThan(Date.now())
+    expect(s.state).toBe('active')
+  })
+
+  it('scores a long draw at 0.5 but voids a short one', async () => {
+    await seedActive(['a@x', 'b@x', 'c@x', 'd@x'], {
+      pairings: [
+        { code: '0031', players: ['a@x', 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
+        { code: '0032', players: ['c@x', 'd@x'], checkedIn: [], result: null, createdAt: Date.now() },
+      ],
+    })
+    await stub().reportResult({ code: '0031', winnerEmail: null, moves: 5 })
+    await stub().reportResult({ code: '0032', winnerEmail: null, moves: 40 })
+    const s = await read()
+    expect(s.pairings[0].result).toBe('void')
+    expect(s.players['a@x'].score).toBe(0)
+    expect(s.pairings[1].result).toBe('draw')
+    expect(s.players['c@x'].score).toBe(0.5)
+    expect(s.players['d@x'].score).toBe(0.5)
+  })
+
+  it('resolves a stalled pairing by attendance', async () => {
+    const stale = Date.now() - 3 * 60_000
+    await seedActive(['a@x', 'b@x', 'c@x', 'd@x'], {
+      pairings: [
+        { code: '0041', players: ['a@x', 'b@x'], checkedIn: ['a@x'], result: null, createdAt: stale },
+        { code: '0042', players: ['c@x', 'd@x'], checkedIn: [], result: null, createdAt: stale },
+      ],
+    })
+    await fireAlarm()
+    const s = await read()
+    expect(s.pairings[0].result).toBe('a')
+    expect(s.players['a@x'].score).toBe(1)
+    expect(s.pairings[1].result).toBe('void')
+    expect(s.players['c@x'].score).toBe(0)
+  })
+
+  it('honors a result landing after the window closed, then finishes and archives', async () => {
+    const opened = Date.now() - 31 * 60_000
+    await seedActive(['a@x', 'b@x'], {
+      startedAt: opened,
+      pairings: [
+        {
+          code: '0051',
+          players: ['a@x', 'b@x'],
+          checkedIn: ['a@x', 'b@x'],
+          started: true,
+          result: null,
+          createdAt: opened + 60_000,
+        },
+      ],
+    })
+    await fireAlarm() // 窗口已关但对局未决 → 不收官
+    expect((await read()).state).toBe('active')
+    await stub().reportResult({ code: '0051', winnerEmail: 'a@x', moves: 40 })
+    const s = await read()
+    expect(s.state).toBe('idle')
+    expect(s.lastStandings[0]).toMatchObject({ email: 'a@x', score: 1, played: 1 })
+    expect(s.lastStandings[1]).toMatchObject({ email: 'b@x', score: 0 })
     const archived = await runInDurableObject(stub(), (_i, st) =>
       st.storage.get(`standings:${beijingDate(Date.now())}`),
     )
     expect(archived).toEqual(s.lastStandings)
   })
 
-  it('does not start with fewer than two players', async () => {
-    await seed({ registrations: ['solo@x'] })
-    await fireStart()
+  it('finishes at window close when nothing is pending', async () => {
+    await seedActive(['a@x', 'b@x'], {
+      startedAt: Date.now() - 31 * 60_000,
+      pairings: [
+        {
+          code: '0061',
+          players: ['a@x', 'b@x'],
+          checkedIn: ['a@x', 'b@x'],
+          result: 'a',
+          createdAt: Date.now() - 20 * 60_000,
+        },
+      ],
+    })
+    await patch((s) => {
+      s.players['a@x'] = { score: 1, wins: 1, games: 1, opponents: ['b@x'] }
+      s.players['b@x'] = { score: 0, wins: 0, games: 1, opponents: ['a@x'] }
+    })
+    await fireAlarm()
     const s = await read()
     expect(s.state).toBe('idle')
-    expect(s.registrations).toEqual(['solo@x'])
+    expect(s.lastStandings.map((r) => r.email)).toEqual(['a@x', 'b@x'])
   })
 
-  it('ignores duplicate, stale-round, and stranger reports', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const [p0, p1] = (await read()).pairings
-    await stub().reportResult({ code: p0.code!, round: 1, winnerEmail: p0.players[0], moves: 40 })
-    await stub().reportResult({ code: p0.code!, round: 1, winnerEmail: p0.players[1], moves: 40 })
-    await stub().reportResult({ code: p1.code!, round: 99, winnerEmail: p1.players[0], moves: 40 })
-    await stub().reportResult({ code: p1.code!, round: 1, winnerEmail: 'ghost@x', moves: 40 })
-    const s = await read()
-    expect(s.players[p0.players[0]!].score).toBe(1)
-    expect(s.players[p0.players[1]!].score).toBe(0)
-    expect(s.pairings.find((p) => p.code === p1.code)?.result).toBeNull()
-    expect(s.round).toBe(1)
-  })
-
-  it('scores a long draw at 0.5 but voids a short one', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const [p0, p1] = (await read()).pairings
-    await stub().reportResult({ code: p0.code!, round: 1, winnerEmail: null, moves: 5 })
-    await stub().reportResult({ code: p1.code!, round: 1, winnerEmail: null, moves: 40 })
-    const s = await read()
-    expect(s.players[p0.players[0]!].score).toBe(0)
-    expect(s.players[p0.players[1]!].score).toBe(0)
-    expect(s.players[p1.players[0]!].score).toBe(0.5)
-    expect(s.players[p1.players[1]!].score).toBe(0.5)
-  })
-
-  it('draws an unfinished game between two present players at the round deadline', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const [p0] = (await read()).pairings
-    await stub().checkIn({ code: p0.code!, email: p0.players[0]! })
-    await stub().checkIn({ code: p0.code!, email: p0.players[1]! })
-    await runInDurableObject(stub(), async (_i, state) => {
-      const t = (await state.storage.get<TState>('t'))!
-      t.roundDeadline = Date.now() - 10_000
-      await state.storage.put('t', t)
-      await state.storage.setAlarm(Date.now() - 1)
+  it('wraps up zombie games long after close as draw or void', async () => {
+    const opened = Date.now() - 51 * 60_000
+    await seedActive(['a@x', 'b@x', 'c@x', 'd@x'], {
+      startedAt: opened,
+      pairings: [
+        {
+          code: '0071',
+          players: ['a@x', 'b@x'],
+          checkedIn: ['a@x', 'b@x'],
+          started: true,
+          result: null,
+          createdAt: opened + 60_000,
+        },
+        {
+          code: '0072',
+          players: ['c@x', 'd@x'],
+          checkedIn: ['c@x', 'd@x'],
+          result: null,
+          createdAt: opened + 60_000,
+        },
+      ],
     })
-    await runDurableObjectAlarm(stub())
+    await fireAlarm()
     const s = await read()
-    expect(s.players[p0.players[0]!].score).toBe(0.5)
-    expect(s.players[p0.players[1]!].score).toBe(0.5)
+    expect(s.state).toBe('idle')
+    const scores = Object.fromEntries(s.lastStandings.map((r) => [r.email, r.score]))
+    expect(scores['a@x']).toBe(0.5) // 已开局双方在场 → 判平
+    expect(scores['b@x']).toBe(0.5)
+    expect(scores['c@x']).toBe(0) // 未开局 → 作废
+    expect(scores['d@x']).toBe(0)
   })
 
-  it('awards a walkover to the only player who checked in', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const [p0] = (await read()).pairings
-    await stub().checkIn({ code: p0.code!, email: p0.players[0]! })
-    await runInDurableObject(stub(), async (_i, state) => {
-      const t = (await state.storage.get<TState>('t'))!
-      t.roundDeadline = Date.now() - 10_000
-      await state.storage.put('t', t)
-      await state.storage.setAlarm(Date.now() - 1)
+  it('sends due bots into the queue and pairs them', async () => {
+    const b0 = 'sb0@pool.example'
+    const b1 = 'sb1@pool.example'
+    await seedActive([b0, b1], {
+      bots: { [b0]: 'normal', [b1]: 'hard' },
+      botSeekAt: { [b0]: Date.now() - 5_000, [b1]: Date.now() - 3_000 },
     })
-    await runDurableObjectAlarm(stub())
+    await fireAlarm()
     const s = await read()
-    expect(s.players[p0.players[0]!].score).toBe(1)
-    expect(s.players[p0.players[1]!].score).toBe(0)
+    expect(s.pairings).toHaveLength(1)
+    expect(s.pairings[0].code).toBeTruthy()
+    expect(s.queue).toEqual([])
+    expect(Object.keys(s.botSeekAt)).toEqual([])
   })
 
-  it('forfeits no-shows three minutes into a round while games in progress continue', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const [p0, p1] = (await read()).pairings
-    // p0 两人都已进场（对局中），p1 只有一人进场。
-    await stub().checkIn({ code: p0.code!, email: p0.players[0]! })
-    await stub().checkIn({ code: p0.code!, email: p0.players[1]! })
-    await stub().checkIn({ code: p1.code!, email: p1.players[0]! })
-    // 把时间拨到弃权检查点之后、本轮截止之前。
-    await runInDurableObject(stub(), async (_i, state) => {
-      const t = (await state.storage.get<TState>('t'))!
-      t.roundDeadline = Date.now() + 60_000
-      await state.storage.put('t', t)
-      await state.storage.setAlarm(Date.now() - 1)
+  it('reschedules a bot seek after its game resolves', async () => {
+    const b0 = 'rs0@pool.example'
+    await seedActive([b0, 'h@x'], {
+      bots: { [b0]: 'normal' },
+      pairings: [
+        { code: '0081', players: [b0, 'h@x'], checkedIn: [], result: null, createdAt: Date.now() },
+      ],
     })
-    await runDurableObjectAlarm(stub())
+    await stub().reportResult({ code: '0081', winnerEmail: 'h@x', moves: 40 })
     const s = await read()
-    expect(s.round).toBe(1) // 还有对局在进行，不收轮
-    expect(s.pairings.find((p) => p.code === p0.code)?.result).toBeNull()
-    expect(s.pairings.find((p) => p.code === p1.code)?.result).toBe('a')
-    expect(s.players[p1.players[0]!].score).toBe(1)
-    expect(s.players[p1.players[1]!].score).toBe(0)
+    expect(s.botSeekAt[b0]).toBeGreaterThan(s.cooldowns[b0])
+  })
+})
+
+describe('arena statuses and spectate gating', () => {
+  it('derives the five player statuses and hands codes to free participants', async () => {
+    const me = 'status-me@example.com'
+    const token = await sessionFor(me)
+    await seedActive([me, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x'], {
+      queue: ['b@x'],
+      cooldowns: { 'g@x': Date.now() + 20_000 },
+      pairings: [
+        {
+          code: '0301',
+          players: ['c@x', 'd@x'],
+          checkedIn: ['c@x', 'd@x'],
+          started: true,
+          result: null,
+          createdAt: Date.now(),
+        },
+        { code: '0302', players: ['e@x', 'f@x'], checkedIn: ['e@x'], result: null, createdAt: Date.now() },
+        {
+          code: '0303',
+          players: [me, 'g@x'],
+          checkedIn: [me, 'g@x'],
+          result: 'a',
+          createdAt: Date.now() - 60_000,
+        },
+      ],
+    })
+    const info = await stub().getInfo(token)
+    expect(info.my).toMatchObject({ status: 'idle' })
+    const byEmail = Object.fromEntries(info.standings.map((r) => [r.email, r.status]))
+    expect(byEmail['b***@x']).toBe('matching')
+    expect(byEmail['c***@x']).toBe('playing')
+    expect(byEmail['d***@x']).toBe('playing')
+    expect(byEmail['e***@x']).toBe('readying')
+    expect(byEmail['g***@x']).toBe('cooldown')
+    // 我不在对局中 → 进行中的桌下发观战房号；已结束的不带
+    expect(info.games.find((m) => m.status === 'playing')?.code).toBe('0301')
+    expect(info.games.find((m) => m.status === 'done')?.code).toBeNull()
   })
 
-  it('keeps the next round on the fixed grid after an early finish', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    const first = await read()
-    await resolveRound(1) // 第 1 轮瞬间打完，第 2 轮立即开启
-    const s = await read()
-    expect(s.round).toBe(2)
-    // 第 2 轮的截止仍是名义网格（开赛+20min），而非提前开轮时点+10min。
-    expect(s.roundDeadline).toBe(first.startedAt! + 2 * 600_000)
+  it('hides spectate codes while my own game is unresolved', async () => {
+    const me = 'busy-me@example.com'
+    const token = await sessionFor(me)
+    await seedActive([me, 'b@x', 'c@x', 'd@x'], {
+      pairings: [
+        { code: '0311', players: [me, 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
+        {
+          code: '0312',
+          players: ['c@x', 'd@x'],
+          checkedIn: ['c@x', 'd@x'],
+          started: true,
+          result: null,
+          createdAt: Date.now(),
+        },
+      ],
+    })
+    const info = await stub().getInfo(token)
+    expect(info.my?.status).toBe('readying')
+    expect(info.myGame).toEqual({ code: '0311' })
+    expect(info.games.every((m) => m.code === null)).toBe(true)
   })
 
-  it('no-ops a superseded round alarm instead of voiding the new round', async () => {
-    await seed({ registrations: ['a@x', 'b@x', 'c@x', 'd@x'] })
-    await fireStart()
-    await resolveRound(1)
-    expect((await read()).round).toBe(2)
-    await runDurableObjectAlarm(stub()) // 未过期的本轮 alarm → closeRound 应直接返回
+  it('hides games from non-participants during an active event', async () => {
+    const outsider = await sessionFor('outsider@example.com')
+    await seedActive(['a@x', 'b@x'])
+    const info = await stub().getInfo(outsider)
+    expect(info.participating).toBe(false)
+    expect(info.standings.length).toBe(2)
+    expect(info.games).toEqual([])
+    expect(info.myGame).toBeNull()
+    expect(info.my).toBeNull()
+  })
+
+  it('lets a non-participant sign up for the next event during an active one', async () => {
+    const token = await sessionFor('late@example.com')
+    await seedActive(['a@x', 'b@x'])
+    const info = await stub().register(token)
+    expect(info.state).toBe('active')
+    expect(info.participating).toBe(false)
+    expect(info.registered).toBe(true)
     const s = await read()
-    expect(s.round).toBe(2)
-    expect(s.pairings.every((p) => p.result === null)).toBe(true)
+    expect(s.registrations).toContain('late@example.com')
+    expect(Object.keys(s.players).sort()).toEqual(['a@x', 'b@x'])
   })
 })
 
@@ -343,146 +495,11 @@ describe('Tournament routes', () => {
     expect(await withdrawn.json()).toMatchObject({ registered: false, playerCount: 0 })
   })
 
-  it('rejects registration without a token', async () => {
-    const res = await SELF.fetch('https://example.com/api/tournament/register', { method: 'POST' })
-    expect(res.status).toBe(401)
-  })
-})
-
-describe('active-state registration and spectating', () => {
-  function seedActive(players: string[]): Promise<void> {
-    return runInDurableObject(stub(), (_i, st) =>
-      st.storage.put(
-        't',
-        full({
-          state: 'active',
-          round: 1,
-          totalRounds: 1,
-          roundDeadline: Date.now() + 600_000,
-          players: Object.fromEntries(players.map((e) => [e, { score: 0, opponents: [], byes: 0 }])),
-          pairings: [{ code: '0001', players: [players[0], players[1]], checkedIn: [], result: null }],
-        }),
-      ),
-    )
-  }
-
-  it('lets a non-participant sign up for the next event during an active one', async () => {
-    const token = await sessionFor('late@example.com')
-    await seedActive(['a@x', 'b@x'])
-    const info = await stub().register(token)
-    expect(info.state).toBe('active')
-    expect(info.participating).toBe(false)
-    expect(info.registered).toBe(true)
-    const s = await read()
-    expect(s.registrations).toContain('late@example.com')
-    expect(Object.keys(s.players).sort()).toEqual(['a@x', 'b@x'])
-  })
-
-  it('shows live standings but hides pairings from non-participants', async () => {
-    const outsider = await sessionFor('outsider@example.com')
-    await seedActive(['a@x', 'b@x'])
-    const info = await stub().getInfo(outsider)
-    expect(info.participating).toBe(false)
-    expect(info.standings.length).toBe(2)
-    expect(info.rounds).toEqual([])
-    expect(info.myGame).toBeNull()
-  })
-
-  it('shows a participant their game and the live standings', async () => {
-    const email = 'inside@example.com'
-    const token = await sessionFor(email)
-    await seedActive([email, 'b@x'])
-    const info = await stub().getInfo(token)
-    expect(info.participating).toBe(true)
-    expect(info.myGame).toEqual({ code: '0001' })
-    expect(info.standings.length).toBe(2)
-  })
-
-  it('exposes per-round matches with status and result to participants', async () => {
-    const email = 'bracket@example.com'
-    const token = await sessionFor(email)
-    await runInDurableObject(stub(), (_i, st) =>
-      st.storage.put(
-        't',
-        full({
-          state: 'active',
-          round: 1,
-          totalRounds: 1,
-          roundDeadline: Date.now() + 600_000,
-          players: Object.fromEntries(
-            [email, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x', 'h@x'].map((e) => [
-              e,
-              { score: 0, opponents: [], byes: 0 },
-            ]),
-          ),
-          pairings: [
-            { code: '0001', players: [email, 'b@x'], checkedIn: [email, 'b@x'], result: 'a' },
-            {
-              code: '0002',
-              players: ['c@x', 'd@x'],
-              checkedIn: ['c@x', 'd@x'],
-              started: true,
-              result: null,
-            },
-            { code: '0003', players: ['e@x', 'f@x'], checkedIn: ['e@x'], result: null },
-            { code: '0004', players: ['g@x', 'h@x'], checkedIn: [], result: null },
-          ],
-        }),
-      ),
-    )
-    const info = await stub().getInfo(token)
-    expect(info.rounds.length).toBe(1)
-    expect(info.rounds[0][0]).toMatchObject({ status: 'done', result: 'a' })
-    expect(info.rounds[0][1].status).toBe('playing')
-    expect(info.rounds[0][2].status).toBe('readying')
-    expect(info.rounds[0][3].status).toBe('pending')
-    const byEmail = Object.fromEntries(info.standings.map((row) => [row.email, row.status]))
-    expect(byEmail['c***@x']).toBe('playing')
-    expect(byEmail['e***@x']).toBe('readying')
-    expect(byEmail['f***@x']).toBe('pending')
-  })
-
-  it('hides rounds from a participant whose own game is still unfinished', async () => {
-    const email = 'busy@example.com'
-    const token = await sessionFor(email)
-    await seedActive([email, 'b@x'])
-    const info = await stub().getInfo(token)
-    expect(info.participating).toBe(true)
-    expect(info.myGame).toEqual({ code: '0001' })
-    expect(info.rounds).toEqual([]) // 自己的对局没打完，不能观战
-  })
-
-  it('hides rounds from a forfeited (left) participant', async () => {
-    const email = 'ghosted@example.com'
-    const token = await sessionFor(email)
-    await runInDurableObject(stub(), (_i, st) =>
-      st.storage.put(
-        't',
-        full({
-          state: 'active',
-          round: 1,
-          totalRounds: 1,
-          roundDeadline: Date.now() + 600_000,
-          players: Object.fromEntries(
-            [email, 'b@x', 'c@x', 'd@x'].map((e) => [e, { score: 0, opponents: [], byes: 0 }]),
-          ),
-          pairings: [
-            // 缺席判负（没到场）→ 已离开，不给观战。
-            { code: '0001', players: [email, 'b@x'], checkedIn: ['b@x'], result: 'b' },
-            { code: '0002', players: ['c@x', 'd@x'], checkedIn: ['c@x', 'd@x'], result: null },
-          ],
-        }),
-      ),
-    )
-    const info = await stub().getInfo(token)
-    expect(info.rounds).toEqual([])
-  })
-
-  it('hides rounds from non-participants during an active event', async () => {
-    const outsider = await sessionFor('nobody@example.com')
-    await seedActive(['a@x', 'b@x'])
-    const info = await stub().getInfo(outsider)
-    expect(info.rounds).toEqual([])
+  it('rejects registration and seeking without a token', async () => {
+    const reg = await SELF.fetch('https://example.com/api/tournament/register', { method: 'POST' })
+    expect(reg.status).toBe(401)
+    const seek = await SELF.fetch('https://example.com/api/tournament/seek', { method: 'POST' })
+    expect(seek.status).toBe(401)
   })
 })
 
@@ -554,12 +571,11 @@ describe('tournament bots', () => {
   it('picks a deterministic daily lineup with identity-bound strength', () => {
     const lineup = dailyBots('2026-08-31', POOL)
     expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
-    expect(lineup.length).toBeGreaterThanOrEqual(3)
-    expect(lineup.length).toBeLessThanOrEqual(7)
+    expect(lineup.length).toBeGreaterThanOrEqual(1)
+    expect(lineup.length).toBeLessThanOrEqual(4)
     expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
 
     const nextDay = dailyBots('2026-09-01', POOL)
-    expect(nextDay.map((b) => b.email)).not.toEqual(lineup.map((b) => b.email))
     // 棋力绑定身份：跨日期同邮箱同棋力
     for (const bot of nextDay) {
       const same = lineup.find((x) => x.email === bot.email)
@@ -590,15 +606,15 @@ describe('tournament bots', () => {
   const dateKey = (i: number) =>
     new Date(Date.UTC(2026, 8, 1) + i * 86_400_000).toISOString().slice(0, 10)
 
-  it('evolves the lineup day by day with few replacements and varied odd/even sizes', () => {
+  it('evolves the lineup day by day with few replacements and varied sizes', () => {
     let prev: string[] = []
     const sizes = new Set<number>()
     let retained = 0
     let carried = 0
     for (let i = 0; i < 60; i++) {
       const next = dailyBots(dateKey(i), POOL, prev).map((b) => b.email)
-      expect(next.length).toBeGreaterThanOrEqual(3)
-      expect(next.length).toBeLessThanOrEqual(7)
+      expect(next.length).toBeGreaterThanOrEqual(1)
+      expect(next.length).toBeLessThanOrEqual(4)
       sizes.add(next.length)
       if (prev.length) {
         retained += prev.filter((e) => next.includes(e)).length
@@ -613,13 +629,13 @@ describe('tournament bots', () => {
   })
 
   it('lets higher-ranked bots return more often than lower-ranked ones', () => {
-    const prevRanked = POOL.slice(0, 6)
+    const prevRanked = POOL.slice(0, 4)
     let top = 0
     let bottom = 0
     for (let i = 0; i < 300; i++) {
       const emails = dailyBots(dateKey(i), POOL, prevRanked).map((b) => b.email)
       if (emails.includes(prevRanked[0])) top++
-      if (emails.includes(prevRanked[5])) bottom++
+      if (emails.includes(prevRanked[3])) bottom++
     }
     expect(top).toBeGreaterThan(bottom)
   })
@@ -644,24 +660,23 @@ describe('tournament bots', () => {
     }
   })
 
-  it('fills the field with bots when enabled', async () => {
+  it('fills the field with 1-4 bots and schedules their first seeks', async () => {
     await seed({ registrations: ['solo@x'] })
     await runInDurableObject(stub(), (instance) => {
       ;(instance as unknown as { env: Record<string, string> }).env.TOURNAMENT_BOTS = POOL.join(',')
     })
-    await fireStart()
+    await fireAlarm()
     const s = await read()
     expect(s.state).toBe('active')
     const emails = Object.keys(s.players)
     expect(emails).toContain('solo@x')
-    expect(emails.length).toBeGreaterThanOrEqual(4)
-    const bots = (s as TState & { bots: Record<string, string> }).bots
-    expect(Object.keys(bots).sort()).toEqual(emails.filter((e) => e !== 'solo@x').sort())
-    // 不凑偶数：奇数人数恰好产生一个轮空，其余全部配上房间
-    const byes = s.pairings.filter((p) => p.players[1] === null)
-    expect(byes).toHaveLength(emails.length % 2)
-    for (const p of s.pairings) {
-      if (p.players[1] !== null) expect(p.code).toBeTruthy()
+    const botEmails = Object.keys(s.bots)
+    expect(botEmails.length).toBeGreaterThanOrEqual(1)
+    expect(botEmails.length).toBeLessThanOrEqual(4)
+    // 竞技场不发牌：开赛时无配对，bot 各自排了首次「点匹配」的时点
+    expect(s.pairings).toEqual([])
+    for (const bot of botEmails) {
+      expect(s.botSeekAt[bot]).toBeGreaterThan(s.startedAt)
     }
   })
 })

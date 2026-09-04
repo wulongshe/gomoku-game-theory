@@ -14,7 +14,6 @@ export async function allocateRoom(
   mode: GameMode,
   opts?: {
     tournament?: {
-      round: number
       players: [string, string]
       bots?: [Difficulty | null, Difficulty | null]
     }
@@ -30,7 +29,6 @@ export async function allocateRoom(
       if (opts?.tournament) {
         // DO 无法从自身 id 反推房号，故把 code 与对阵双方一并写进房间。
         params.set('tournament', '1')
-        params.set('round', String(opts.tournament.round))
         params.set('code', code)
         params.set('p0', opts.tournament.players[0])
         params.set('p1', opts.tournament.players[1])

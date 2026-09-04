@@ -11,9 +11,9 @@ export const ROOM_CODE_PATTERN = /^\d{4,8}$/
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 8
 
-// 大赛对局逐帧时限：开局快节奏，中盘逐帧放宽到 30s 封顶（前 5 帧 10s，之后每帧 +1s）。
+// 大赛对局逐帧时限：开局快节奏，中盘逐帧放宽到 45s 封顶（前 5 帧 10s，之后每帧 +1s）。
 export function tournamentFrameSeconds(frame: number): number {
-  return Math.min(30, Math.max(10, 10 + frame - 5))
+  return Math.min(45, Math.max(10, 10 + frame - 5))
 }
 
 export function maskEmail(email: string): string {
@@ -74,33 +74,32 @@ export interface Standing {
   email: string
   score: number
   played: number
-  status?: PlayerStatus // 仅实时积分下发：本轮待开始/准备中/对局中/已结束/已离开
+  status?: PlayerStatus // 仅实时积分下发
 }
 
-export type PlayerStatus = 'pending' | 'readying' | 'playing' | 'done' | 'left'
+export type PlayerStatus = 'idle' | 'matching' | 'readying' | 'playing' | 'cooldown'
 
 export interface Match {
-  code: string | null // 房号：观战入口（能看到 rounds 的人才拿得到）
+  code: string | null // 房号：观战入口（仅对当下可观战的人下发）
   a: string
-  b: string | null // null = 轮空
-  status: 'pending' | 'readying' | 'playing' | 'done'
-  result: 'a' | 'b' | 'draw' | 'void' | 'bye' | null
+  b: string
+  status: 'readying' | 'playing' | 'done'
+  result: 'a' | 'b' | 'draw' | 'void' | null
 }
 
 export interface TournamentInfo {
   state: 'idle' | 'active'
   now: number
   startsAt: number
-  round: number
-  totalRounds: number
   playerCount: number
   registered: boolean // 已报名下一场
   participating: boolean // 当前正在进行的这场的参赛者
   myGame: { code: string } | null
-  roundDeadline: number | null
+  matchCloseAt: number | null // 竞技场停止配新对局的时点；已开局的照常打完计分
+  my: { status: PlayerStatus; cooldownUntil: number | null } | null
   standings: Standing[]
   me: number | null // 我在 standings 中的下标（脱敏前定位）
-  rounds: Match[][] // 各轮对阵（仅参赛者/赛后可见）
+  games: Match[] // 全部对局，新的在前（仅参赛者/赛后可见）
 }
 
 export function parseClientMessage(raw: string): ClientMessage | null {

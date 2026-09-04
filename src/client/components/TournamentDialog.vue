@@ -21,14 +21,14 @@ const loading = ref(true)
 // 服务端时钟偏移校正后再倒计时。
 const startDeadline = ref<number | null>(null)
 const startLeft = useCountdown(startDeadline)
-const roundDeadline = ref<number | null>(null)
-const roundLeft = useCountdown(roundDeadline)
+const closeDeadline = ref<number | null>(null)
+const closeLeft = useCountdown(closeDeadline)
 
 function apply(data: TournamentInfo) {
   info.value = data
   startDeadline.value = Date.now() + (data.startsAt - data.now)
-  roundDeadline.value =
-    data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
+  closeDeadline.value =
+    data.matchCloseAt === null ? null : Date.now() + (data.matchCloseAt - data.now)
   loading.value = false
 }
 
@@ -84,10 +84,13 @@ const buttonVariant = computed(() =>
       <div class="rounded-xl bg-stone-100 px-4 py-3 text-center dark:bg-stone-700/50">
         <template v-if="info.participating">
           <p class="text-sm text-stone-500 dark:text-stone-400">
-            第 {{ info.round }} / {{ info.totalRounds }} 轮 · 本轮剩余
+            {{ (closeLeft ?? 0) > 0 ? '进行中 · 距匹配截止' : '匹配已截止 · 等待收官' }}
           </p>
-          <p class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100">
-            {{ formatCountdown(roundLeft ?? 0) }}
+          <p
+            v-if="(closeLeft ?? 0) > 0"
+            class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100"
+          >
+            {{ formatCountdown(closeLeft ?? 0) }}
           </p>
           <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">{{ info.playerCount }} 人参赛</p>
         </template>
@@ -102,7 +105,9 @@ const buttonVariant = computed(() =>
             {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 20:00 · 已报名 ${info.playerCount} 人` }}
           </p>
         </template>
-        <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">约3轮 · 每轮10min · 每回合10~30s</p>
+        <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+          竞技场 30 分钟 · 随到随战
+        </p>
       </div>
 
       <div v-if="info.standings.length" class="flex flex-col gap-1.5">
@@ -112,11 +117,7 @@ const buttonVariant = computed(() =>
         <TournamentStandings :standings="info.standings" :me="info.me" class="max-h-64" />
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
-        瑞士轮积分赛 · 报名后到点自动配对开赛
-      </p>
-
-      <p v-if="info.registered" class="text-center text-xs text-stone-400 dark:text-stone-500">
-        每轮开始后 3 分钟未准备视为弃权
+        竞技场积分赛 · 多打多得
       </p>
 
       <p v-if="!loggedIn" class="text-center text-xs text-amber-600 dark:text-amber-400">

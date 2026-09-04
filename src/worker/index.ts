@@ -106,6 +106,14 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
         if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
         return Response.json(await tournament.withdraw(token))
       }
+      if (request.method === 'POST' && url.pathname === '/api/tournament/seek') {
+        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
+        return Response.json(await tournament.seekMatch(token))
+      }
+      if (request.method === 'POST' && url.pathname === '/api/tournament/unseek') {
+        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
+        return Response.json(await tournament.cancelSeek(token))
+      }
       return new Response('Not Found', { status: 404 })
     }
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
@@ -149,7 +157,6 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       }
       const code = await allocateRoom(env, 15, 'forbidden', {
         tournament: {
-          round: Number(url.searchParams.get('round') ?? 1),
           players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
           bots: [diff('ai0'), diff('ai1')],
         },

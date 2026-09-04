@@ -17,8 +17,11 @@ import {
 } from './bots'
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
-const ROUND_MS = 10 * 60_000
-const FORFEIT_MS = 3 * 60_000 // 每轮开始后未进场判弃权的时限
+const ARENA_MS = 30 * 60_000 // 配新对局的窗口；已开局的照常打完，超过窗口收官也计分
+const COOLDOWN_MS = 60_000
+const PAIR_TTL_MS = 2 * 60_000 // 配上后迟迟未开局的裁决时限
+const WRAPUP_MS = 20 * 60_000 // 窗口关闭后仍未决对局（房间悄悄死掉等）的硬兜底
+const POLL_MS = 60_000
 const TFRAME = 15
 const TMODE = 'forbidden'
 const MIN_DRAW_MOVES = 30 // 和棋计分所需最少步数（game.frame）
@@ -26,40 +29,34 @@ const SKEW_MS = 1000
 const DAY_MS = 86_400_000
 
 type TState = 'idle' | 'active'
-type Result = 'a' | 'b' | 'draw' | 'void' | 'bye' | null
+type Result = 'a' | 'b' | 'draw' | 'void' | null
 
 interface Player {
   score: number
+  wins: number
+  games: number
   opponents: string[]
-  byes: number
-}
-
-export interface SwissPlayer {
-  email: string
-  score: number
-  opponents: string[]
-  byes: number
 }
 
 export interface Pairing {
-  code: string | null
-  players: [string, string | null] // [a, b]；b === null 表示轮空
+  code: string
+  players: [string, string]
   checkedIn: string[]
   started?: true // 房间已实际开局（双方就绪）；入座只算 checkedIn
   result: Result
+  createdAt: number
 }
 
 interface TournamentState {
   state: TState
-  startedAt: number // 本届开赛时点：轮次网格锚点（第 N 轮名义起点 = startedAt + (N-1)*ROUND_MS）
-  round: number
-  totalRounds: number
-  roundDeadline: number | null
+  startedAt: number
   registrations: string[]
   players: Record<string, Player>
   bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 基准棋力档（每局在 ±1 档内浮动）
-  pairings: Pairing[] // 当前轮
-  past: Pairing[][] // 已结束的各轮
+  queue: string[] // 匹配中（先到先配）
+  cooldowns: Record<string, number> // email → 冷却结束时点
+  botSeekAt: Record<string, number> // bot → 下次「点匹配」的时点
+  pairings: Pairing[]
   lastStandings: Standing[]
   devStartsAt?: number // 仅 dev 注入：覆盖下一场开赛时点（正常恒为每天 20:00）
 }
@@ -68,14 +65,13 @@ function defaultState(): TournamentState {
   return {
     state: 'idle',
     startedAt: 0,
-    round: 0,
-    totalRounds: 0,
-    roundDeadline: null,
     registrations: [],
     players: {},
     bots: {},
+    queue: [],
+    cooldowns: {},
+    botSeekAt: {},
     pairings: [],
-    past: [],
     lastStandings: [],
   }
 }
@@ -89,43 +85,6 @@ export function nextDailyStart(now: number, hour = DAILY_HOUR_UTC): number {
   const d = new Date(now)
   const target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, 0, 0, 0)
   return target > now ? target : target + DAY_MS
-}
-
-// 纯瑞士轮配对：按分数（并列随机）排序，优先未交手过的对手；奇数则将轮空判给
-// 分数最低且未轮空过者。不做 FIDE/Dutch 最优匹配，允许在全交手过时退化为重复对手。
-export function pairRound(players: SwissPlayer[], rng: () => number = Math.random): Pairing[] {
-  const order = [...players].sort((a, b) => b.score - a.score || rng() - 0.5)
-  const pairings: Pairing[] = []
-
-  let pool = order
-  if (pool.length % 2 === 1) {
-    const bye = [...pool].reverse().find((p) => p.byes === 0) ?? pool[pool.length - 1]
-    pairings.push({ code: null, players: [bye.email, null], checkedIn: [], result: 'bye' })
-    pool = pool.filter((p) => p !== bye)
-  }
-
-  const paired = new Set<string>()
-  for (let i = 0; i < pool.length; i++) {
-    const a = pool[i]
-    if (paired.has(a.email)) continue
-    let partner = -1
-    let fallback = -1
-    for (let j = i + 1; j < pool.length; j++) {
-      if (paired.has(pool[j].email)) continue
-      if (fallback === -1) fallback = j
-      if (!a.opponents.includes(pool[j].email)) {
-        partner = j
-        break
-      }
-    }
-    const j = partner !== -1 ? partner : fallback
-    if (j === -1) continue
-    const b = pool[j]
-    paired.add(a.email)
-    paired.add(b.email)
-    pairings.push({ code: null, players: [a.email, b.email], checkedIn: [], result: null })
-  }
-  return pairings
 }
 
 interface SocketTag {
@@ -214,10 +173,49 @@ export class Tournament extends DurableObject<Env> {
     })
   }
 
+  // 「匹配对手」：第一局与冷却结束后都由玩家手动触发，绝不自动排队。
+  async seekMatch(token: string): Promise<TournamentInfo> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const email = await this.email(token)
+      const s = await this.load()
+      const now = Date.now()
+      if (
+        email !== null &&
+        s.state === 'active' &&
+        email in s.players &&
+        now < this.matchCloseAt(s) &&
+        !s.queue.includes(email) &&
+        (s.cooldowns[email] ?? 0) <= now &&
+        !this.unresolvedOf(s, email)
+      ) {
+        s.queue.push(email)
+        await this.tryPair(s)
+        await this.armActive(s)
+        await this.save(s)
+        await this.broadcast(s)
+      }
+      return this.toInfo(s, email)
+    })
+  }
+
+  async cancelSeek(token: string): Promise<TournamentInfo> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const email = await this.email(token)
+      const s = await this.load()
+      // 已被配走（不在队列）就当无事发生，随后的 myGame 推送会把玩家带进房。
+      if (email !== null && s.queue.includes(email)) {
+        s.queue = s.queue.filter((e) => e !== email)
+        await this.save(s)
+        await this.broadcast(s)
+      }
+      return this.toInfo(s, email)
+    })
+  }
+
   async checkIn(input: { code: string; email: string }): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
-      const p = s.pairings.find((x) => x.code === input.code)
+      const p = s.pairings.find((x) => x.code === input.code && x.result === null)
       if (p && !p.checkedIn.includes(input.email)) {
         p.checkedIn.push(input.email)
         await this.save(s)
@@ -229,7 +227,7 @@ export class Tournament extends DurableObject<Env> {
   async gameStarted(input: { code: string }): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
-      const p = s.pairings.find((x) => x.code === input.code)
+      const p = s.pairings.find((x) => x.code === input.code && x.result === null)
       if (p && !p.started) {
         p.started = true
         await this.save(s)
@@ -240,15 +238,15 @@ export class Tournament extends DurableObject<Env> {
 
   async reportResult(input: {
     code: string
-    round: number
     winnerEmail: string | null
     moves: number
   }): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
-      if (s.state !== 'active' || input.round !== s.round) return
-      const p = s.pairings.find((x) => x.code === input.code)
-      if (!p || p.result !== null) return
+      if (s.state !== 'active') return
+      // 只认未决对局：窗口关闭后收官的迟到结果照样有效，重复上报被幂等挡掉。
+      const p = s.pairings.find((x) => x.code === input.code && x.result === null)
+      if (!p) return
       if (input.winnerEmail === null) {
         p.result = input.moves >= MIN_DRAW_MOVES ? 'draw' : 'void'
       } else if (input.winnerEmail === p.players[0]) {
@@ -259,7 +257,8 @@ export class Tournament extends DurableObject<Env> {
         return // 上报者不属于本对；忽略
       }
       this.applyResult(s, p)
-      if (s.pairings.every((x) => x.result !== null)) await this.advance(s)
+      this.afterResult(s, p)
+      if (!(await this.maybeFinish(s))) await this.armActive(s)
       await this.save(s)
       await this.broadcast(s)
     })
@@ -269,11 +268,7 @@ export class Tournament extends DurableObject<Env> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
       if (s.state !== 'active') await this.start(s)
-      else if (s.roundDeadline !== null && Date.now() < s.roundDeadline - SKEW_MS) {
-        await this.forfeitCheckpoint(s)
-      } else {
-        await this.closeRound(s)
-      }
+      else await this.tick(s)
       await this.save(s)
       await this.broadcast(s)
     })
@@ -286,7 +281,6 @@ export class Tournament extends DurableObject<Env> {
     s.bots = {}
     const pool = this.botPool()
     if (pool.length) {
-      // 不凑偶数：奇数场次由瑞士轮轮空机制消化，人数更自然。
       const bots = dailyBots(beijingDate(Date.now()), pool, this.prevRankedBots(s, pool))
       for (const bot of bots) {
         if (emails.includes(bot.email)) continue
@@ -299,167 +293,208 @@ export class Tournament extends DurableObject<Env> {
       return
     }
     s.players = {}
-    for (const email of emails) s.players[email] = { score: 0, opponents: [], byes: 0 }
+    for (const email of emails) s.players[email] = { score: 0, wins: 0, games: 0, opponents: [] }
     s.registrations = []
-    s.past = []
+    s.pairings = []
+    s.queue = []
+    s.cooldowns = {}
+    s.botSeekAt = {}
     s.startedAt = Date.now()
-    s.round = 1
-    s.totalRounds = Math.max(1, Math.ceil(Math.log2(Object.keys(s.players).length)))
     s.state = 'active'
-    await this.pairAndAlloc(s)
+    // 竞技场没有整点发牌：bot 也和真人一样过一会儿才「点匹配」，首局错峰进场。
+    for (const email of Object.keys(s.bots)) {
+      s.botSeekAt[email] = s.startedAt + 5_000 + Math.random() * 40_000
+    }
+    await this.armActive(s)
   }
 
-  // 开轮 3 分钟检查点：没进场的判弃权（对手在场即轮空胜、双方都缺席作废），已开打的照常。
-  private async forfeitCheckpoint(s: TournamentState): Promise<void> {
-    const forfeitAt = s.roundDeadline! - ROUND_MS + FORFEIT_MS
-    if (Date.now() < forfeitAt - SKEW_MS) {
-      // 被 advance 抢先换了新一轮，本次 alarm 已过期，重挂即可。
-      await this.ctx.storage.setAlarm(Math.min(forfeitAt, s.roundDeadline!))
-      return
-    }
-    for (const p of s.pairings) {
-      if (p.result !== null || p.checkedIn.length >= 2) continue
-      p.result = p.checkedIn.length === 0 ? 'void' : p.checkedIn[0] === p.players[0] ? 'a' : 'b'
-      this.applyResult(s, p)
-    }
-    if (s.pairings.every((p) => p.result !== null)) await this.advance(s)
-    else await this.ctx.storage.setAlarm(s.roundDeadline!)
-  }
-
-  private async closeRound(s: TournamentState): Promise<void> {
-    if (s.state !== 'active') return
-    for (const p of s.pairings) {
-      if (p.result !== null) continue
-      const present = (p.players.filter((e) => e !== null) as string[]).filter((e) =>
-        p.checkedIn.includes(e),
-      )
-      // 双方都在场却没下完 → 轮时到判平；仅一方到场轮空胜；都没来作废。
-      if (present.length === 2) p.result = 'draw'
-      else if (present.length === 1) p.result = present[0] === p.players[0] ? 'a' : 'b'
-      else p.result = 'void'
-      this.applyResult(s, p)
-    }
-    await this.advance(s)
-  }
-
-  private async advance(s: TournamentState): Promise<void> {
-    s.past.push(s.pairings) // 归档刚结束的一轮
-    if (s.round < s.totalRounds) {
-      s.round += 1
-      await this.pairAndAlloc(s)
-    } else {
-      s.lastStandings = this.standings(s)
-      // 每天的终榜按日期永久归档（原始邮箱，展示时再按开关脱敏）；lastStandings 仅是最近一届的展示缓存。
-      await this.ctx.storage.put(`standings:${beijingDate(Date.now())}`, s.lastStandings)
-      s.state = 'idle'
-      s.round = 0
-      s.totalRounds = 0
-      s.roundDeadline = null
-      s.players = {}
-      s.bots = {}
-      s.pairings = []
-      await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
-    }
-  }
-
-  private async pairAndAlloc(s: TournamentState): Promise<void> {
-    const roster: SwissPlayer[] = Object.entries(s.players).map(([email, p]) => ({ email, ...p }))
-    const pairings = pairRound(roster)
-    for (const p of pairings) {
-      if (p.players[1]) {
-        s.players[p.players[0]].opponents.push(p.players[1])
-        s.players[p.players[1]].opponents.push(p.players[0])
+  private async tick(s: TournamentState): Promise<void> {
+    const now = Date.now()
+    const close = this.matchCloseAt(s)
+    for (const email of Object.keys(s.botSeekAt)) {
+      if (now < s.botSeekAt[email] - SKEW_MS) continue
+      delete s.botSeekAt[email]
+      if (now >= close) continue
+      if (
+        email in s.players &&
+        !s.queue.includes(email) &&
+        (s.cooldowns[email] ?? 0) <= now + SKEW_MS &&
+        !this.unresolvedOf(s, email)
+      ) {
+        s.queue.push(email)
       }
-      if (p.result === 'bye') {
-        this.applyResult(s, p)
-      } else {
-        // 双 bot 强制异档：同档互搏极易和棋。
-        const baseA = s.bots[p.players[0]] ?? null
-        const baseB = s.bots[p.players[1]!] ?? null
-        const bots: [Difficulty | null, Difficulty | null] =
-          baseA && baseB
-            ? pairedBotDifficulties(baseA, baseB)
-            : [baseA && gameDifficulty(baseA), baseB && gameDifficulty(baseB)]
-        try {
-          p.code = await allocateRoom(this.env, TFRAME, TMODE, {
-            tournament: {
-              round: s.round,
-              players: [p.players[0], p.players[1]!],
-              bots,
-            },
-          })
-        } catch {
-          p.result = 'void' // 建房失败则该局作废
+    }
+    if (now >= close) s.queue = [] // 窗口关闭：停配新对局，等待中的回到空闲
+    await this.tryPair(s)
+    this.resolveStalled(s, now)
+    if (now >= close + WRAPUP_MS - SKEW_MS) this.wrapup(s)
+    if (!(await this.maybeFinish(s))) await this.armActive(s)
+  }
+
+  private async tryPair(s: TournamentState): Promise<void> {
+    while (s.queue.length >= 2) {
+      const a = s.queue[0]
+      // 候选里选交手次数最少的对手（并列随机），少重复对阵。
+      const met = new Map<string, number>()
+      for (const o of s.players[a]?.opponents ?? []) met.set(o, (met.get(o) ?? 0) + 1)
+      let best: string[] = []
+      let bestMet = Infinity
+      for (const cand of s.queue.slice(1)) {
+        const m = met.get(cand) ?? 0
+        if (m < bestMet) {
+          bestMet = m
+          best = [cand]
+        } else if (m === bestMet) {
+          best.push(cand)
         }
       }
+      const b = best[Math.floor(Math.random() * best.length)]
+      s.queue = s.queue.filter((e) => e !== a && e !== b)
+      const baseA = s.bots[a] ?? null
+      const baseB = s.bots[b] ?? null
+      // 双 bot 强制异档：同档互搏极易和棋。
+      const bots: [Difficulty | null, Difficulty | null] =
+        baseA && baseB
+          ? pairedBotDifficulties(baseA, baseB)
+          : [baseA && gameDifficulty(baseA), baseB && gameDifficulty(baseB)]
+      try {
+        const code = await allocateRoom(this.env, TFRAME, TMODE, {
+          tournament: { players: [a, b], bots },
+        })
+        s.pairings.push({ code, players: [a, b], checkedIn: [], result: null, createdAt: Date.now() })
+        s.players[a].opponents.push(b)
+        s.players[b].opponents.push(a)
+      } catch {
+        // 建房失败：双方回到空闲，可重新点匹配
+      }
     }
-    s.pairings = pairings
-    // 轮次挂在固定网格上：上一轮提前收轮只是让本轮提前可下，弃权点（名义开轮+3min）
-    // 与截止（名义开轮+10min）不前移，即固定在 20:03/20:13/… 与 20:10/20:20/…。
-    s.roundDeadline = s.startedAt + s.round * ROUND_MS
-    // 先在弃权检查点醒来，届时再把闹钟拨到本轮截止。
-    await this.ctx.storage.setAlarm(s.roundDeadline - ROUND_MS + FORFEIT_MS)
+  }
+
+  // 配上却迟迟没开局的对局：到时限后按到场情况裁决（到场方胜/双缺作废）；
+  // 双方都到场或已开局的不动，交给对局自身或收尾兜底。
+  private resolveStalled(s: TournamentState, now: number): void {
+    for (const p of s.pairings) {
+      if (p.result !== null || p.started || p.checkedIn.length >= 2) continue
+      if (now < p.createdAt + PAIR_TTL_MS - SKEW_MS) continue
+      p.result = p.checkedIn.length === 0 ? 'void' : p.checkedIn[0] === p.players[0] ? 'a' : 'b'
+      this.applyResult(s, p)
+      this.afterResult(s, p)
+    }
+  }
+
+  // 窗口关闭很久仍未决的僵尸对局（房间悄悄死掉等）：双方到场的判平，其余作废。
+  private wrapup(s: TournamentState): void {
+    for (const p of s.pairings) {
+      if (p.result !== null) continue
+      p.result = p.started && p.checkedIn.length === 2 ? 'draw' : 'void'
+      this.applyResult(s, p)
+      this.afterResult(s, p)
+    }
   }
 
   private applyResult(s: TournamentState, p: Pairing): void {
-    const a = s.players[p.players[0]]
-    if (!a) return
-    if (p.result === 'bye') {
-      a.score += 1
-      a.byes += 1
-      return
-    }
-    const b = p.players[1] ? s.players[p.players[1]] : null
-    if (!b) return
+    const [a, b] = p.players.map((e) => s.players[e])
+    if (!a || !b) return
+    a.games += 1
+    b.games += 1
     if (p.result === 'draw') {
       a.score += 0.5
       b.score += 0.5
     } else if (p.result === 'a') {
       a.score += 1
+      a.wins += 1
     } else if (p.result === 'b') {
       b.score += 1
+      b.wins += 1
     }
     // void → 双方 0 分
   }
 
-  // 榜内保留原始邮箱，展示时统一经 displayEmails 按账号开关打码。
-  private standings(s: TournamentState): Standing[] {
-    const buchholz = (p: Player) =>
-      p.opponents.reduce((sum, o) => sum + (s.players[o]?.score ?? 0), 0)
-    return Object.entries(s.players)
-      .map(([email, p]) => ({
-        email,
-        score: p.score,
-        played: p.opponents.length + p.byes,
-        buchholz: buchholz(p),
-      }))
-      .sort((a, b) => b.score - a.score || b.buchholz - a.buchholz || a.email.localeCompare(b.email))
-      .map(({ email, score, played }) => ({ email, score, played }))
-  }
-
-  // 按本轮配对推断每人状态：未出结果时未到场为待开始，到场后随房间实际开局分准备中/对局中；
-  // 已出结果时到过场的算已结束（轮空视同），整轮没露面的视为已离开。
-  private playerStatuses(s: TournamentState): Map<string, PlayerStatus> {
-    const statuses = new Map<string, PlayerStatus>()
-    for (const p of s.pairings) {
-      for (const email of p.players) {
-        if (email === null) continue
-        const arrived = p.checkedIn.includes(email)
-        statuses.set(
-          email,
-          p.result === null
-            ? arrived
-              ? p.started
-                ? 'playing'
-                : 'readying'
-              : 'pending'
-            : p.result === 'bye' || arrived
-              ? 'done'
-              : 'left',
-        )
+  // 冷却：冷却期内可观战，结束后要自己再点匹配；bot 在冷却后隔一小段随机时间「点」。
+  private afterResult(s: TournamentState, p: Pairing): void {
+    const now = Date.now()
+    for (const email of p.players) {
+      if (!(email in s.players)) continue
+      s.cooldowns[email] = now + COOLDOWN_MS
+      if (email in s.bots && now + COOLDOWN_MS < this.matchCloseAt(s)) {
+        s.botSeekAt[email] = now + COOLDOWN_MS + 3_000 + Math.random() * 27_000
       }
     }
-    return statuses
+  }
+
+  // 窗口已关且所有对局尘埃落定才收官出榜——最后一局拖过窗口也照常计分。
+  private async maybeFinish(s: TournamentState): Promise<boolean> {
+    if (Date.now() < this.matchCloseAt(s) - SKEW_MS) return false
+    if (s.pairings.some((p) => p.result === null)) return false
+    await this.finish(s)
+    return true
+  }
+
+  private async finish(s: TournamentState): Promise<void> {
+    s.lastStandings = this.standings(s)
+    // 每天的终榜按日期永久归档（原始邮箱，展示时再按开关脱敏）；lastStandings 仅是最近一届的展示缓存。
+    await this.ctx.storage.put(`standings:${beijingDate(Date.now())}`, s.lastStandings)
+    s.state = 'idle'
+    s.players = {}
+    s.bots = {}
+    s.queue = []
+    s.cooldowns = {}
+    s.botSeekAt = {}
+    s.pairings = []
+    await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+  }
+
+  private async armActive(s: TournamentState): Promise<void> {
+    const now = Date.now()
+    const close = this.matchCloseAt(s)
+    const targets = Object.values(s.botSeekAt)
+    for (const p of s.pairings) {
+      if (p.result === null && !p.started && p.checkedIn.length < 2) {
+        targets.push(p.createdAt + PAIR_TTL_MS)
+      }
+    }
+    if (now < close) targets.push(close)
+    else if (s.pairings.some((p) => p.result === null)) {
+      targets.push(Math.min(now + POLL_MS, close + WRAPUP_MS))
+    }
+    if (targets.length) await this.ctx.storage.setAlarm(Math.min(...targets))
+  }
+
+  private matchCloseAt(s: TournamentState): number {
+    return s.startedAt + ARENA_MS
+  }
+
+  private unresolvedOf(s: TournamentState, email: string): Pairing | undefined {
+    return s.pairings.find((p) => p.result === null && p.players.includes(email))
+  }
+
+  private statuses(s: TournamentState): Map<string, PlayerStatus> {
+    const now = Date.now()
+    const map = new Map<string, PlayerStatus>()
+    for (const email of Object.keys(s.players)) {
+      const pairing = this.unresolvedOf(s, email)
+      map.set(
+        email,
+        pairing
+          ? pairing.started
+            ? 'playing'
+            : 'readying'
+          : s.queue.includes(email)
+            ? 'matching'
+            : (s.cooldowns[email] ?? 0) > now
+              ? 'cooldown'
+              : 'idle',
+      )
+    }
+    return map
+  }
+
+  // 榜内保留原始邮箱，展示时统一经 displayEmails 按账号开关打码。
+  private standings(s: TournamentState): Standing[] {
+    return Object.entries(s.players)
+      .map(([email, p]) => ({ email, score: p.score, played: p.games, wins: p.wins }))
+      .sort((a, b) => b.score - a.score || b.wins - a.wins || a.email.localeCompare(b.email))
+      .map(({ email, score, played }) => ({ email, score, played }))
   }
 
   private async displayNames(emails: string[]): Promise<Map<string, string>> {
@@ -477,23 +512,19 @@ export class Tournament extends DurableObject<Env> {
     const now = Date.now()
     const participating = s.state === 'active' && email !== null && email in s.players
     const registered = email !== null && s.registrations.includes(email)
-    const statuses = s.state === 'active' ? this.playerStatuses(s) : null
-    // 观战门槛：本轮自己的状态为「已结束」（到场打完或轮空）才开放各桌对阵；
-    // 未打完、缺席判离开的都不行。
-    const myDone = participating && statuses?.get(email!) === 'done'
-    const showLive = s.state !== 'active' || myDone
-    const myGame = participating
-      ? (s.pairings.find((x) => x.code && x.result === null && x.players.includes(email!))?.code ??
-          null)
-      : null
-    const liveRounds = s.state === 'active' ? [...s.past, s.pairings] : s.past
-    // 实时榜全员可见；进行中的逐轮配对仅参赛者可见（防多号观战对方局面）。
+    const statuses = s.state === 'active' ? this.statuses(s) : null
+    const myPairing = participating ? this.unresolvedOf(s, email!) : undefined
+    // 观战门槛：参赛且此刻不在对局里（空闲/匹配中/冷却中都可以看别桌），房号只发给这类人。
+    const mayWatch = participating && myPairing === undefined
+    const games =
+      s.state !== 'active' || participating
+        ? [...s.pairings].reverse().map((p) => this.toMatch(p, s.state === 'active' && mayWatch))
+        : []
     const standings = s.state === 'idle' ? s.lastStandings : this.standings(s)
-    const rounds = showLive ? liveRounds.map((r) => r.map((p) => this.toMatch(p))) : []
     const names = await this.displayNames([
       ...new Set([
         ...standings.map((row) => row.email),
-        ...rounds.flat().flatMap((m) => (m.b ? [m.a, m.b] : [m.a])),
+        ...games.flatMap((m) => [m.a, m.b]),
       ]),
     ])
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
@@ -506,70 +537,59 @@ export class Tournament extends DurableObject<Env> {
       ? botRegistrations(beijingDate(startsAt), pool, startsAt, now, this.prevRankedBots(s, pool))
           .length
       : 0
+    const cooldownUntil = email !== null && (s.cooldowns[email] ?? 0) > now ? s.cooldowns[email] : null
     return {
       state: s.state,
       now,
       startsAt,
-      round: s.round,
-      totalRounds: s.totalRounds,
       playerCount:
         s.state === 'idle'
           ? s.registrations.length + virtualCount
           : Object.keys(s.players).length,
       registered,
       participating,
-      myGame: myGame ? { code: myGame } : null,
-      roundDeadline: s.roundDeadline,
+      myGame: myPairing ? { code: myPairing.code } : null,
+      matchCloseAt: s.state === 'active' ? this.matchCloseAt(s) : null,
+      my: participating
+        ? { status: statuses!.get(email!) ?? 'idle', cooldownUntil }
+        : null,
       standings: standings.map((row) => ({
         ...row,
         email: shown(row.email),
-        ...(statuses && { status: statuses.get(row.email) ?? 'pending' }),
+        ...(statuses && { status: statuses.get(row.email) ?? 'idle' }),
       })),
       me: meIndex < 0 ? null : meIndex,
-      rounds: rounds.map((r) => r.map((m) => ({ ...m, a: shown(m.a), b: m.b && shown(m.b) }))),
+      games: games.map((m) => ({ ...m, a: shown(m.a), b: shown(m.b) })),
     }
   }
 
-  private toMatch(p: Pairing): Match {
+  private toMatch(p: Pairing, includeCode: boolean): Match {
     return {
-      code: p.code,
+      code: includeCode && p.result === null ? p.code : null,
       a: p.players[0],
       b: p.players[1],
-      status:
-        p.result !== null
-          ? 'done'
-          : p.started
-            ? 'playing'
-            : p.checkedIn.length
-              ? 'readying'
-              : 'pending',
+      status: p.result !== null ? 'done' : p.started ? 'playing' : 'readying',
       result: p.result,
     }
   }
 
-  // 观战资格（Room 校验用）：本轮参赛且自己的状态为「已结束」（缺席判离开的不算）。
+  // 观战资格（Room 校验用）：参赛且此刻不在对局里。
   async canSpectate(email: string): Promise<boolean> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const s = await this.load()
-      return (
-        s.state === 'active' &&
-        email in s.players &&
-        this.playerStatuses(s).get(email) === 'done'
-      )
+      return s.state === 'active' && email in s.players && this.unresolvedOf(s, email) === undefined
     })
   }
 
   // 本地开发数据注入（路由仅 localhost 暴露，见 index.ts）：覆写状态、重挂闹钟并广播。
   async devSeed(input: Partial<TournamentState>): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      const s = { ...(await this.load()), ...input }
+      const s = { ...defaultState(), ...input }
       s.devStartsAt = input.devStartsAt // 不从上一次注入残留
       if (s.state === 'active') {
-        s.roundDeadline = Date.now() + ROUND_MS
-        s.startedAt = s.roundDeadline - s.round * ROUND_MS
-        await this.ctx.storage.setAlarm(Date.now() + FORFEIT_MS)
+        s.startedAt ||= Date.now() - 5 * 60_000
+        await this.ctx.storage.setAlarm(Date.now() + 3_000)
       } else {
-        s.roundDeadline = null
         await this.ctx.storage.setAlarm(s.devStartsAt ?? nextDailyStart(Date.now()))
       }
       await this.save(s)
@@ -595,10 +615,11 @@ export class Tournament extends DurableObject<Env> {
 
   private async load(): Promise<TournamentState> {
     const s = (await this.ctx.storage.get<TournamentState>('t')) ?? defaultState()
-    s.past ??= []
     s.bots ??= {}
-    // 旧状态没有网格锚点时按当前轮的截止反推，保证进行中的一届无缝续跑。
-    s.startedAt ??= (s.roundDeadline ?? Date.now()) - s.round * ROUND_MS
+    s.queue ??= []
+    s.cooldowns ??= {}
+    s.botSeekAt ??= {}
+    s.pairings ??= []
     return s
   }
 

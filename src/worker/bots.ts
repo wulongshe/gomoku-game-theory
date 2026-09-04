@@ -77,16 +77,16 @@ function shuffle(items: string[], rand: () => number): string[] {
   return order
 }
 
-// 阵容逐日演化：上一届成员大概率留任（名次靠前留任概率稍高），人数在 3~7 间 ±1 随机游走
-// （奇偶皆可），缺口从池中未在场者随机补——整体只做少量替换，不整套换血。
+// 阵容逐日演化：上一届成员大概率留任（名次靠前留任概率稍高），人数在 1~4 间 ±1 随机游走
+// （与真人报名数无关），缺口从池中未在场者随机补——整体只做少量替换，不整套换血。
 function evolveLineup(rand: () => number, pool: string[], prevRanked: string[]): string[] {
-  const cap = Math.min(7, pool.length)
+  const cap = Math.min(4, pool.length)
   const prev = prevRanked.filter((e) => pool.includes(e))
-  if (prev.length === 0) return shuffle(pool, rand).slice(0, Math.min(3 + Math.floor(rand() * 5), cap))
+  if (prev.length === 0) return shuffle(pool, rand).slice(0, Math.min(1 + Math.floor(rand() * 4), cap))
   const stay = prev.filter(
     (_, i) => rand() < 0.85 - (prev.length > 1 ? (0.25 * i) / (prev.length - 1) : 0),
   )
-  const target = Math.max(Math.min(3, cap), Math.min(prev.length + Math.floor(rand() * 3) - 1, cap))
+  const target = Math.max(Math.min(1, cap), Math.min(prev.length + Math.floor(rand() * 3) - 1, cap))
   const lineup = stay.slice(0, target)
   const fresh = shuffle(pool.filter((e) => !lineup.includes(e)), rand)
   while (lineup.length < target && fresh.length) lineup.push(fresh.pop()!)

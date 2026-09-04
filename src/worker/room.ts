@@ -73,7 +73,6 @@ interface RematchProposal {
 type RematchProposals = Partial<Record<Seat, RematchProposal>>
 
 interface TournamentTag {
-  round: number
   code: string
   players: [string, string]
 }
@@ -117,7 +116,6 @@ export class Room extends DurableObject<Env> {
           url.searchParams.get('p1') ?? '',
         ]
         entries.tournament = {
-          round: Number(url.searchParams.get('round')),
           code: url.searchParams.get('code') ?? '',
           players: tPlayers,
         } satisfies TournamentTag
@@ -592,6 +590,8 @@ export class Room extends DurableObject<Env> {
     game: GameState | undefined,
   ): Promise<void> {
     if (game && game.phase === 'playing') {
+      // 中途退出 = 认输判负，但不立即拆房：终局照常入库留给对方复盘/刷新后重看，
+      // 只送走退出者，空房 TTL 到点再关——立即 deleteAll 会让掉线的赢方回来撞「房间不存在」。
       const resigned: GameState = {
         ...game,
         phase: seat === 'black' ? 'white_won' : 'black_won',
@@ -600,16 +600,12 @@ export class Room extends DurableObject<Env> {
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws) this.send(other, { type: 'opponent_resigned', left: true })
       }
-      this.broadcast({ type: 'frame_settled', state: resigned, deadline: null, now: Date.now(), passed: [] })
-      await this.recordResult(resigned.phase)
-      for (const socket of this.ctx.getWebSockets()) {
-        if (socket === ws) socket.close(1000, 'room closed')
-        else this.send(socket, { type: 'room_closed' })
-      }
-    } else {
-      for (const socket of this.ctx.getWebSockets()) {
-        socket.close(1000, 'room closed')
-      }
+      await this.endGame(resigned)
+      ws.close(1000, 'room closed')
+      return
+    }
+    for (const socket of this.ctx.getWebSockets()) {
+      socket.close(1000, 'room closed')
     }
     await this.close()
   }
@@ -892,7 +888,6 @@ export class Room extends DurableObject<Env> {
       try {
         await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).reportResult({
           code: tournament.code,
-          round: tournament.round,
           winnerEmail,
           moves: game?.frame ?? 0,
         })

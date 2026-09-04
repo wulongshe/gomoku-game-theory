@@ -134,7 +134,9 @@ export function tournamentWsUrl(): string {
   return `${wsProto()}://${location.host}/api/tournament/ws${token}`
 }
 
-async function tournamentAction(action: 'register' | 'withdraw'): Promise<TournamentInfo> {
+async function tournamentAction(
+  action: 'register' | 'withdraw' | 'seek' | 'unseek',
+): Promise<TournamentInfo> {
   const res = await fetch(`/api/tournament/${action}`, { method: 'POST', headers: bearer() })
   if (!res.ok) throw new Error(`${action}Tournament failed: ${res.status}`)
   return (await res.json()) as TournamentInfo
@@ -146,4 +148,12 @@ export function registerTournament(): Promise<TournamentInfo> {
 
 export function withdrawTournament(): Promise<TournamentInfo> {
   return tournamentAction('withdraw')
+}
+
+export function seekTournamentMatch(): Promise<TournamentInfo> {
+  return tournamentAction('seek')
+}
+
+export function cancelTournamentSeek(): Promise<TournamentInfo> {
+  return tournamentAction('unseek')
 }

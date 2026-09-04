@@ -24,7 +24,7 @@ import IconSettings from '~/components/icons/IconSettings.vue'
 import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { roomStatus, roomWsUrl, spectateWsUrl, tournamentWsUrl } from '~/apis'
+import { roomStatus, roomWsUrl, spectateWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
@@ -49,7 +49,6 @@ import {
   type ClientMessage,
   type FrameMoves,
   type ServerMessage,
-  type TournamentInfo,
 } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
@@ -497,37 +496,18 @@ watch(homeSecondsLeft, (s) => {
   if (s === 0) backOrReplace()
 })
 
-// 大赛对局结束后不自动跳转，可留在棋盘复盘；下一轮开始（轮次推进或配到新对局）才倒计时回大厅。
+// 大赛对局结束后留半分钟复盘再回大厅，剩余冷却在大厅读秒。
 const tournamentReturn = ref<number | null>(null)
-const tournamentReturnLeft = useCountdown(tournamentReturn, 5)
+const tournamentReturnLeft = useCountdown(tournamentReturn)
 
 watch(tournamentReturnLeft, (s) => {
   if (s === 0) backOrReplace('/tournament')
 })
 
-const tournamentRound = ref<number | null>(null)
-const { open: watchNextRound } = useWebSocket(tournamentWsUrl(), {
-  immediate: false,
-  autoReconnect: { delay: 3000 },
-  heartbeat: {
-    message: 'ping',
-    responseMessage: 'pong',
-    interval: 20_000,
-    pongTimeout: 10_000,
-  },
-  onMessage(_ws, event) {
-    const info = JSON.parse(event.data as string) as TournamentInfo
-    if (info.state !== 'active') return
-    tournamentRound.value ??= info.round
-    const nextGame = info.myGame !== null && info.myGame.code !== props.code
-    if ((info.round > tournamentRound.value || nextGame) && tournamentReturn.value === null) {
-      tournamentReturn.value = Date.now() + 5000
-    }
-  },
-})
-
 watch(stage, (s) => {
-  if (s === 'over' && tournament.value) watchNextRound()
+  if (s === 'over' && tournament.value && tournamentReturn.value === null) {
+    tournamentReturn.value = Date.now() + 30_000
+  }
 })
 
 // 翻回合时顺带收起结果遮罩，露出棋盘。
@@ -559,7 +539,7 @@ function exitRoom() {
   clearMoves()
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
   forgetKey()
-  setTimeout(() => backOrReplace(), 150)
+  setTimeout(() => backOrReplace(tournament.value ? '/tournament' : '/'), 150)
 }
 </script>
 
@@ -732,21 +712,21 @@ function exitRoom() {
         </template>
 
         <template v-else-if="tournament">
-          <AppButton class="w-full" @click="backOrReplace('/tournament')">
-            返回每日大赛<template v-if="tournamentReturnLeft !== null">（{{ tournamentReturnLeft }}s）</template>
-          </AppButton>
+          <AppButton class="w-full" @click="backOrReplace('/tournament')">返回每日大赛</AppButton>
         </template>
 
         <template v-else>
           <AppButton
-            v-if="!roomClosed"
+            v-if="!roomClosed && !oppLeft"
             class="w-full"
             :disabled="rematchAsked"
             @click="openRematchConfig"
           >
             {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
           </AppButton>
-          <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">对方已退出，房间已关闭</p>
+          <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
+            {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
+          </p>
         </template>
 
         <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">

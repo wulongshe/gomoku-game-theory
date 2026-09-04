@@ -6,7 +6,7 @@ import SegmentedControl from '~/components/SegmentedControl.vue'
 import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { tournamentWsUrl } from '~/apis'
+import { cancelTournamentSeek, seekTournamentMatch, tournamentWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
@@ -16,35 +16,73 @@ import type { Match, TournamentInfo } from '@/shared/protocol'
 const { loggedIn } = useAuth()
 const info = ref<TournamentInfo | null>(null)
 const loading = ref(true)
+const busy = ref(false)
 
 const startDeadline = ref<number | null>(null)
 const startLeft = useCountdown(startDeadline)
-const roundDeadline = ref<number | null>(null)
-const roundLeft = useCountdown(roundDeadline)
+const closeDeadline = ref<number | null>(null)
+const closeLeft = useCountdown(closeDeadline)
+const cooldownDeadline = ref<number | null>(null)
+const cooldownLeft = useCountdown(cooldownDeadline)
 
 function apply(data: TournamentInfo) {
   info.value = data
   startDeadline.value = Date.now() + (data.startsAt - data.now)
-  roundDeadline.value =
-    data.roundDeadline === null ? null : Date.now() + (data.roundDeadline - data.now)
+  closeDeadline.value =
+    data.matchCloseAt === null ? null : Date.now() + (data.matchCloseAt - data.now)
+  cooldownDeadline.value =
+    data.my?.cooldownUntil == null ? null : Date.now() + (data.my.cooldownUntil - data.now)
   loading.value = false
 }
 
-// 参赛者可切到「对局状态」观战本轮各桌对阵（rounds 仅对参赛者下发）。
+// 冷却读秒走完就地视为空闲（服务端只在事件时推送，不为冷却到点广播）。
+const myStatus = computed(() => {
+  const my = info.value?.my
+  if (!my) return null
+  if (my.status === 'cooldown' && (cooldownLeft.value ?? 0) <= 0) return 'idle'
+  return my.status
+})
+const matchClosed = computed(
+  () => info.value?.matchCloseAt !== null && (closeLeft.value ?? 0) <= 0,
+)
+
+// 配上对手（或刷新回来还有未打完的对局）即自动进房。
+let navigated = false
+watch(
+  () => info.value?.myGame?.code,
+  (code) => {
+    if (code && !navigated) {
+      navigated = true
+      location.assign(`/room/${code}`)
+    }
+  },
+)
+
+async function seek() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    apply(await (myStatus.value === 'matching' ? cancelTournamentSeek() : seekTournamentMatch()))
+  } catch {
+    // ignore
+  } finally {
+    busy.value = false
+  }
+}
+
+// 空闲/匹配中/冷却中都可观战对局中的桌（房号仅对可观战者下发）。
 const VIEWS = ['standings', 'matches'] as const
 const VIEW_LABELS: Record<(typeof VIEWS)[number], string> = {
   standings: '积分',
   matches: '观战',
 }
 const view = ref<(typeof VIEWS)[number]>('standings')
-// 只列对局中的桌（打完的看积分即可，没开的没内容可看）。
 const currentMatches = computed<Match[]>(() =>
   info.value?.state === 'active'
-    ? (info.value.rounds[info.value.rounds.length - 1] ?? []).filter((m) => m.status === 'playing')
+    ? info.value.games.filter((m) => m.status === 'playing' && m.code)
     : [],
 )
 
-// 没有可观战的桌时（未打完自己的对局 / 各桌都不在对局中）退回积分视图，观战项置灰。
 watch(currentMatches, (matches) => {
   if (!matches.length) view.value = 'standings'
 })
@@ -99,23 +137,54 @@ useWebSocket(tournamentWsUrl(), {
             </p>
             <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">可在首页登录后报名参赛</p>
           </template>
-          <template v-else-if="info.myGame">
-            <p class="text-sm text-stone-500 dark:text-stone-400">第 {{ info.round }} 轮 · 已为你配对</p>
-            <p class="mt-1 text-lg font-semibold text-stone-800 dark:text-stone-100">准备好了就进入对局</p>
-            <a :href="`/room/${info.myGame.code}`" class="mt-3 inline-block">
-              <AppButton>进入对局</AppButton>
-            </a>
-          </template>
           <template v-else-if="info.participating">
             <p class="text-sm text-stone-500 dark:text-stone-400">
-              第 {{ info.round }} / {{ info.totalRounds }} 轮 · 本轮剩余
+              {{ matchClosed ? '匹配已截止 · 等待收官' : '距匹配截止' }}
             </p>
-            <p class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100">
-              {{ formatCountdown(roundLeft ?? 0) }}
+            <p
+              v-if="!matchClosed"
+              class="mt-1 text-2xl font-bold text-stone-800 tabular-nums dark:text-stone-100"
+            >
+              {{ formatCountdown(closeLeft ?? 0) }}
             </p>
-            <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-              等待其他对局结束 · {{ info.playerCount }} 人参赛
-            </p>
+            <template v-if="myStatus === 'matching'">
+              <AppButton
+                secondary
+                class="mt-3 inline-flex items-center justify-center gap-2"
+                :disabled="busy"
+                @click="seek"
+              >
+                <IconSpinner class="size-4" />匹配中，点击取消
+              </AppButton>
+            </template>
+            <template v-else-if="myStatus === 'cooldown'">
+              <p class="mt-3 text-sm font-semibold text-stone-700 dark:text-stone-200">
+                冷却中 {{ cooldownLeft ?? 0 }}s
+              </p>
+              <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">歇口气，可先观战其他对局</p>
+            </template>
+            <template v-else-if="myStatus === 'readying' || myStatus === 'playing'">
+              <p class="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-stone-700 dark:text-stone-200">
+                <IconSpinner class="size-4" />已匹配到对手，正在进入对局…
+              </p>
+            </template>
+            <template v-else-if="!matchClosed">
+              <AppButton
+                class="mt-3 inline-flex items-center justify-center gap-2"
+                :disabled="busy"
+                @click="seek"
+              >
+                <IconSpinner v-if="busy" class="size-4" />匹配对手
+              </AppButton>
+              <p class="mt-2 text-xs text-stone-400 dark:text-stone-500">
+                {{ info.playerCount }} 人参赛
+              </p>
+            </template>
+            <template v-else>
+              <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+                进行中的对局打完即出终榜
+              </p>
+            </template>
           </template>
           <template v-else-if="info.state === 'active'">
             <p class="text-sm text-stone-500 dark:text-stone-400">大赛进行中</p>
@@ -130,10 +199,12 @@ useWebSocket(tournamentWsUrl(), {
               {{ formatCountdown(startLeft ?? 0) }}
             </p>
             <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-              已报名 {{ info.playerCount }} 人{{ info.registered ? ' · 到点自动进入对局' : '' }}
+              已报名 {{ info.playerCount }} 人{{ info.registered ? ' · 开赛后手动匹配对手' : '' }}
             </p>
           </template>
-          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">约3轮 · 每轮10min · 每回合10~30s</p>
+          <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+            竞技场 30 分钟 · 随到随战
+          </p>
         </div>
 
         <div

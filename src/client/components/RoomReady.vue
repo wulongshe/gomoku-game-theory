@@ -63,7 +63,7 @@ const players = computed(() => [
       </div>
       <div class="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
         <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">
-          每回合 {{ tournament ? '10~30s' : frameLabel(frameSeconds) }}
+          每回合 {{ tournament ? '10~45s' : frameLabel(frameSeconds) }}
         </span>
         <span class="rounded-full bg-stone-100 px-2.5 py-1 dark:bg-stone-700/60">{{ MODE_LABELS[mode] }}模式</span>
       </div>

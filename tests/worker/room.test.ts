@@ -463,7 +463,7 @@ describe('Room', () => {
     expect(await a.next('error')).toMatchObject({ message: 'game not finished' })
   })
 
-  it('forfeits the game and closes the room on leave', async () => {
+  it('forfeits the game on leave but keeps the room for the winner', async () => {
     const [a, b] = await startGame('1016')
     a.ws.send(JSON.stringify({ type: 'leave' }))
     expect(await b.next('opponent_resigned')).toEqual({ type: 'opponent_resigned', left: true })
@@ -471,17 +471,13 @@ describe('Room', () => {
     if (settled.type !== 'frame_settled') throw new Error('unreachable')
     expect(settled.state.phase).toBe('white_won')
     expect(settled.deadline).toBeNull()
-    expect(await b.next('room_closed')).toEqual({ type: 'room_closed' })
 
-    const stub = env.ROOM.get(env.ROOM.idFromName('1016'))
-    await vi.waitFor(async () => {
-      const entries = await runInDurableObject(stub, (_instance, state) => state.storage.list())
-      expect(entries.size).toBe(0)
-    })
-    const res = await SELF.fetch('https://example.com/api/rooms/1016/ws?key=key-c', {
-      headers: { Upgrade: 'websocket' },
-    })
-    expect(res.status).toBe(404)
+    // 房间保留终局：赢方掉线/刷新后回来仍能看到胜局，而非「房间不存在」。
+    const b2 = await connect('1016', 'key-b')
+    expect(await b2.next('joined')).toMatchObject({ seat: 'white' })
+    const start = await b2.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    expect(start.state.phase).toBe('white_won')
   })
 
   it('recycles a finished room after the last player leaves', async () => {
@@ -651,22 +647,22 @@ describe('account seat recovery', () => {
     const x = await sessionFor(xEmail)
     const y = await sessionFor(yEmail)
     const code = await allocateRoom(env, 15, 'forbidden', {
-      tournament: { round: 1, players: [xEmail, yEmail] },
+      tournament: { players: [xEmail, yEmail] },
     })
 
     const tstub = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
     await runInDurableObject(tstub, (_i, state) =>
       state.storage.put('t', {
         state: 'active',
-        round: 1,
-        totalRounds: 2,
-        roundDeadline: Date.now() + 600_000,
+        startedAt: Date.now(),
         registrations: [],
         players: {
-          [xEmail]: { score: 0, opponents: [yEmail], byes: 0 },
-          [yEmail]: { score: 0, opponents: [xEmail], byes: 0 },
+          [xEmail]: { score: 0, wins: 0, games: 0, opponents: [yEmail] },
+          [yEmail]: { score: 0, wins: 0, games: 0, opponents: [xEmail] },
         },
-        pairings: [{ code, players: [xEmail, yEmail], checkedIn: [], result: null }],
+        pairings: [
+          { code, players: [xEmail, yEmail], checkedIn: [], result: null, createdAt: Date.now() },
+        ],
         lastStandings: [],
       }),
     )
@@ -792,7 +788,7 @@ describe('account seat recovery', () => {
     await b.next('start')
 
     a.ws.send(JSON.stringify({ type: 'leave' }))
-    await b.next('room_closed')
+    await b.next('frame_settled')
 
     const stub = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
     await vi.waitFor(async () => {
@@ -976,15 +972,12 @@ describe('tournament spectating', () => {
       state.storage.put('t', {
         state: 'active',
         startedAt: Date.now(),
-        round: 1,
-        totalRounds: 1,
-        roundDeadline: Date.now() + 600_000,
         registrations: [],
         players: {
-          [viewerEmail]: { score: 0, opponents: ['b@x'], byes: 0 },
-          'b@x': { score: 0, opponents: [viewerEmail], byes: 0 },
-          'c@x': { score: 0, opponents: ['d@x'], byes: 0 },
-          'd@x': { score: 0, opponents: ['c@x'], byes: 0 },
+          [viewerEmail]: { score: 0, wins: 0, games: 0, opponents: ['b@x'] },
+          'b@x': { score: 0, wins: 0, games: 0, opponents: [viewerEmail] },
+          'c@x': { score: 0, wins: 0, games: 0, opponents: ['d@x'] },
+          'd@x': { score: 0, wins: 0, games: 0, opponents: ['c@x'] },
         },
         pairings: [
           {
@@ -992,10 +985,16 @@ describe('tournament spectating', () => {
             players: [viewerEmail, 'b@x'],
             checkedIn: [viewerEmail, 'b@x'],
             result: done ? 'a' : null,
+            createdAt: Date.now(),
           },
-          { code: '8802', players: ['c@x', 'd@x'], checkedIn: ['c@x', 'd@x'], result: null },
+          {
+            code: '8802',
+            players: ['c@x', 'd@x'],
+            checkedIn: ['c@x', 'd@x'],
+            result: null,
+            createdAt: Date.now(),
+          },
         ],
-        past: [],
         lastStandings: [],
       }),
     )
@@ -1012,7 +1011,7 @@ describe('tournament spectating', () => {
     const token = await sessionFor(viewer)
     await seedSpectatableTournament(viewer, true)
     const code = await allocateRoom(env, 30, 'forbidden', {
-      tournament: { round: 1, players: ['c@x', 'd@x'] },
+      tournament: { players: ['c@x', 'd@x'] },
     })
     const cToken = await sessionFor('c@x')
     const dToken = await sessionFor('d@x')
@@ -1067,7 +1066,7 @@ describe('tournament spectating', () => {
     const token = await sessionFor(viewer)
     await seedSpectatableTournament(viewer, false)
     const code = await allocateRoom(env, 30, 'forbidden', {
-      tournament: { round: 1, players: ['c@x', 'd@x'] },
+      tournament: { players: ['c@x', 'd@x'] },
     })
     expect((await connectSpectator(code, token)).status).toBe(403)
     const guest = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?spectate=1`, {
@@ -1083,27 +1082,24 @@ describe('tournament bot rooms', () => {
 
   interface TPairing {
     code: string | null
-    players: [string, string | null]
+    players: [string, string]
     checkedIn: string[]
     result: string | null
+    createdAt?: number
   }
 
   async function seedTournament(
-    players: Record<string, { score: number; opponents: string[]; byes: number }>,
+    players: Record<string, { score: number; wins: number; games: number; opponents: string[] }>,
     pairings: TPairing[],
   ): Promise<void> {
     await runInDurableObject(tstub(), (_i, state) =>
       state.storage.put('t', {
         state: 'active',
         startedAt: Date.now(),
-        round: 1,
-        totalRounds: 1,
-        roundDeadline: Date.now() + 600_000,
         registrations: [],
         players,
         bots: {},
-        pairings,
-        past: [],
+        pairings: pairings.map((p) => ({ createdAt: Date.now(), ...p })),
         lastStandings: [],
       }),
     )
@@ -1112,19 +1108,19 @@ describe('tournament bot rooms', () => {
   const readT = () =>
     runInDurableObject(tstub(), (_i, state) =>
       state.storage.get('t'),
-    ) as Promise<{ state: string; pairings: TPairing[]; past: TPairing[][] }>
+    ) as Promise<{ state: string; pairings: TPairing[] }>
 
   it('checks the bot in, plays human vs bot, and reports the result by bot email', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1)
     const human = 'tb-human@example.com'
     const bot = 'tb-bot@example.com'
     const code = await allocateRoom(env, 30, 'forbidden', {
-      tournament: { round: 1, players: [bot, human], bots: ['normal', null] },
+      tournament: { players: [bot, human], bots: ['normal', null] },
     })
     await seedTournament(
       {
-        [bot]: { score: 0, opponents: [human], byes: 0 },
-        [human]: { score: 0, opponents: [bot], byes: 0 },
+        [bot]: { score: 0, wins: 0, games: 0, opponents: [human] },
+        [human]: { score: 0, wins: 0, games: 0, opponents: [bot] },
       },
       [{ code, players: [bot, human], checkedIn: [], result: null }],
     )
@@ -1143,8 +1139,8 @@ describe('tournament bot rooms', () => {
     h.ws.send(JSON.stringify({ type: 'resign' }))
     await h.next('frame_settled')
     const t = await readT()
-    expect(t.state).toBe('idle') // 唯一一轮唯一一局出结果 → 收轮收赛
-    expect(t.past[0][0].result).toBe('a')
+    expect(t.state).toBe('active') // 竞技场窗口未关，继续等其他人开战
+    expect(t.pairings[0].result).toBe('a')
 
     // 不入普通战绩
     const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
@@ -1160,14 +1156,14 @@ describe('tournament bot rooms', () => {
     const b0 = 'tb-b0@example.com'
     const b1 = 'tb-b1@example.com'
     const code = await allocateRoom(env, 30, 'forbidden', {
-      tournament: { round: 1, players: [b0, b1], bots: ['normal', 'easy'] },
+      tournament: { players: [b0, b1], bots: ['normal', 'easy'] },
     })
     await seedTournament(
       {
-        [viewer]: { score: 1, opponents: ['x@x'], byes: 0 },
-        'x@x': { score: 0, opponents: [viewer], byes: 0 },
-        [b0]: { score: 0, opponents: [b1], byes: 0 },
-        [b1]: { score: 0, opponents: [b0], byes: 0 },
+        [viewer]: { score: 1, wins: 1, games: 1, opponents: ['x@x'] },
+        'x@x': { score: 0, wins: 0, games: 0, opponents: [viewer] },
+        [b0]: { score: 0, wins: 0, games: 0, opponents: [b1] },
+        [b1]: { score: 0, wins: 0, games: 0, opponents: [b0] },
       },
       [
         { code: '9901', players: [viewer, 'x@x'], checkedIn: [viewer, 'x@x'], result: 'a' },
@@ -1222,12 +1218,12 @@ describe('tournament bot rooms', () => {
     const b0 = 'tb-auto0@example.com'
     const b1 = 'tb-auto1@example.com'
     const code = await allocateRoom(env, 30, 'forbidden', {
-      tournament: { round: 1, players: [b0, b1], bots: ['easy', 'easy'] },
+      tournament: { players: [b0, b1], bots: ['easy', 'easy'] },
     })
     await seedTournament(
       {
-        [b0]: { score: 0, opponents: [b1], byes: 0 },
-        [b1]: { score: 0, opponents: [b0], byes: 0 },
+        [b0]: { score: 0, wins: 0, games: 0, opponents: [b1] },
+        [b1]: { score: 0, wins: 0, games: 0, opponents: [b0] },
       },
       [{ code, players: [b0, b1], checkedIn: [], result: null }],
     )

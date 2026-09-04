@@ -209,7 +209,7 @@ useEventListener(window, 'resize', updateScrollHint)
         ><span class="block -translate-y-px">🏅</span></span>
         <div class="flex-1">
           <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">每日大赛</p>
-          <p class="text-xs text-stone-500 dark:text-stone-400">每天 20:00 · 瑞士轮积分</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">每天 20:00 · 竞技场积分</p>
         </div>
         <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
       </button>
