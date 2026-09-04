@@ -258,9 +258,7 @@ export class Room extends DurableObject<Env> {
         submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
         yourChoice: choices[seat]?.point ?? null,
       })
-      for (const other of this.ctx.getWebSockets()) {
-        if (other !== pair[1]) this.send(other, { type: 'opponent_returned' })
-      }
+      this.notifyPeers(pair[1], { type: 'opponent_returned' })
     } else {
       const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
       if (ready.black && ready.white && this.readyToStart(aiSeats)) {
@@ -347,6 +345,13 @@ export class Room extends DurableObject<Env> {
       const attachment = ws.deserializeAttachment() as Attachment
       return !attachment.spectator && !attachment.replaced
     })
+  }
+
+  // 求和/认输/再战/进离场等对局交互只发给对方玩家：观战者只看棋局本身，收到这些会误弹「本局你获胜」等提示。
+  private notifyPeers(sender: WebSocket | null, message: ServerMessage): void {
+    for (const ws of this.playerSockets()) {
+      if (ws !== sender) this.send(ws, message)
+    }
   }
 
   private readyToStart(aiSeats: AiSeats): boolean {
@@ -506,9 +511,7 @@ export class Room extends DurableObject<Env> {
     if (msg.type === 'rematch_decline') {
       if (game && game.phase !== 'playing') {
         await this.ctx.storage.delete('rematch')
-        for (const other of this.ctx.getWebSockets()) {
-          if (other !== ws) this.send(other, { type: 'rematch_declined' })
-        }
+        this.notifyPeers(ws, { type: 'rematch_declined' })
       }
       return
     }
@@ -517,9 +520,7 @@ export class Room extends DurableObject<Env> {
         return this.send(ws, { type: 'error', message: 'game not in progress' })
       }
       if (msg.type === 'resign') {
-        for (const other of this.ctx.getWebSockets()) {
-          if (other !== ws) this.send(other, { type: 'opponent_resigned', left: false })
-        }
+        this.notifyPeers(ws, { type: 'opponent_resigned', left: false })
         return this.endGame({
           ...game,
           phase: seat === 'black' ? 'white_won' : 'black_won',
@@ -527,9 +528,7 @@ export class Room extends DurableObject<Env> {
         })
       }
       if (msg.type === 'draw_offer') {
-        for (const other of this.ctx.getWebSockets()) {
-          if (other !== ws) this.send(other, { type: 'draw_offered' })
-        }
+        this.notifyPeers(ws, { type: 'draw_offered' })
         const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
         if (aiSeat) {
           await this.ctx.storage.put('aiDrawOffered', true)
@@ -540,9 +539,7 @@ export class Room extends DurableObject<Env> {
       if (msg.accept) {
         return this.endGame({ ...game, phase: 'draw', cleared: [] })
       }
-      for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) this.send(other, { type: 'draw_declined' })
-      }
+      this.notifyPeers(ws, { type: 'draw_declined' })
       return
     }
     if (!game || game.phase !== 'playing') {
@@ -597,9 +594,7 @@ export class Room extends DurableObject<Env> {
         phase: seat === 'black' ? 'white_won' : 'black_won',
         cleared: [],
       }
-      for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) this.send(other, { type: 'opponent_resigned', left: true })
-      }
+      this.notifyPeers(ws, { type: 'opponent_resigned', left: true })
       await this.endGame(resigned)
       ws.close(1000, 'room closed')
       return
@@ -625,9 +620,7 @@ export class Room extends DurableObject<Env> {
     if (!accepted) {
       rematch[seat] = proposal
       await this.ctx.storage.put('rematch', rematch)
-      for (const socket of this.ctx.getWebSockets()) {
-        if (socket !== ws) this.send(socket, { type: 'rematch_requested', ...proposal })
-      }
+      this.notifyPeers(ws, { type: 'rematch_requested', ...proposal })
       const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
       if (aiSeat) {
         await this.planAi(aiSeat, 1000 + Math.random() * 2500)
@@ -825,7 +818,7 @@ export class Room extends DurableObject<Env> {
       game.frame >= drawFloor &&
       Math.random() < persona.drawish + (losing ? 0.35 : 0)
     if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
-    this.broadcast({ type: 'draw_declined' })
+    this.notifyPeers(null, { type: 'draw_declined' })
     // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
     const deadline = await this.ctx.storage.get<number>('deadline')
     const frameStart = (await this.ctx.storage.get<number>('frameStart')) ?? Date.now()
@@ -838,9 +831,7 @@ export class Room extends DurableObject<Env> {
 
   private async aiResign(seat: Seat, game: GameState): Promise<void> {
     // 只通知在场的对手（不含观战者，否则观战方会误弹「本局你获胜」）。
-    for (const ws of this.playerSockets()) {
-      this.send(ws, { type: 'opponent_resigned', left: false })
-    }
+    this.notifyPeers(null, { type: 'opponent_resigned', left: false })
     await this.endGame({
       ...game,
       phase: seat === 'black' ? 'white_won' : 'black_won',
@@ -853,9 +844,7 @@ export class Room extends DurableObject<Env> {
     if (attachment.replaced || attachment.spectator) return
     if (!(await this.ctx.storage.get<boolean>('created'))) return
     const remaining = this.ctx.getWebSockets().filter((other) => other !== ws)
-    for (const other of remaining) {
-      this.send(other, { type: 'opponent_left' })
-    }
+    this.notifyPeers(ws, { type: 'opponent_left' })
     const game = await this.ctx.storage.get<GameState>('game')
     if (!game) {
       // 离开准备页即清除该席位的准备状态，回来后需重新准备。

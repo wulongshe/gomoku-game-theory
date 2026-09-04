@@ -1076,6 +1076,48 @@ describe('tournament spectating', () => {
     expect(seenTypes).not.toContain('choices')
   })
 
+  it('never leaks draw or resign notifications to spectators', async () => {
+    const viewer = 'peeker@example.com'
+    const token = await sessionFor(viewer)
+    const code = await allocateRoom(env, 30, 'forbidden', {
+      tournament: { players: ['pc@x', 'pd@x'] },
+    })
+    const cToken = await sessionFor('pc@x')
+    const dToken = await sessionFor('pd@x')
+    const a = await connect(code, 'key-c', cToken)
+    const b = await connect(code, 'key-d', dToken)
+    await a.next('joined')
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    await a.next('start')
+    await b.next('start')
+
+    const res = await connectSpectator(code, token)
+    const ws = res.webSocket!
+    ws.accept()
+    const seenTypes: string[] = []
+    ws.addEventListener('message', (event) => {
+      seenTypes.push((JSON.parse(event.data as string) as ServerMessage).type)
+    })
+
+    // 一方求和被另一方拒绝：两个玩家往返，观战者不该收到任何求和提示。
+    a.ws.send(JSON.stringify({ type: 'draw_offer' }))
+    await b.next('draw_offered')
+    b.ws.send(JSON.stringify({ type: 'draw_response', accept: false }))
+    await a.next('draw_declined')
+
+    // 一方认输：对手收到认输提示，观战者只应看到最终结算。
+    a.ws.send(JSON.stringify({ type: 'resign' }))
+    await b.next('opponent_resigned')
+    await b.next('frame_settled')
+
+    await vi.waitFor(() => expect(seenTypes).toContain('frame_settled'))
+    expect(seenTypes).not.toContain('draw_offered')
+    expect(seenTypes).not.toContain('draw_declined')
+    expect(seenTypes).not.toContain('opponent_resigned')
+  })
+
   it('admits guest spectators to tournament rooms but not to normal rooms', async () => {
     const code = await allocateRoom(env, 30, 'forbidden', {
       tournament: { players: ['c@x', 'd@x'] },
