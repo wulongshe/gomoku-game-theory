@@ -423,7 +423,7 @@ describe('arena statuses and spectate gating', () => {
     expect(info.games.find((m) => m.status === 'done')?.code).toBeNull()
   })
 
-  it('hides spectate codes while my own game is unresolved', async () => {
+  it('hands spectate codes to everyone, guests and busy players alike', async () => {
     const me = 'busy-me@example.com'
     const token = await sessionFor(me)
     await seedActive([me, 'b@x', 'c@x', 'd@x'], {
@@ -442,18 +442,13 @@ describe('arena statuses and spectate gating', () => {
     const info = await stub().getInfo(token)
     expect(info.my?.status).toBe('readying')
     expect(info.myGame).toEqual({ code: '0311' })
-    expect(info.games.every((m) => m.code === null)).toBe(true)
-  })
+    expect(info.games.find((m) => m.status === 'playing')?.code).toBe('0312')
 
-  it('hides games from non-participants during an active event', async () => {
-    const outsider = await sessionFor('outsider@example.com')
-    await seedActive(['a@x', 'b@x'])
-    const info = await stub().getInfo(outsider)
-    expect(info.participating).toBe(false)
-    expect(info.standings.length).toBe(2)
-    expect(info.games).toEqual([])
-    expect(info.myGame).toBeNull()
-    expect(info.my).toBeNull()
+    const guest = await stub().getInfo(null)
+    expect(guest.participating).toBe(false)
+    expect(guest.games.find((m) => m.status === 'playing')?.code).toBe('0312')
+    expect(guest.myGame).toBeNull()
+    expect(guest.my).toBeNull()
   })
 
   it('lets a non-participant sign up for the next event during an active one', async () => {

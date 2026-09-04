@@ -164,7 +164,7 @@ export class Room extends DurableObject<Env> {
       return new Response('Room not found', { status: 404 })
     }
     if (url.searchParams.get('spectate') === '1') {
-      return this.acceptSpectator(url)
+      return this.acceptSpectator()
     }
     const key = url.searchParams.get('key')
     if (!key) {
@@ -266,20 +266,11 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
 
-  // 观战连接：仅大赛房开放，且由大赛 DO 校验资格（本轮参赛且自己的对局已打完）。
-  // 观战者无席位、只收广播；帧内双方选点不下发，帧结算后才能看到落子（防多号传点）。
-  private async acceptSpectator(url: URL): Promise<Response> {
+  // 观战连接：仅大赛房开放，不限身份（含游客）。观战者无席位、只收广播；
+  // 帧内双方选点不下发，帧结算后才能看到落子（防传点）。
+  private async acceptSpectator(): Promise<Response> {
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    const email = await this.accountEmail(url.searchParams.get('token'))
-    let allowed = false
-    if (tournament && email !== null) {
-      try {
-        allowed = await this.env.TOURNAMENT.get(
-          this.env.TOURNAMENT.idFromName('daily'),
-        ).canSpectate(email)
-      } catch {}
-    }
-    if (!allowed) {
+    if (!tournament) {
       return new Response('Not allowed to spectate', { status: 403 })
     }
     const pair = new WebSocketPair()

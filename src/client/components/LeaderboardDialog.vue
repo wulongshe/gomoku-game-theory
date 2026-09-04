@@ -50,7 +50,7 @@ onMounted(async () => {
           {{ item.label }}
         </span>
       </div>
-      <div class="flex max-h-80 flex-col gap-2 overflow-y-auto">
+      <div class="flex max-h-80 flex-col gap-2 overflow-y-auto overscroll-contain">
         <div
           v-for="(entry, index) in entries"
           :key="index"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useEventListener, useScrollLock } from '@vueuse/core'
 import IconChevronRight from '~/components/icons/IconChevronRight.vue'
 import IconCross from '~/components/icons/IconCross.vue'
 import { fullRules } from '@gomoku/branding'
@@ -8,6 +8,11 @@ import { fullRules } from '@gomoku/branding'
 const emit = defineEmits<{ close: [] }>()
 
 const FULL_RULES = fullRules()
+
+// 弹窗期间锁住页面滚动：内容滚到尽头时滚动链会越过遮罩落到 body，锁住才真正不穿透。
+const pageLocked = useScrollLock(() => document.body)
+onMounted(() => (pageLocked.value = true))
+onBeforeUnmount(() => (pageLocked.value = false))
 
 // 规则超出弹窗高度时提示可下滑，滚到接近底部即淡出。
 const body = ref<HTMLElement>()
@@ -22,8 +27,9 @@ useEventListener(window, 'resize', updateScrollHint)
 </script>
 
 <template>
+  <!-- 遮罩自身作为滚动容器并 overscroll-contain：滚动链在此截断，滚不到底层主界面。 -->
   <div
-    class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6"
+    class="fixed inset-0 z-10 flex items-center justify-center overflow-y-auto overscroll-contain bg-black/40 p-6"
     @click.self="emit('close')"
   >
     <div
@@ -39,7 +45,7 @@ useEventListener(window, 'resize', updateScrollHint)
           <IconCross class="size-4" />
         </button>
       </div>
-      <div ref="body" class="flex flex-col gap-5 overflow-y-auto">
+      <div ref="body" class="flex flex-col gap-5 overflow-y-auto overscroll-contain">
         <div v-for="section in FULL_RULES" :key="section.title" class="flex flex-col gap-2">
           <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">{{ section.title }}</p>
           <ul class="flex flex-col gap-1.5 text-sm text-stone-500 dark:text-stone-400">

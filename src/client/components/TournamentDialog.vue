@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useWebSocket } from '@vueuse/core'
 import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
+import SegmentedControl from '~/components/SegmentedControl.vue'
+import TournamentMatches from '~/components/TournamentMatches.vue'
 import TournamentStandings from '~/components/TournamentStandings.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { registerTournament, tournamentWsUrl, withdrawTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { formatCountdown } from '~/utils/format'
-import type { TournamentInfo } from '@/shared/protocol'
+import type { Match, TournamentInfo } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: []; login: [] }>()
 
@@ -31,6 +33,28 @@ function apply(data: TournamentInfo) {
     data.matchCloseAt === null ? null : Date.now() + (data.matchCloseAt - data.now)
   loading.value = false
 }
+
+// 与大厅一致的观战入口：进行中可切到对局中的桌。
+const VIEWS = ['standings', 'matches'] as const
+const VIEW_LABELS: Record<(typeof VIEWS)[number], string> = {
+  standings: '积分',
+  matches: '观战',
+}
+const view = ref<(typeof VIEWS)[number]>('standings')
+const currentMatches = computed<Match[]>(() =>
+  info.value?.state === 'active'
+    ? info.value.games.filter((m) => m.status === 'playing' && m.code)
+    : [],
+)
+
+watch(currentMatches, (matches) => {
+  if (!matches.length) view.value = 'standings'
+})
+
+// 进行中给列表按屏高定死高度：积分/观战两个 tab 内容行数不同，跟随内容会让弹窗抖动。
+const listHeight = computed(() =>
+  info.value?.state === 'active' ? 'h-[38dvh]' : 'max-h-64',
+)
 
 // 服务端连上即推一帧、状态变化再推，无需轮询。
 useWebSocket(tournamentWsUrl(), {
@@ -110,11 +134,27 @@ const buttonVariant = computed(() =>
         </p>
       </div>
 
-      <div v-if="info.standings.length" class="flex flex-col gap-1.5">
+      <div
+        v-if="info.standings.length || currentMatches.length"
+        class="flex flex-col gap-1.5"
+      >
         <p v-if="info.state !== 'active'" class="text-xs text-stone-400 dark:text-stone-500">
           上届排名
         </p>
-        <TournamentStandings :standings="info.standings" :me="info.me" class="max-h-64" />
+        <SegmentedControl
+          v-else
+          v-model="view"
+          :options="VIEWS"
+          :label="(v) => VIEW_LABELS[v]"
+          class="text-sm"
+        />
+        <TournamentStandings
+          v-if="view === 'standings'"
+          :standings="info.standings"
+          :me="info.me"
+          :class="listHeight"
+        />
+        <TournamentMatches v-else :matches="currentMatches" :class="listHeight" />
       </div>
       <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
         竞技场积分赛 · 多打多得

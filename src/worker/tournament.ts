@@ -514,12 +514,8 @@ export class Tournament extends DurableObject<Env> {
     const registered = email !== null && s.registrations.includes(email)
     const statuses = s.state === 'active' ? this.statuses(s) : null
     const myPairing = participating ? this.unresolvedOf(s, email!) : undefined
-    // 观战门槛：参赛且此刻不在对局里（空闲/匹配中/冷却中都可以看别桌），房号只发给这类人。
-    const mayWatch = participating && myPairing === undefined
-    const games =
-      s.state !== 'active' || participating
-        ? [...s.pairings].reverse().map((p) => this.toMatch(p, s.state === 'active' && mayWatch))
-        : []
+    // 观战不设门槛：进行中的桌对所有人（含游客）下发房号；帧内选点本就要结算后才可见。
+    const games = [...s.pairings].reverse().map((p) => this.toMatch(p, s.state === 'active'))
     const standings = s.state === 'idle' ? s.lastStandings : this.standings(s)
     const names = await this.displayNames([
       ...new Set([
@@ -571,14 +567,6 @@ export class Tournament extends DurableObject<Env> {
       status: p.result !== null ? 'done' : p.started ? 'playing' : 'readying',
       result: p.result,
     }
-  }
-
-  // 观战资格（Room 校验用）：参赛且此刻不在对局里。
-  async canSpectate(email: string): Promise<boolean> {
-    return this.ctx.blockConcurrencyWhile(async () => {
-      const s = await this.load()
-      return s.state === 'active' && email in s.players && this.unresolvedOf(s, email) === undefined
-    })
   }
 
   // 本地开发数据注入（路由仅 localhost 暴露，见 index.ts）：覆写状态、重挂闹钟并广播。

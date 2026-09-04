@@ -33,7 +33,7 @@ const hasStatus = computed(() => props.standings.some((row) => row.status))
         {{ item.label }}
       </span>
     </div>
-    <div class="flex min-h-0 flex-col gap-1 overflow-y-auto">
+    <div class="flex min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain">
       <div
         v-for="(row, i) in standings"
         :key="i"

@@ -1061,18 +1061,20 @@ describe('tournament spectating', () => {
     expect(seenTypes).not.toContain('choices')
   })
 
-  it('rejects spectators whose own game is unfinished and guests', async () => {
-    const viewer = 'busyviewer@example.com'
-    const token = await sessionFor(viewer)
-    await seedSpectatableTournament(viewer, false)
+  it('admits guest spectators to tournament rooms but not to normal rooms', async () => {
     const code = await allocateRoom(env, 30, 'forbidden', {
       tournament: { players: ['c@x', 'd@x'] },
     })
-    expect((await connectSpectator(code, token)).status).toBe(403)
     const guest = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?spectate=1`, {
       headers: { Upgrade: 'websocket' },
     })
-    expect(guest.status).toBe(403)
+    expect(guest.status).toBe(101)
+
+    await createRoom('7301')
+    const normal = await SELF.fetch('https://example.com/api/rooms/7301/ws?spectate=1', {
+      headers: { Upgrade: 'websocket' },
+    })
+    expect(normal.status).toBe(403)
   })
 })
 

@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useScrollLock } from '@vueuse/core'
 import IconCross from '~/components/icons/IconCross.vue'
 
 withDefaults(defineProps<{ title: string; closable?: boolean }>(), { closable: true })
 const emit = defineEmits<{ close: [] }>()
+
+// 弹窗期间锁住页面滚动：内容滚到尽头时滚动链会越过遮罩落到 body，锁住才真正不穿透。
+const pageLocked = useScrollLock(() => document.body)
 
 // 内容高度变化时平滑过渡：实测内容高度写入外框（height:auto 不可过渡，故用具体像素值）。
 // 底部 footer 固定贴底，正文区高度不足时裁掉溢出，让按钮随外框底边平滑移动、不跳动。
@@ -18,6 +22,7 @@ function measure() {
 }
 
 onMounted(() => {
+  pageLocked.value = true
   // 首帧直接落到实测高度（auto→px 不触发过渡），之后的 px→px 变化才走动画。
   measure()
   observer = new ResizeObserver(measure)
@@ -25,11 +30,17 @@ onMounted(() => {
   if (footer.value) observer.observe(footer.value)
 })
 
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(() => {
+  pageLocked.value = false
+  observer?.disconnect()
+})
 </script>
 
 <template>
-  <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6">
+  <!-- 遮罩自身作为滚动容器并 overscroll-contain：滚动链在此截断，滚不到底层主界面。 -->
+  <div
+    class="fixed inset-0 z-10 flex items-center justify-center overflow-y-auto overscroll-contain bg-black/40 p-6"
+  >
     <div
       class="flex w-full max-w-xs flex-col overflow-hidden rounded-2xl bg-white shadow-lg transition-[height] duration-300 ease-out dark:bg-stone-800"
       :style="{ height }"
