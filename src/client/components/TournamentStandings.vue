@@ -20,6 +20,8 @@ const STATUS_META: Record<PlayerStatus, { label: string; dot: string }> = {
 
 // 仅实时积分带状态（上届排名不带），有状态才显示图例与着色。
 const hasStatus = computed(() => props.standings.some((row) => row.status))
+
+const MEDALS = ['🥇', '🥈', '🥉']
 </script>
 
 <template>
@@ -53,8 +55,9 @@ const hasStatus = computed(() => props.standings.some((row) => row.status))
           class="size-2 shrink-0 rounded-full"
           :class="STATUS_META[row.status].dot"
         />
-        <span class="min-w-5 text-center font-semibold text-stone-400 dark:text-stone-500">
-          {{ i + 1 }}
+        <span class="min-w-5 shrink-0 text-center">
+          <template v-if="i < MEDALS.length">{{ MEDALS[i] }}</template>
+          <span v-else class="font-semibold text-stone-400 dark:text-stone-500">{{ i + 1 }}</span>
         </span>
         <span
           class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-stone-700 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:text-stone-200"
