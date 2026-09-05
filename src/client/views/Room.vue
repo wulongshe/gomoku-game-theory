@@ -21,10 +21,18 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconSettings from '~/components/icons/IconSettings.vue'
+import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { roomStatus, roomWsUrl, spectateWsUrl, tournamentWsUrl } from '~/apis'
+import {
+  cancelTournamentSeek,
+  roomStatus,
+  roomWsUrl,
+  seekTournamentMatch,
+  spectateWsUrl,
+  tournamentWsUrl,
+} from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
@@ -49,6 +57,7 @@ import {
   type ClientMessage,
   type FrameMoves,
   type ServerMessage,
+  type TournamentInfo,
 } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
@@ -119,7 +128,9 @@ const key = useStorage(`${ROOM_KEY_PREFIX}${props.code}`, nanoid())
 const { loggedIn, refresh: refreshAuth } = useAuth()
 refreshAuth()
 
-// 大赛在场心跳：登录用户观战大赛对局时保持一条大厅连接，榜单不把 TA 标成「已离开」。
+// 大赛在场心跳：登录用户观战大赛对局时保持一条大厅连接，榜单不把 TA 标成「已离开」；
+// 推送顺带驱动「有人空闲、可匹配」提示。
+const tournamentInfo = ref<TournamentInfo | null>(null)
 const presence = useWebSocket(tournamentWsUrl(), {
   immediate: false,
   heartbeat: {
@@ -129,11 +140,53 @@ const presence = useWebSocket(tournamentWsUrl(), {
     pongTimeout: 10_000,
   },
   autoReconnect: { delay: 3000 },
+  onMessage(_ws, event) {
+    tournamentInfo.value = JSON.parse(event.data as string) as TournamentInfo
+  },
 })
 watch(
   () => spectating && tournament.value && loggedIn.value,
   (on) => (on ? presence.open() : presence.close()),
 )
+
+// 观战中配上了对手：先退回大厅（保持历史干净），由大厅自动带进自己的新对局。
+watch(
+  () => tournamentInfo.value?.myGame?.code,
+  (code) => {
+    if (code) backOrReplace('/tournament')
+  },
+)
+
+const spectatorSeekStatus = computed(() => tournamentInfo.value?.my?.status ?? null)
+const othersIdle = computed(() => {
+  const info = tournamentInfo.value
+  if (!info) return false
+  return info.standings.some(
+    (row, i) => (row.status === 'idle' || row.status === 'matching') && i !== info.me,
+  )
+})
+// 匹配按钮：本人空闲且场上还有空闲玩家时出现；点了之后保持可取消，直到配上。
+const spectatorCanSeek = computed(() => {
+  const info = tournamentInfo.value
+  if (!info?.participating || info.matchCloseAt === null) return false
+  if (info.matchCloseAt - info.now <= 0) return false
+  const status = spectatorSeekStatus.value
+  return status === 'matching' || (status === 'idle' && othersIdle.value)
+})
+const seekBusy = ref(false)
+async function spectatorSeek() {
+  if (seekBusy.value) return
+  seekBusy.value = true
+  try {
+    tournamentInfo.value = await (spectatorSeekStatus.value === 'matching'
+      ? cancelTournamentSeek()
+      : seekTournamentMatch())
+  } catch {
+    // ignore
+  } finally {
+    seekBusy.value = false
+  }
+}
 
 function forgetKey() {
   localStorage.removeItem(`${ROOM_KEY_PREFIX}${props.code}`)
@@ -768,6 +821,19 @@ function exitRoom() {
               {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
             </p>
           </template>
+
+          <div v-if="spectating && spectatorCanSeek" class="flex w-full flex-col items-center gap-1.5">
+            <p v-if="othersIdle" class="text-xs text-stone-400 dark:text-stone-500">有其他玩家处于空闲中</p>
+            <AppButton
+              :secondary="spectatorSeekStatus === 'matching'"
+              class="flex w-full items-center justify-center gap-2"
+              :disabled="seekBusy"
+              @click="spectatorSeek"
+            >
+              <IconSpinner v-if="spectatorSeekStatus === 'matching'" class="size-4" />
+              {{ spectatorSeekStatus === 'matching' ? '匹配中，点击取消' : '匹配对手' }}
+            </AppButton>
+          </div>
 
           <div v-if="seatAccounts.black || seatAccounts.white" class="flex justify-center">
             <button
