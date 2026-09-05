@@ -830,14 +830,15 @@ export class Room extends DurableObject<Env> {
     // 只需胜负态势判断，走轻量研判（不做选点的虚拟对弈）。
     const { commanding, losing } = assessPosition(game, seat, info.difficulty)
     const drawFloor = tournament ? TOURNAMENT_MIN_DRAW_MOVES : 12 // 和棋计分下限：不足判无效
-    // 落后或八十回合开外的拉锯，都更愿意握手言和；同一局被求和次数越多，越倾向点头。
+    // 落后或八十回合开外的拉锯，都更愿意握手言和；同一局被求和，第二次必接受。
     const asked = ((await this.ctx.storage.get<number>('aiDrawAsked')) ?? 0) + 1
     await this.ctx.storage.put('aiDrawAsked', asked)
     const accept =
       !commanding &&
       game.frame >= drawFloor &&
-      Math.random() <
-        persona.drawish + (losing ? 0.35 : 0) + (game.frame > 80 ? 0.35 : 0) + (asked - 1) * 0.15
+      (asked >= 2 ||
+        Math.random() <
+          persona.drawish + (losing ? 0.35 : 0) + (game.frame > 80 ? 0.35 : 0) + (asked - 1) * 0.15)
     if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
     this.notifyPeers(null, { type: 'draw_declined' })
     // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
