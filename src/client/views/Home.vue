@@ -227,32 +227,28 @@ useEventListener(window, 'resize', updateScrollHint)
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
-      <div class="flex w-full gap-2">
-        <AppButton secondary class="flex-1" @click="showMatch = true">随机匹配</AppButton>
-        <AppButton secondary class="flex-1" @click="showAi = true">人机对战</AppButton>
-      </div>
-      <div class="flex w-full gap-2">
-        <AppButton class="shrink-0" @click="showInvite = true">邀请好友</AppButton>
-        <div
-          class="flex min-w-0 flex-1 overflow-hidden rounded-xl border border-stone-300 bg-white/80 shadow-sm focus-within:border-stone-500 dark:border-stone-600 dark:bg-stone-800/80 dark:focus-within:border-stone-400"
+      <AppButton secondary class="w-full" @click="showAi = true">人机对战</AppButton>
+      <AppButton class="w-full" @click="showInvite = true">双人对战</AppButton>
+      <AppButton secondary class="w-full" @click="showMatch = true">随机匹配</AppButton>
+      <div
+        class="flex w-full min-w-0 overflow-hidden rounded-xl border border-stone-300 bg-white/80 shadow-sm focus-within:border-stone-500 dark:border-stone-600 dark:bg-stone-800/80 dark:focus-within:border-stone-400"
+      >
+        <input
+          v-model="joinCode"
+          :maxlength="ROOM_CODE_MAX_LENGTH"
+          inputmode="numeric"
+          placeholder="输入房间号"
+          class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
+          @input="joinCode = joinCode.replace(/\D/g, '')"
+          @keyup.enter="join"
+        />
+        <button
+          class="cursor-pointer bg-stone-800 px-5 text-lg font-medium text-white active:bg-stone-600 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
+          :disabled="!joinCodeValid"
+          @click="join"
         >
-          <input
-            v-model="joinCode"
-            :maxlength="ROOM_CODE_MAX_LENGTH"
-            inputmode="numeric"
-            placeholder="输入房间号"
-            class="min-w-0 flex-1 bg-transparent px-4 py-3 text-lg text-stone-800 placeholder:text-stone-400 focus:outline-none dark:text-stone-100 dark:placeholder:text-stone-500"
-            @input="joinCode = joinCode.replace(/\D/g, '')"
-            @keyup.enter="join"
-          />
-          <button
-            class="cursor-pointer bg-stone-800 px-5 text-lg font-medium text-white active:bg-stone-600 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:active:bg-stone-400"
-            :disabled="!joinCodeValid"
-            @click="join"
-          >
-            进入
-          </button>
-        </div>
+          进入
+        </button>
       </div>
       <div class="flex items-center gap-1">
         <a
@@ -333,7 +329,7 @@ useEventListener(window, 'resize', updateScrollHint)
       v-if="showInvite"
       v-model:frame="inviteFrame"
       v-model:mode="inviteMode"
-      title="邀请好友"
+      title="双人对战"
       :confirm-text="creating ? '邀请中…' : '发起邀请'"
       :loading="creating"
       :disabled="creating"
