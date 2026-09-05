@@ -16,6 +16,9 @@ export function tournamentFrameSeconds(frame: number): number {
   return Math.min(45, Math.max(10, 10 + frame - 5))
 }
 
+// 大赛和棋计分所需最少回合数（game.frame），不足记无效局；客户端据此在求和弹窗提示。
+export const TOURNAMENT_MIN_DRAW_MOVES = 50
+
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
   const visible = local.length > 2 ? local.slice(0, 2) : local.slice(0, 1)

@@ -292,7 +292,7 @@ describe('Arena tournament DO', () => {
       ],
     })
     await stub().reportResult({ code: '0031', winnerEmail: null, moves: 5 })
-    await stub().reportResult({ code: '0032', winnerEmail: null, moves: 40 })
+    await stub().reportResult({ code: '0032', winnerEmail: null, moves: 60 })
     const s = await read()
     expect(s.pairings[0].result).toBe('void')
     expect(s.players['a@x'].score).toBe(0)

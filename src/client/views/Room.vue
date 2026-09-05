@@ -53,6 +53,7 @@ import {
   type Seat,
 } from '@gomoku/engine/game'
 import {
+  TOURNAMENT_MIN_DRAW_MOVES,
   tournamentFrameSeconds,
   type ClientMessage,
   type FrameMoves,
@@ -508,6 +509,11 @@ function respondDraw(accept: boolean) {
 
 const drawInviteSeconds = useCountdown(drawInviteDeadline, 5)
 
+// 大赛不足计分回合数的和棋记无效局（双方 0 分）：求和相关弹窗里提前说清，别让玩家白握手。
+const drawWouldVoid = computed(
+  () => tournament.value && (game.value?.frame ?? 0) < TOURNAMENT_MIN_DRAW_MOVES,
+)
+
 watch(drawInviteSeconds, (s) => {
   if (s === 0) respondDraw(false)
 })
@@ -923,6 +929,9 @@ function exitRoom() {
       <p class="text-sm text-stone-500 dark:text-stone-400">
         认输将判对方获胜；求和需对方同意，同意后本局记为平局。
       </p>
+      <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
+        大赛规则：不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
+      </p>
       <template #footer>
         <div class="flex gap-2">
           <DialogButton variant="secondary" @click="offerDraw">求和</DialogButton>
@@ -934,6 +943,9 @@ function exitRoom() {
     <AppDialog v-if="drawInvite" title="对方求和" :closable="false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         对方提议和棋，同意后本局记为平局。{{ drawInviteSeconds }} 秒后自动拒绝。
+      </p>
+      <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
+        大赛规则：不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
       </p>
       <template #footer>
         <div class="flex gap-2">

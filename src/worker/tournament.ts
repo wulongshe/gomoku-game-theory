@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 import type { Difficulty } from '@gomoku/engine/ai'
 import {
   maskEmail,
+  TOURNAMENT_MIN_DRAW_MOVES,
   type Match,
   type PlayerStatus,
   type Standing,
@@ -29,7 +30,6 @@ const WRAPUP_MS = 20 * 60_000 // 窗口关闭后仍未决对局（房间悄悄�
 const POLL_MS = 60_000
 const TFRAME = 15
 const TMODE = 'forbidden'
-const MIN_DRAW_MOVES = 30 // 和棋计分所需最少步数（game.frame）
 const SKEW_MS = 1000
 const DAY_MS = 86_400_000
 
@@ -285,7 +285,7 @@ export class Tournament extends DurableObject<Env> {
       const p = s.pairings.find((x) => x.code === input.code && x.result === null)
       if (!p) return
       if (input.winnerEmail === null) {
-        p.result = input.moves >= MIN_DRAW_MOVES ? 'draw' : 'void'
+        p.result = input.moves >= TOURNAMENT_MIN_DRAW_MOVES ? 'draw' : 'void'
       } else if (input.winnerEmail === p.players[0]) {
         p.result = 'a'
       } else if (input.winnerEmail === p.players[1]) {

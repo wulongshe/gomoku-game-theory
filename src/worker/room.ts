@@ -13,6 +13,7 @@ import { assessPosition, decideAiMove, type Difficulty } from '@gomoku/engine/ai
 import {
   maskEmail,
   parseClientMessage,
+  TOURNAMENT_MIN_DRAW_MOVES,
   tournamentFrameSeconds,
   type FrameMoves,
   type ServerMessage,
@@ -788,9 +789,9 @@ export class Room extends DurableObject<Env> {
         if (decision.losing && Math.random() < (1 - persona.grit) * 0.3) {
           return this.aiResign(seat, game)
         }
-        // 百回合开外的拉锯多半已成死局：不占优时按概率主动求和——对面是 bot 走 AI 应和，
+        // 八十回合开外的拉锯多半已成死局：不占优时按概率主动求和——对面是 bot 走 AI 应和，
         // 是真人则正常弹窗；被拒了后续回合还会再随机发起。
-        if (game.frame > 100 && !decision.commanding && !offered && Math.random() < 0.2) {
+        if (game.frame > 80 && !decision.commanding && !offered && Math.random() < 0.2) {
           this.notifyPeers(null, { type: 'draw_offered' })
           const other: Seat = seat === 'black' ? 'white' : 'black'
           if ((await this.aiSeats())[other]) {
@@ -828,12 +829,15 @@ export class Room extends DurableObject<Env> {
   ): Promise<void> {
     // 只需胜负态势判断，走轻量研判（不做选点的虚拟对弈）。
     const { commanding, losing } = assessPosition(game, seat, info.difficulty)
-    const drawFloor = tournament ? 30 : 12 // 和棋计分下限：大赛需 ≥30 手，否则判无效
-    // 落后或百回合开外的拉锯，都更愿意握手言和。
+    const drawFloor = tournament ? TOURNAMENT_MIN_DRAW_MOVES : 12 // 和棋计分下限：不足判无效
+    // 落后或八十回合开外的拉锯，都更愿意握手言和；同一局被求和次数越多，越倾向点头。
+    const asked = ((await this.ctx.storage.get<number>('aiDrawAsked')) ?? 0) + 1
+    await this.ctx.storage.put('aiDrawAsked', asked)
     const accept =
       !commanding &&
       game.frame >= drawFloor &&
-      Math.random() < persona.drawish + (losing ? 0.35 : 0) + (game.frame > 100 ? 0.35 : 0)
+      Math.random() <
+        persona.drawish + (losing ? 0.35 : 0) + (game.frame > 80 ? 0.35 : 0) + (asked - 1) * 0.15
     if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
     this.notifyPeers(null, { type: 'draw_declined' })
     // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
@@ -904,7 +908,7 @@ export class Room extends DurableObject<Env> {
 
   private async endGame(next: GameState, passed: Seat[] = [], moves?: FrameMoves): Promise<void> {
     // deadline 必须随终局清掉：残留的过期时点会被 armAlarm 当目标，闹钟立即重响进入风暴。
-    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered', 'deadline'])
+    await this.ctx.storage.delete(['choices', 'aiPlan', 'aiDrawOffered', 'aiDrawAsked', 'deadline'])
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     await this.ctx.storage.put('game', next)
     this.broadcast({ type: 'frame_settled', state: next, deadline: null, now: Date.now(), passed, moves })
