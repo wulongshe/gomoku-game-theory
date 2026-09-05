@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "deploy": "pnpm build && wrangler deploy",
+    "deploy:beta": "CLOUDFLARE_ENV=beta pnpm build && wrangler deploy",
     "check": "vue-tsc -b",
     "ai:battle": "node --import ./scripts/loader.ts scripts/ai-battle/main.ts",
     "test": "vitest run",
