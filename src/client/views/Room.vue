@@ -374,6 +374,15 @@ const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执
 
 const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(game, seat)
 
+// 观战视角不站队：终局在左上角直接报哪方赢。
+const spectatorResult = computed(() => {
+  const phase = game.value?.phase
+  if (phase === 'black_won') return { text: '黑方赢', cls: 'text-amber-500 dark:text-amber-400' }
+  if (phase === 'white_won') return { text: '白方赢', cls: 'text-amber-500 dark:text-amber-400' }
+  if (phase === 'draw') return { text: '和棋', cls: 'text-stone-500 dark:text-stone-400' }
+  return null
+})
+
 function sendChoice(point: Point, final: boolean) {
   if (!game.value) return
   const msg: ClientMessage = { type: 'submit', frame: game.value.frame, point, final }
@@ -587,7 +596,13 @@ function exitRoom() {
       <div class="flex w-full max-w-md flex-1 flex-col gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
-            <IconStones v-if="spectating" class="h-4" />
+            <template v-if="spectating">
+              <IconStones class="h-4" />
+              <template v-if="stage === 'over' && spectatorResult">
+                ·
+                <span class="font-semibold" :class="spectatorResult.cls">{{ spectatorResult.text }}</span>
+              </template>
+            </template>
             <template v-else>
               <IconStone :seat="seat" class="size-3.5" />
               {{ seatLabel }}
