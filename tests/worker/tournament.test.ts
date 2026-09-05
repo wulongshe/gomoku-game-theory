@@ -703,13 +703,12 @@ describe('tournament bots', () => {
     }
   })
 
-  it('keeps a two-tier gap between two bots in one game', () => {
-    const tiers = ['easy', 'normal', 'hard', 'master']
-    for (let i = 0; i < 500; i++) {
+  it('pits paired bots at the extreme tiers, stronger base on top', () => {
+    for (let i = 0; i < 200; i++) {
       const [a, b] = pairedBotDifficulties('normal', 'normal')
-      expect(Math.abs(tiers.indexOf(a) - tiers.indexOf(b))).toBe(2)
-      const [c, d] = pairedBotDifficulties('easy', 'hard')
-      expect(Math.abs(tiers.indexOf(c) - tiers.indexOf(d))).toBe(2)
+      expect([a, b].sort()).toEqual(['easy', 'master'])
+      expect(pairedBotDifficulties('easy', 'hard')).toEqual(['easy', 'master'])
+      expect(pairedBotDifficulties('master', 'normal')).toEqual(['master', 'easy'])
     }
   })
 

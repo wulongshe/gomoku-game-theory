@@ -113,20 +113,16 @@ export function gameDifficulty(base: Difficulty, rand: () => number = Math.rando
   return TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]
 }
 
-// bot 对 bot 水平接近极易和棋：直接拉开两档，方向随双方基准的强弱（同基准随机），
-// 让一侧明显更强、更快分出胜负。
+// bot 对 bot 水平接近极易和棋：档差直接拉满，一端 easy 一端 master，绝不出现势均力敌；
+// 强的一端给基准更高的 bot（同基准随机），榜单成绩仍大体贴合人设。
 export function pairedBotDifficulties(
   baseA: Difficulty,
   baseB: Difficulty,
   rand: () => number = Math.random,
 ): [Difficulty, Difficulty] {
-  const a = gameDifficulty(baseA, rand)
-  const ai = TIERS.indexOf(a)
-  const gap = TIERS.indexOf(baseB) - TIERS.indexOf(baseA)
-  const dir = gap > 0 ? 1 : gap < 0 ? -1 : rand() < 0.5 ? 1 : -1
-  let j = ai + dir * 2
-  if (j < 0 || j >= TIERS.length) j = ai - dir * 2
-  return [a, TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]]
+  const gap = TIERS.indexOf(baseA) - TIERS.indexOf(baseB)
+  const aStronger = gap > 0 || (gap === 0 && rand() < 0.5)
+  return aStronger ? ['master', 'easy'] : ['easy', 'master']
 }
 
 function shuffle(items: string[], rand: () => number): string[] {
