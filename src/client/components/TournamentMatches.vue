@@ -18,8 +18,9 @@ defineProps<{
       :class="rowClass ?? 'bg-stone-100 hover:bg-stone-200/70 dark:bg-stone-700/50 dark:hover:bg-stone-700'"
     >
       <span class="min-w-0 flex-1 truncate text-left text-stone-700 dark:text-stone-200">{{ m.a }}</span>
+      <!-- bg-clip-text 只在盒内着色，斜体溢出盒外的部分会被「裁掉」，用内边距把溢出兜进来。 -->
       <span
-        class="shrink-0 bg-gradient-to-br from-amber-500 to-red-600 bg-clip-text font-black italic tracking-tight text-transparent"
+        class="shrink-0 bg-gradient-to-br from-amber-500 to-red-600 bg-clip-text px-1 font-black italic tracking-tight text-transparent"
       >VS</span>
       <span class="min-w-0 flex-1 truncate text-right text-stone-700 dark:text-stone-200">{{ m.b }}</span>
     </a>
