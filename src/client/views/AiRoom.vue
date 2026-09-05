@@ -296,26 +296,24 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </div>
       </div>
 
-      <template v-if="playing">
-        <AppButton
-          class="w-full"
-          :disabled="!resolving && !selected"
-          @click="resolving ? cancelChoice() : submitChoice()"
-        >
-          {{ resolving ? '取消提交' : selected ? '确认提交' : '点击棋盘选择落点' }}
+      <!-- 复盘行始终占位（对局中隐藏），终局按钮出现时棋盘不位移。 -->
+      <div class="flex w-full gap-2" :class="{ invisible: playing || !reviewAvailable }">
+        <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
+          上一回合
         </AppButton>
-      </template>
-      <template v-else>
-        <div v-if="reviewAvailable" class="flex w-full gap-2">
-          <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
-            上一回合
-          </AppButton>
-          <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
-            下一回合
-          </AppButton>
-        </div>
-        <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
-      </template>
+        <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
+          下一回合
+        </AppButton>
+      </div>
+      <AppButton
+        v-if="playing"
+        class="w-full"
+        :disabled="!resolving && !selected"
+        @click="resolving ? cancelChoice() : submitChoice()"
+      >
+        {{ resolving ? '取消提交' : selected ? '确认提交' : '点击棋盘选择落点' }}
+      </AppButton>
+      <AppButton v-else class="w-full" @click="openConfig">再来一局</AppButton>
     </div>
 
     <GameConfigDialog
