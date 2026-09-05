@@ -21,9 +21,9 @@ const WIDEN_PER_SEC = 40
 const RECHECK_MS = 3000
 
 // 久等无人时悄悄换 AI 顶替。到点时间在区间内随机且偏前（平方随机）：
-// 多数人等 15~45s 就有「对手」，少数拖到更晚，避免固定时长或均匀分布露馅。
-const AI_FALLBACK_MIN_MS = 15_000
-const AI_FALLBACK_MAX_MS = 120_000
+// 多数人等 5~12s 就有「对手」，少数拖到更晚，避免固定时长或均匀分布露馅。
+const AI_FALLBACK_MIN_MS = 5_000
+const AI_FALLBACK_MAX_MS = 30_000
 
 export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
   const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]

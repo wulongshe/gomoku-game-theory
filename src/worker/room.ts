@@ -35,11 +35,12 @@ function lateness(frame: number): number {
   return Math.min(1, (frame - 1) / 30)
 }
 
-// 开帧后的「反应」延时：先看棋再落子，取帧长的一段（封顶 6s），避免秒下——这是明显手的主要耗时；
-// 均势岔路口的额外长考再由 aiThinkTime 按局面加码。无限时帧按一个较长的名义帧长取值。
-function aiReaction(frameMs: number): number {
-  const span = Math.min(frameMs * 0.5, 6000)
-  return span * (0.4 + Math.random() * 0.5)
+// 开帧后的「反应」延时：先看棋再落子，取帧长的一段（封顶 18s）再按手数渐增——开局手快、
+// 中后盘渐慢，固定帧长的随机匹配也有节奏变化；均势岔路口的额外长考再由 aiThinkTime 按局面
+// 加码。无限时帧按一个较长的名义帧长取值。
+function aiReaction(frameMs: number, frame: number): number {
+  const span = Math.min(frameMs * 0.6, 18_000) * (0.5 + 0.5 * lateness(frame))
+  return span * (0.3 + Math.random() * 0.7)
 }
 
 // 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下；
@@ -54,9 +55,9 @@ function aiSubmitCap(frame: number): number {
   return 10_000 + Math.floor((frame - 1) / 5) * 5_000
 }
 
-// 大赛 bot 的进场延时：开轮后错峰入座，别整齐划一地秒到。
+// 大赛 bot 的进场延时：配上对手后很快入座，只留一点错峰。
 function aiArriveDelay(): number {
-  return 5_000 + Math.random() * 55_000
+  return 4_000 + Math.random() * 6_000
 }
 
 interface Attachment {
@@ -476,7 +477,7 @@ export class Room extends DurableObject<Env> {
     }
     const reactionFrameMs = frameSeconds > 0 ? frameSeconds * 1000 : 40_000
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
-      await this.planAi(seat, aiReaction(reactionFrameMs))
+      await this.planAi(seat, aiReaction(reactionFrameMs, game.frame))
     }
     return deadline
   }
