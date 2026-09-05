@@ -113,23 +113,20 @@ export function gameDifficulty(base: Difficulty, rand: () => number = Math.rando
   return TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]
 }
 
-// bot 对 bot 同档极易和棋：撞档时把 b 挪到其浮动范围内的另一档，保证两侧不同。
+// bot 对 bot 水平接近极易和棋：直接拉开两档，方向随双方基准的强弱（同基准随机），
+// 让一侧明显更强、更快分出胜负。
 export function pairedBotDifficulties(
   baseA: Difficulty,
   baseB: Difficulty,
   rand: () => number = Math.random,
 ): [Difficulty, Difficulty] {
   const a = gameDifficulty(baseA, rand)
-  let b = gameDifficulty(baseB, rand)
-  if (b === a) {
-    const i = TIERS.indexOf(baseB)
-    const band = [i - 1, i, i + 1]
-      .filter((j) => j >= 0 && j < TIERS.length)
-      .map((j) => TIERS[j])
-      .filter((d) => d !== a)
-    b = band[Math.floor(rand() * band.length)]
-  }
-  return [a, b]
+  const ai = TIERS.indexOf(a)
+  const gap = TIERS.indexOf(baseB) - TIERS.indexOf(baseA)
+  const dir = gap > 0 ? 1 : gap < 0 ? -1 : rand() < 0.5 ? 1 : -1
+  let j = ai + dir * 2
+  if (j < 0 || j >= TIERS.length) j = ai - dir * 2
+  return [a, TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]]
 }
 
 function shuffle(items: string[], rand: () => number): string[] {

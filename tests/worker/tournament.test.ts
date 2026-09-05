@@ -691,12 +691,13 @@ describe('tournament bots', () => {
     }
   })
 
-  it('never gives two bots in one game the same difficulty', () => {
+  it('keeps a two-tier gap between two bots in one game', () => {
+    const tiers = ['easy', 'normal', 'hard', 'master']
     for (let i = 0; i < 500; i++) {
       const [a, b] = pairedBotDifficulties('normal', 'normal')
-      expect(a).not.toBe(b)
+      expect(Math.abs(tiers.indexOf(a) - tiers.indexOf(b))).toBe(2)
       const [c, d] = pairedBotDifficulties('easy', 'hard')
-      expect(c).not.toBe(d)
+      expect(Math.abs(tiers.indexOf(c) - tiers.indexOf(d))).toBe(2)
     }
   })
 
