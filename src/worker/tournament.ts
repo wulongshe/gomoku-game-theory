@@ -329,6 +329,9 @@ export class Tournament extends DurableObject<Env> {
   private async tick(s: TournamentState): Promise<void> {
     const now = Date.now()
     const close = this.matchCloseAt(s)
+    for (const email of Object.keys(s.cooldowns)) {
+      if (s.cooldowns[email] <= now + SKEW_MS) delete s.cooldowns[email]
+    }
     for (const email of Object.keys(s.botSeekAt)) {
       if (now < s.botSeekAt[email] - SKEW_MS) continue
       delete s.botSeekAt[email]
@@ -474,6 +477,8 @@ export class Tournament extends DurableObject<Env> {
     const now = Date.now()
     const close = this.matchCloseAt(s)
     const targets = Object.values(s.botSeekAt)
+    // 冷却到期也是闹钟目标：到点广播一帧，榜单上的「冷却中」标记即时翻回。
+    targets.push(...Object.values(s.cooldowns).filter((t) => t > now))
     for (const p of s.pairings) {
       if (p.result === null && !p.started && p.checkedIn.length < 2) {
         targets.push(p.createdAt + PAIR_TTL_MS)

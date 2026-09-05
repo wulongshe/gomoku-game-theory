@@ -240,6 +240,18 @@ describe('Arena tournament DO', () => {
     expect((await read()).queue).toEqual([])
   })
 
+  it('prunes expired cooldowns on tick and arms the next expiry', async () => {
+    await seedActive(['a@x', 'b@x'], {
+      cooldowns: { 'a@x': Date.now() + 500, 'b@x': Date.now() + 60_000 },
+    })
+    await fireAlarm()
+    const s = await read()
+    expect(s.cooldowns['a@x']).toBeUndefined()
+    expect(s.cooldowns['b@x']).toBeGreaterThan(Date.now())
+    const armed = await runInDurableObject(stub(), (_i, state) => state.storage.getAlarm())
+    expect(armed).toBe(s.cooldowns['b@x'])
+  })
+
   it('scores a win with graded cooldowns and ignores duplicates and strangers', async () => {
     await seedActive(['a@x', 'b@x', 'c@x'], {
       pairings: [
