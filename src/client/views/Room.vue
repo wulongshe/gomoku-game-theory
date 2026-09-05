@@ -668,8 +668,9 @@ function exitRoom() {
               :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
               @select="select"
             />
+            <!-- 观战方只在和棋时展示艺术字（胜负用左上角徽标，不挡观战复盘视线）。 -->
             <ResultOverlay
-              v-if="stage === 'over' && !overlayDismissed && !spectating"
+              v-if="stage === 'over' && !overlayDismissed && (!spectating || game?.phase === 'draw')"
               :char="resultChar"
               :colors="resultColors"
               @dismiss="overlayDismissed = true"
