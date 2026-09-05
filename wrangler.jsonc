@@ -53,6 +53,42 @@
     }
   ],
   "vars": {
-    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>"
+    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>",
+    "TOURNAMENT_START": "20:00"
+  },
+  "env": {
+    "beta": {
+      "name": "gomoku-game-theory-beta",
+      "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "gomoku-beta.recode.top",
+          "custom_domain": true
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ROOM",
+            "class_name": "Room"
+          },
+          {
+            "name": "LOBBY",
+            "class_name": "Lobby"
+          },
+          {
+            "name": "ACCOUNTS",
+            "class_name": "Accounts"
+          },
+          {
+            "name": "TOURNAMENT",
+            "class_name": "Tournament"
+          }
+        ]
+      },
+      "vars": {
+        "TOURNAMENT_START": "14:30"
+      }
+    }
   }
 }

@@ -56,7 +56,6 @@ interface TournamentState {
   botSeekAt: Record<string, number> // bot → 下次「点匹配」的时点
   pairings: Pairing[]
   lastStandings: Standing[]
-  devStartsAt?: number // 仅 dev 注入：覆盖下一场开赛时点（正常恒为每天 20:00）
 }
 
 function defaultState(): TournamentState {
@@ -78,10 +77,14 @@ export function beijingDate(now: number): string {
   return new Date(now + 8 * 3600_000).toISOString().slice(0, 10)
 }
 
-export function nextDailyStart(now: number, hour = DAILY_HOUR_UTC): number {
+// start 为北京时间 HH:MM（TOURNAMENT_START 环境变量），缺省或非法时用默认 20:00。
+export function nextDailyStart(now: number, start?: string): number {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(start ?? '')
+  const [hour, minute] = m ? [Number(m[1]) - 8, Number(m[2])] : [DAILY_HOUR_UTC, 0]
   const d = new Date(now)
-  const target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, 0, 0, 0)
-  return target > now ? target : target + DAY_MS
+  let target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, minute)
+  while (target <= now) target += DAY_MS
+  return target
 }
 
 interface SocketTag {
@@ -285,7 +288,6 @@ export class Tournament extends DurableObject<Env> {
 
   private async start(s: TournamentState): Promise<void> {
     if (s.state !== 'idle') return
-    s.devStartsAt = undefined
     const emails = [...s.registrations]
     s.bots = {}
     const pool = this.botPool()
@@ -298,7 +300,7 @@ export class Tournament extends DurableObject<Env> {
       }
     }
     if (emails.length < 2) {
-      await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+      await this.ctx.storage.setAlarm(this.nextStart())
       return
     }
     s.players = {}
@@ -442,7 +444,7 @@ export class Tournament extends DurableObject<Env> {
     s.queue = []
     s.botSeekAt = {}
     s.pairings = []
-    await this.ctx.storage.setAlarm(nextDailyStart(Date.now()))
+    await this.ctx.storage.setAlarm(this.nextStart())
   }
 
   private async armActive(s: TournamentState): Promise<void> {
@@ -543,7 +545,7 @@ export class Tournament extends DurableObject<Env> {
     const shown = (raw: string) => names.get(raw) ?? maskEmail(raw)
     // 脱敏后邮箱可能撞车，「我」的位置以脱敏前的下标为准下发。
     const meIndex = email === null ? -1 : standings.findIndex((row) => row.email === email)
-    const startsAt = (s.state === 'idle' && s.devStartsAt) || nextDailyStart(now)
+    const startsAt = this.nextStart(now)
     // 报名注水：开赛前的报名人数惰性叠加当日 bot 时间表里已「报名」的数量。
     const pool = this.botPool()
     const virtualCount = pool.length
@@ -583,30 +585,21 @@ export class Tournament extends DurableObject<Env> {
     }
   }
 
-  // 本地开发数据注入（路由仅 localhost 暴露，见 index.ts）：覆写状态、重挂闹钟并广播。
-  async devSeed(input: Partial<TournamentState>): Promise<void> {
-    await this.ctx.blockConcurrencyWhile(async () => {
-      const s = { ...defaultState(), ...input }
-      s.devStartsAt = input.devStartsAt // 不从上一次注入残留
-      if (s.state === 'active') {
-        s.startedAt ||= Date.now() - 5 * 60_000
-        await this.ctx.storage.setAlarm(Date.now() + 3_000)
-      } else {
-        await this.ctx.storage.setAlarm(s.devStartsAt ?? nextDailyStart(Date.now()))
-      }
-      await this.save(s)
-      await this.broadcast(s)
-    })
-  }
-
+  // 空闲态闹钟始终对齐下一场开赛点：TOURNAMENT_START 变更后旧闹钟不作数。
   private async armIfNeeded(s: TournamentState): Promise<void> {
-    if (s.state === 'idle' && (await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(s.devStartsAt ?? nextDailyStart(Date.now()))
-    }
+    if (s.state !== 'idle') return
+    const armed = await this.ctx.storage.getAlarm()
+    if (armed !== null && armed <= Date.now()) return // 已到点、等待触发中，别把它臂到明天
+    const want = this.nextStart()
+    if (armed !== want) await this.ctx.storage.setAlarm(want)
   }
 
   private botPool(): string[] {
     return parseBotPool(this.env.TOURNAMENT_BOTS)
+  }
+
+  private nextStart(now = Date.now()): number {
+    return nextDailyStart(now, this.env.TOURNAMENT_START)
   }
 
   // 上一届 bot 按名次排列（榜单 ∩ 池），供阵容逐日演化：池启用后每天必开赛，

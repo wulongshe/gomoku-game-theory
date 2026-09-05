@@ -16,7 +16,8 @@ import IconUser from '~/components/icons/IconUser.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
-import { createRoom, matchWsUrl } from '~/apis'
+import { createRoom, fetchTournament, matchWsUrl } from '~/apis'
+import { formatDailyTime } from '~/utils/format'
 import { useAuth } from '~/composables/useAuth'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
@@ -45,6 +46,12 @@ function loginFromTournament() {
   showTournament.value = false
   showAuth.value = true
 }
+
+// 入口卡片上的开赛时点跟随服务端配置（TOURNAMENT_START），拿到前不显示具体时间。
+const tournamentDaily = ref<string | null>(null)
+fetchTournament()
+  .then((info) => (tournamentDaily.value = formatDailyTime(info.startsAt)))
+  .catch(() => {})
 
 const { email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
@@ -211,7 +218,9 @@ useEventListener(window, 'resize', updateScrollHint)
         ><span class="block -translate-y-px">🏅</span></span>
         <div class="flex-1">
           <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">每日大赛</p>
-          <p class="text-xs text-stone-500 dark:text-stone-400">每天 20:00 · 竞技场积分</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">
+            {{ tournamentDaily ? `每天 ${tournamentDaily} · 竞技场积分` : '竞技场积分' }}
+          </p>
         </div>
         <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
       </button>

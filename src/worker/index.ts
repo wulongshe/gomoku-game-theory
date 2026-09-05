@@ -93,11 +93,6 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       if (request.method === 'GET' && url.pathname === '/api/tournament') {
         return Response.json(await tournament.getInfo(token))
       }
-      // 本地造数据入口（数据在 scripts/seed-tournament.ts）：仅 vite dev 存在，生产构建与测试中为死代码。
-      if (DEV && request.method === 'POST' && url.pathname === '/api/tournament/seed') {
-        await tournament.devSeed(await request.json())
-        return new Response(null, { status: 204 })
-      }
       if (request.method === 'POST' && url.pathname === '/api/tournament/register') {
         if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
         return Response.json(await tournament.register(token))
@@ -149,19 +144,6 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       }
       const login = await accounts.login(email, 'test1234')
       return login.ok ? Response.json({ token: login.token }) : authError('unauthorized', 401)
-    }
-    if (DEV && url.pathname === '/api/dev/tournament-room') {
-      const diff = (name: string) => {
-        const value = url.searchParams.get(name)
-        return value === 'easy' || value === 'normal' || value === 'hard' ? value : null
-      }
-      const code = await allocateRoom(env, 15, 'forbidden', {
-        tournament: {
-          players: [url.searchParams.get('p0') ?? '', url.searchParams.get('p1') ?? ''],
-          bots: [diff('ai0'), diff('ai1')],
-        },
-      })
-      return Response.json({ code })
     }
     const roomMatch = url.pathname.match(/^\/api\/rooms\/(\d{4,8})(\/ws)?$/)
     if (roomMatch && request.method === 'GET') {

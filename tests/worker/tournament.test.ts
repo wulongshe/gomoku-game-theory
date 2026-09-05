@@ -109,6 +109,25 @@ describe('nextDailyStart', () => {
     expect(nextDailyStart(Date.UTC(2026, 0, 1, 12))).toBe(Date.UTC(2026, 0, 2, 12))
     expect(nextDailyStart(Date.UTC(2026, 0, 1, 13))).toBe(Date.UTC(2026, 0, 2, 12))
   })
+
+  it('honors a TOURNAMENT_START override in 北京时间 HH:MM', () => {
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 6), '14:30')).toBe(Date.UTC(2026, 0, 1, 6, 30))
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 7), '14:30')).toBe(Date.UTC(2026, 0, 2, 6, 30))
+    // 北京时间在 UTC 日界前的时点：00:30 北京 = 前一日 16:30 UTC
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 20), '00:30')).toBe(Date.UTC(2026, 0, 2, 16, 30))
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 10), 'nonsense')).toBe(Date.UTC(2026, 0, 1, 12))
+  })
+})
+
+describe('idle alarm re-arming', () => {
+  it('re-arms a stale idle alarm to the configured start', async () => {
+    await seed({})
+    await runInDurableObject(stub(), (_i, state) => state.storage.setAlarm(Date.now() + 999_000_000))
+    await runInDurableObject(stub(), (instance) => instance.getInfo(null))
+    const armed = await runInDurableObject(stub(), (_i, state) => state.storage.getAlarm())
+    expect(armed).toBe(nextDailyStart(Date.now(), env.TOURNAMENT_START))
+  })
+
 })
 
 describe('Arena tournament DO', () => {

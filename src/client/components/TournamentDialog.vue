@@ -10,7 +10,7 @@ import IconSpinner from '~/components/icons/IconSpinner.vue'
 import { registerTournament, tournamentWsUrl, withdrawTournament } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
-import { formatCountdown } from '~/utils/format'
+import { formatCountdown, formatDailyTime } from '~/utils/format'
 import type { Match, TournamentInfo } from '@/shared/protocol'
 
 const emit = defineEmits<{ close: []; login: [] }>()
@@ -126,7 +126,7 @@ const buttonVariant = computed(() =>
             {{ formatCountdown(startLeft ?? 0) }}
           </p>
           <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-            {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 20:00 · 已报名 ${info.playerCount} 人` }}
+            {{ info.state === 'active' ? '报名参加明天的大赛' : `每日 ${formatDailyTime(info.startsAt)} · 已报名 ${info.playerCount} 人` }}
           </p>
         </template>
         <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
