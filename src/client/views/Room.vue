@@ -24,7 +24,7 @@ import IconSettings from '~/components/icons/IconSettings.vue'
 import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
 import IconStones from '~/components/icons/IconStones.vue'
-import { roomStatus, roomWsUrl, spectateWsUrl } from '~/apis'
+import { roomStatus, roomWsUrl, spectateWsUrl, tournamentWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
@@ -116,8 +116,24 @@ function showToast(message: string) {
 }
 
 const key = useStorage(`${ROOM_KEY_PREFIX}${props.code}`, nanoid())
-const { refresh: refreshAuth } = useAuth()
+const { loggedIn, refresh: refreshAuth } = useAuth()
 refreshAuth()
+
+// 大赛在场心跳：登录用户观战大赛对局时保持一条大厅连接，榜单不把 TA 标成「已离开」。
+const presence = useWebSocket(tournamentWsUrl(), {
+  immediate: false,
+  heartbeat: {
+    message: 'ping',
+    responseMessage: 'pong',
+    interval: 20_000,
+    pongTimeout: 10_000,
+  },
+  autoReconnect: { delay: 3000 },
+})
+watch(
+  () => spectating && tournament.value && loggedIn.value,
+  (on) => (on ? presence.open() : presence.close()),
+)
 
 function forgetKey() {
   localStorage.removeItem(`${ROOM_KEY_PREFIX}${props.code}`)
