@@ -54,7 +54,7 @@
   ],
   "vars": {
     "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>",
-    "TOURNAMENT_START": "20:00"
+    "TOURNAMENT_WINDOW": "20:00-20:30"
   },
   "env": {
     "beta": {
@@ -87,7 +87,7 @@
         ]
       },
       "vars": {
-        "TOURNAMENT_START": "14:30"
+        "TOURNAMENT_WINDOW": "16:50-17:20"
       }
     }
   }

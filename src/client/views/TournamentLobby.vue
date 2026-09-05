@@ -159,7 +159,7 @@ useWebSocket(tournamentWsUrl(), {
               {{ formatCountdown(startLeft ?? 0) }}
             </p>
           </template>
-          <p class="text-xs text-stone-400 dark:text-stone-500">竞技场 30 分钟 · 随到随战</p>
+          <p class="text-xs text-stone-400 dark:text-stone-500">竞技场 {{ info.arenaMinutes }} 分钟 · 随到随战</p>
         </div>
 
         <div

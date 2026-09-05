@@ -96,6 +96,7 @@ export interface TournamentInfo {
   participating: boolean // 当前正在进行的这场的参赛者
   myGame: { code: string } | null
   matchCloseAt: number | null // 竞技场停止配新对局的时点；已开局的照常打完计分
+  arenaMinutes: number // 竞技场窗口时长（随 TOURNAMENT_WINDOW 配置，供文案展示）
   my: { status: PlayerStatus; cooldownUntil: number | null } | null
   standings: Standing[]
   me: number | null // 我在 standings 中的下标（脱敏前定位）

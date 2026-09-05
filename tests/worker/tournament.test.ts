@@ -1,7 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { maskEmail, tournamentFrameSeconds, type TournamentInfo } from '@/shared/protocol'
-import { beijingDate, nextDailyStart } from '@/worker/tournament'
+import { beijingDate, nextDailyStart, tournamentWindow } from '@/worker/tournament'
 import {
   botRegistrations,
   dailyBots,
@@ -112,12 +112,23 @@ describe('nextDailyStart', () => {
     expect(nextDailyStart(Date.UTC(2026, 0, 1, 13))).toBe(Date.UTC(2026, 0, 2, 12))
   })
 
-  it('honors a TOURNAMENT_START override in 北京时间 HH:MM', () => {
-    expect(nextDailyStart(Date.UTC(2026, 0, 1, 6), '14:30')).toBe(Date.UTC(2026, 0, 1, 6, 30))
-    expect(nextDailyStart(Date.UTC(2026, 0, 1, 7), '14:30')).toBe(Date.UTC(2026, 0, 2, 6, 30))
+  it('honors a TOURNAMENT_WINDOW override in 北京时间 HH:MM-HH:MM', () => {
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 6), '14:30-15:00')).toBe(Date.UTC(2026, 0, 1, 6, 30))
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 7), '14:30-15:00')).toBe(Date.UTC(2026, 0, 2, 6, 30))
     // 北京时间在 UTC 日界前的时点：00:30 北京 = 前一日 16:30 UTC
-    expect(nextDailyStart(Date.UTC(2026, 0, 1, 20), '00:30')).toBe(Date.UTC(2026, 0, 2, 16, 30))
+    expect(nextDailyStart(Date.UTC(2026, 0, 1, 20), '00:30-01:00')).toBe(Date.UTC(2026, 0, 2, 16, 30))
     expect(nextDailyStart(Date.UTC(2026, 0, 1, 10), 'nonsense')).toBe(Date.UTC(2026, 0, 1, 12))
+  })
+})
+
+describe('tournamentWindow', () => {
+  it('parses the window, supports crossing midnight, falls back on bad input', () => {
+    expect(tournamentWindow('14:30-15:15')).toEqual({ startMin: 14 * 60 + 30, arenaMs: 45 * 60_000 })
+    expect(tournamentWindow('23:50-00:20')).toEqual({ startMin: 23 * 60 + 50, arenaMs: 30 * 60_000 })
+    const fallback = { startMin: 20 * 60, arenaMs: 30 * 60_000 }
+    expect(tournamentWindow(undefined)).toEqual(fallback)
+    expect(tournamentWindow('20:00')).toEqual(fallback)
+    expect(tournamentWindow('20:00-20:00')).toEqual(fallback)
   })
 })
 
@@ -127,7 +138,7 @@ describe('idle alarm re-arming', () => {
     await runInDurableObject(stub(), (_i, state) => state.storage.setAlarm(Date.now() + 999_000_000))
     await runInDurableObject(stub(), (instance) => instance.getInfo(null))
     const armed = await runInDurableObject(stub(), (_i, state) => state.storage.getAlarm())
-    expect(armed).toBe(nextDailyStart(Date.now(), env.TOURNAMENT_START))
+    expect(armed).toBe(nextDailyStart(Date.now(), env.TOURNAMENT_WINDOW))
   })
 
 })

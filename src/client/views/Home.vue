@@ -47,7 +47,7 @@ function loginFromTournament() {
   showAuth.value = true
 }
 
-// 入口卡片上的开赛时点跟随服务端配置（TOURNAMENT_START），拿到前不显示具体时间。
+// 入口卡片上的开赛时点跟随服务端配置（TOURNAMENT_WINDOW），拿到前不显示具体时间。
 const tournamentDaily = ref<string | null>(null)
 fetchTournament()
   .then((info) => (tournamentDaily.value = formatDailyTime(info.startsAt)))

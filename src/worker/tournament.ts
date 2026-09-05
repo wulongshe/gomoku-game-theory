@@ -16,8 +16,10 @@ import {
   parseBotPool,
 } from './bots'
 
-const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
-const ARENA_MS = 30 * 60_000 // 配新对局的窗口；已开局的照常打完，超过窗口收官也计分
+// 每日赛程缺省值：20:00 开赛（北京时间，无夏令时，固定 UTC+8）、30 分钟竞技场窗口。
+// 窗口内配新对局；已开局的照常打完，超过窗口收官也计分。可用 TOURNAMENT_WINDOW 覆盖。
+const DEFAULT_START_MIN = 20 * 60
+const ARENA_MS = 30 * 60_000
 // 一局打完后的冷却：赢家歇得更久（防连胜连刷），未打成（void）不冷却。
 const COOLDOWN_LOSS_MS = 15_000
 const COOLDOWN_DRAW_MS = 30_000
@@ -83,12 +85,28 @@ export function beijingDate(now: number): string {
   return new Date(now + 8 * 3600_000).toISOString().slice(0, 10)
 }
 
-// start 为北京时间 HH:MM（TOURNAMENT_START 环境变量），缺省或非法时用默认 20:00。
-export function nextDailyStart(now: number, start?: string): number {
-  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(start ?? '')
-  const [hour, minute] = m ? [Number(m[1]) - 8, Number(m[2])] : [DAILY_HOUR_UTC, 0]
+// TOURNAMENT_WINDOW 环境变量：「HH:MM-HH:MM」北京时间，开赛时点与竞技场关闭时点。
+// 支持跨零点（如 23:50-00:20）；缺省或非法回落到 20:00 开赛、30 分钟窗口。
+export function tournamentWindow(value?: string): { startMin: number; arenaMs: number } {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)-([01]?\d|2[0-3]):([0-5]\d)$/.exec(value ?? '')
+  if (m) {
+    const start = Number(m[1]) * 60 + Number(m[2])
+    const minutes = (Number(m[3]) * 60 + Number(m[4]) - start + 1440) % 1440
+    if (minutes > 0) return { startMin: start, arenaMs: minutes * 60_000 }
+  }
+  return { startMin: DEFAULT_START_MIN, arenaMs: ARENA_MS }
+}
+
+export function nextDailyStart(now: number, window?: string): number {
+  const { startMin } = tournamentWindow(window)
   const d = new Date(now)
-  let target = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, minute)
+  let target = Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    Math.floor(startMin / 60) - 8,
+    startMin % 60,
+  )
   while (target <= now) target += DAY_MS
   return target
 }
@@ -495,7 +513,7 @@ export class Tournament extends DurableObject<Env> {
   }
 
   private matchCloseAt(s: TournamentState): number {
-    return s.startedAt + ARENA_MS
+    return s.startedAt + tournamentWindow(this.env.TOURNAMENT_WINDOW).arenaMs
   }
 
   private unresolvedOf(s: TournamentState, email: string): Pairing | undefined {
@@ -596,6 +614,7 @@ export class Tournament extends DurableObject<Env> {
       participating,
       myGame: myPairing ? { code: myPairing.code } : null,
       matchCloseAt: s.state === 'active' ? this.matchCloseAt(s) : null,
+      arenaMinutes: Math.round(tournamentWindow(this.env.TOURNAMENT_WINDOW).arenaMs / 60_000),
       my: participating
         ? {
             status: statuses!.get(email!) ?? 'idle',
@@ -622,7 +641,7 @@ export class Tournament extends DurableObject<Env> {
     }
   }
 
-  // 空闲态闹钟始终对齐下一场开赛点：TOURNAMENT_START 变更后旧闹钟不作数。
+  // 空闲态闹钟始终对齐下一场开赛点：TOURNAMENT_WINDOW 变更后旧闹钟不作数。
   private async armIfNeeded(s: TournamentState): Promise<void> {
     if (s.state !== 'idle') return
     const armed = await this.ctx.storage.getAlarm()
@@ -636,7 +655,7 @@ export class Tournament extends DurableObject<Env> {
   }
 
   private nextStart(now = Date.now()): number {
-    return nextDailyStart(now, this.env.TOURNAMENT_START)
+    return nextDailyStart(now, this.env.TOURNAMENT_WINDOW)
   }
 
   // 上一届 bot 按名次排列（榜单 ∩ 池），供阵容逐日演化：池启用后每天必开赛，

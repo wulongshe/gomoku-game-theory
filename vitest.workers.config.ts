@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
-      miniflare: { bindings: { TOURNAMENT_BOTS: '', TOURNAMENT_START: '20:00' } },
+      miniflare: { bindings: { TOURNAMENT_BOTS: '', TOURNAMENT_WINDOW: '20:00-20:30' } },
     }),
   ],
   resolve: {
