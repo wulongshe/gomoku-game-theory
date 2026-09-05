@@ -83,9 +83,13 @@ const currentMatches = computed<Match[]>(() =>
     : [],
 )
 
-watch(currentMatches, (matches) => {
-  if (!matches.length) view.value = 'standings'
-})
+// 观战页空了就原地显示空态，绝不强拉回积分页；只在大赛收官（tab 消失）时归位。
+watch(
+  () => info.value?.state,
+  (s) => {
+    if (s !== 'active') view.value = 'standings'
+  },
+)
 
 // 服务端连上即推一帧、状态变化再推，无需轮询。
 useWebSocket(tournamentWsUrl(), {
