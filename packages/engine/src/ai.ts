@@ -3,15 +3,27 @@ import { analyzeBoard, evaluateState, sampleIndex, WIN_SCORE } from './eval'
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'master'
 
-// explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）。
+// explore：均衡分布里混入均匀探索的比例（越高越随机越弱）；budgetMs：SM-MCTS 时间盒（毫秒）；
+// fallback：吞吐自适应降级——上一手实际迭代数不足 minIterations（慢设备）则改用窄候选。
+// 对战实测：宽候选需吃饱 K² 联合格的访问密度才占优（14 需 ~120k 迭代），吃不饱时反被稀释、弱于窄候选。
 export const DIFFICULTY_SETTINGS: Record<
   Difficulty,
-  { candidates: number; explore: number; budgetMs: number }
+  {
+    candidates: number
+    explore: number
+    budgetMs: number
+    fallback?: { candidates: number; minIterations: number }
+  }
 > = {
   easy: { candidates: 5, explore: 0.55, budgetMs: 200 },
   normal: { candidates: 6, explore: 0.22, budgetMs: 450 },
   hard: { candidates: 7, explore: 0, budgetMs: 800 },
-  master: { candidates: 10, explore: 0, budgetMs: 6400 },
+  master: {
+    candidates: 14,
+    explore: 0,
+    budgetMs: 8000,
+    fallback: { candidates: 10, minIterations: 100_000 },
+  },
 }
 
 const FICTITIOUS_ITERATIONS = 300

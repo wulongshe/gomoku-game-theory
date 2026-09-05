@@ -14,13 +14,20 @@ interface DuctNode extends Core {
   visits: number
 }
 
+// iterations 是本次实际完成的模拟数（唯一手/无候选的直接返回记 0）：
+// 供调用方感知设备吞吐、做宽窄候选自适应。
+export interface SearchResult {
+  point: Point | null
+  iterations: number
+}
+
 export function ductSearch(
   state: GameState,
   seat: Seat,
   candidates: number,
   explore: number,
   budget: number,
-): Point | null {
+): SearchResult {
   function makeNode(s: GameState): DuctNode {
     const core = expand(s, seat, candidates)
     const size = core.expandable ? core.aiMoves.length * core.oppMoves.length : 0
@@ -90,8 +97,8 @@ export function ductSearch(
   }
 
   const root = makeNode(state)
-  if (!root.expandable) return root.aiMoves[0] ?? null
-  if (root.aiMoves.length === 1) return root.aiMoves[0]
+  if (!root.expandable) return { point: root.aiMoves[0] ?? null, iterations: 0 }
+  if (root.aiMoves.length === 1) return { point: root.aiMoves[0], iterations: 0 }
 
   const deadline = performance.now() + budget
   let iterations = 0
@@ -101,7 +108,7 @@ export function ductSearch(
   }
 
   const totalVisits = root.aiCnt.reduce((a, b) => a + b, 0)
-  if (totalVisits === 0) return root.aiMoves[0]
+  if (totalVisits === 0) return { point: root.aiMoves[0], iterations }
 
   // 困难（explore=0）取访问最多手（最强）；其余在访问频率上混入均匀探索后采样（多样、不可预判）。
   if (explore === 0) {
@@ -109,10 +116,10 @@ export function ductSearch(
     for (let i = 1; i < root.aiCnt.length; i++) {
       if (root.aiCnt[i] > root.aiCnt[best]) best = i
     }
-    return root.aiMoves[best]
+    return { point: root.aiMoves[best], iterations }
   }
 
   const n = root.aiMoves.length
   const dist = root.aiCnt.map((c) => (1 - explore) * (c / totalVisits) + explore / n)
-  return root.aiMoves[sampleIndex(dist)]
+  return { point: root.aiMoves[sampleIndex(dist)], iterations }
 }

@@ -4,7 +4,7 @@ import { createGame, settleFrame, type GameMode, type GameState, type Point, typ
 import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====
-const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / race 竞速 / minus 负子
+const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / minus 负子
 const ROUNDS = Number(process.env.ROUNDS ?? 20)
 const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 10) // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）

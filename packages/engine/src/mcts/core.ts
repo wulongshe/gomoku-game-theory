@@ -1,7 +1,8 @@
 import { type FrameChoices, type GameState, type Point, type Seat } from '../game'
 import { analyzeBoard, evaluateState, MAX_THREAT_VALUE, TERMINAL } from '../eval'
 
-export const MAX_ITERATIONS = 60_000
+// 对战实测：K=14 需 ~120k 迭代才够摊满 K² 联合格的访问密度；低难度受时间盒约束，远触不到这道闸。
+export const MAX_ITERATIONS = 120_000
 // 递归深度上限：常规下棋盘单调填满、深度天然有界，唯「双方同帧成五湮灭清子」会破坏单调，硬顶防爆栈。
 export const MAX_DEPTH = 300
 // 非终局威胁差的量级上限（含多胜点重奖），保证多威胁不被对数归一挤到与单威胁齐平。

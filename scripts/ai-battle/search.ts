@@ -9,5 +9,5 @@ export interface SideConfig {
 
 // 与引擎行为一致，走 DUCT。
 export function searchSideMove(state: GameState, seat: Seat, side: SideConfig): Point | null {
-  return ductSearch(state, seat, side.candidates, side.explore, side.budgetMs)
+  return ductSearch(state, seat, side.candidates, side.explore, side.budgetMs).point
 }
