@@ -77,7 +77,7 @@ export interface Standing {
   status?: PlayerStatus // 仅实时积分下发
 }
 
-export type PlayerStatus = 'idle' | 'matching' | 'readying' | 'playing' | 'left'
+export type PlayerStatus = 'idle' | 'matching' | 'readying' | 'playing' | 'cooldown' | 'left'
 
 export interface Match {
   code: string | null // 房号：观战入口（仅对当下可观战的人下发）
@@ -96,7 +96,7 @@ export interface TournamentInfo {
   participating: boolean // 当前正在进行的这场的参赛者
   myGame: { code: string } | null
   matchCloseAt: number | null // 竞技场停止配新对局的时点；已开局的照常打完计分
-  my: { status: PlayerStatus } | null
+  my: { status: PlayerStatus; cooldownUntil: number | null } | null
   standings: Standing[]
   me: number | null // 我在 standings 中的下标（脱敏前定位）
   games: Match[] // 全部对局，新的在前（仅参赛者/赛后可见）

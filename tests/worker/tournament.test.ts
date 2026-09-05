@@ -24,6 +24,7 @@ interface TState {
   players: Record<string, TPlayer>
   bots: Record<string, string>
   queue: string[]
+  cooldowns: Record<string, number>
   botSeekAt: Record<string, number>
   pairings: Array<{
     code: string
@@ -48,6 +49,7 @@ function full(partial: Partial<TState>): TState {
     players: {},
     bots: {},
     queue: [],
+    cooldowns: {},
     botSeekAt: {},
     pairings: [],
     lastStandings: [],
@@ -201,11 +203,21 @@ describe('Arena tournament DO', () => {
     expect(s.queue).toEqual(['b@x'])
   })
 
-  it('blocks seeking during an unresolved game or after close', async () => {
+  it('blocks seeking during cooldown, an unresolved game, or after close', async () => {
     const e = 'cool@example.com'
     const t = await sessionFor(e)
     await seedActive([e, 'b@x'])
+    await patch((s) => {
+      s.cooldowns[e] = Date.now() + 30_000
+    })
+    const cooling = await stub().seekMatch(t)
+    expect(cooling.my?.status).toBe('cooldown')
+    expect(cooling.my?.cooldownUntil).toBeGreaterThan(Date.now())
+    expect((await read()).queue).toEqual([])
 
+    await patch((s) => {
+      s.cooldowns[e] = Date.now() - 1
+    })
     const ok = await stub().seekMatch(t)
     expect(ok.my?.status).toBe('matching')
 
@@ -228,7 +240,7 @@ describe('Arena tournament DO', () => {
     expect((await read()).queue).toEqual([])
   })
 
-  it('scores a win and ignores duplicates and strangers', async () => {
+  it('scores a win with graded cooldowns and ignores duplicates and strangers', async () => {
     await seedActive(['a@x', 'b@x', 'c@x'], {
       pairings: [
         { code: '0021', players: ['a@x', 'b@x'], checkedIn: [], result: null, createdAt: Date.now() },
@@ -242,6 +254,10 @@ describe('Arena tournament DO', () => {
     expect(s.pairings[0].result).toBe('a')
     expect(s.players['a@x']).toMatchObject({ score: 1, wins: 1, games: 1 })
     expect(s.players['b@x']).toMatchObject({ score: 0, wins: 0, games: 1 })
+    // 赢家冷却 45s、输家 15s
+    expect(s.cooldowns['a@x']).toBeGreaterThan(Date.now())
+    expect(s.cooldowns['b@x']).toBeGreaterThan(Date.now())
+    expect(s.cooldowns['a@x'] - s.cooldowns['b@x']).toBe(30_000)
     expect(s.state).toBe('active')
   })
 
@@ -386,16 +402,17 @@ describe('Arena tournament DO', () => {
     })
     await stub().reportResult({ code: '0081', winnerEmail: 'h@x', moves: 40 })
     const s = await read()
-    expect(s.botSeekAt[b0]).toBeGreaterThan(Date.now())
+    expect(s.botSeekAt[b0]).toBeGreaterThan(s.cooldowns[b0])
   })
 })
 
 describe('arena statuses and spectate gating', () => {
-  it('derives the five player statuses and hands codes to free participants', async () => {
+  it('derives the player statuses and hands codes to free participants', async () => {
     const me = 'status-me@example.com'
     const token = await sessionFor(me)
-    await seedActive([me, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x'], {
+    await seedActive([me, 'b@x', 'c@x', 'd@x', 'e@x', 'f@x', 'g@x', 'h@x'], {
       queue: ['b@x'],
+      cooldowns: { 'h@x': Date.now() + 20_000 },
       pairings: [
         {
           code: '0301',
@@ -422,8 +439,9 @@ describe('arena statuses and spectate gating', () => {
     expect(byEmail['c***@x']).toBe('playing')
     expect(byEmail['d***@x']).toBe('playing')
     expect(byEmail['e***@x']).toBe('readying')
-    // g@x 空闲但没连着大厅 WS（本人不是请求者）→ 已离开
+    // g@x 空闲但没连着大厅 WS（本人不是请求者）→ 已离开；h@x 冷却优先于离场判定
     expect(byEmail['g***@x']).toBe('left')
+    expect(byEmail['h***@x']).toBe('cooldown')
     // 我不在对局中 → 进行中的桌下发观战房号；已结束的不带
     expect(info.games.find((m) => m.status === 'playing')?.code).toBe('0301')
     expect(info.games.find((m) => m.status === 'done')?.code).toBeNull()

@@ -22,16 +22,26 @@ const startDeadline = ref<number | null>(null)
 const startLeft = useCountdown(startDeadline)
 const closeDeadline = ref<number | null>(null)
 const closeLeft = useCountdown(closeDeadline)
+const cooldownDeadline = ref<number | null>(null)
+const cooldownLeft = useCountdown(cooldownDeadline)
 
 function apply(data: TournamentInfo) {
   info.value = data
   startDeadline.value = Date.now() + (data.startsAt - data.now)
   closeDeadline.value =
     data.matchCloseAt === null ? null : Date.now() + (data.matchCloseAt - data.now)
+  cooldownDeadline.value =
+    data.my?.cooldownUntil == null ? null : Date.now() + (data.my.cooldownUntil - data.now)
   loading.value = false
 }
 
-const myStatus = computed(() => info.value?.my?.status ?? null)
+// 冷却读秒走完就地视为空闲（服务端只在事件时推送，不为冷却到点广播）。
+const myStatus = computed(() => {
+  const my = info.value?.my
+  if (!my) return null
+  if (my.status === 'cooldown' && (cooldownLeft.value ?? 0) <= 0) return 'idle'
+  return my.status
+})
 const matchClosed = computed(
   () => info.value?.matchCloseAt !== null && (closeLeft.value ?? 0) <= 0,
 )
@@ -60,7 +70,7 @@ async function seek() {
   }
 }
 
-// 空闲/匹配中都可观战对局中的桌（房号仅对可观战者下发）。
+// 空闲/匹配中/冷却中都可观战对局中的桌（房号仅对可观战者下发）。
 const VIEWS = ['standings', 'matches'] as const
 const VIEW_LABELS: Record<(typeof VIEWS)[number], string> = {
   standings: '积分',
@@ -190,6 +200,9 @@ useWebSocket(tournamentWsUrl(), {
             @click="seek"
           >
             <IconSpinner class="size-4" />匹配中，点击取消
+          </AppButton>
+          <AppButton v-else-if="myStatus === 'cooldown'" class="w-full" disabled>
+            冷却中 {{ cooldownLeft ?? 0 }}s · 可先观战
           </AppButton>
           <AppButton
             v-else-if="myStatus === 'readying' || myStatus === 'playing'"

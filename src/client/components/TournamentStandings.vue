@@ -13,9 +13,10 @@ const props = defineProps<{
 const STATUS_META: Record<PlayerStatus, { label: string; dot: string }> = {
   idle: { label: '空闲中', dot: 'bg-stone-400' },
   matching: { label: '匹配中', dot: 'bg-amber-400' },
-  readying: { label: '准备中', dot: 'bg-sky-400' },
+  readying: { label: '准备中', dot: 'bg-purple-500' },
   playing: { label: '对局中', dot: 'bg-emerald-500' },
-  left: { label: '已离开', dot: 'bg-stone-300 dark:bg-stone-600' },
+  cooldown: { label: '冷却中', dot: 'bg-sky-400' },
+  left: { label: '已离开', dot: 'bg-red-400' },
 }
 
 // 仅实时积分带状态（上届排名不带），有状态才显示图例与着色。
@@ -28,7 +29,7 @@ const MEDALS = ['🥇', '🥈', '🥉']
   <div class="flex min-h-0 flex-col gap-1.5">
     <div
       v-if="hasStatus"
-      class="flex items-start justify-center gap-4 text-xs text-stone-500 dark:text-stone-400"
+      class="flex items-start justify-center gap-2.5 text-xs text-stone-500 dark:text-stone-400"
     >
       <span v-for="item in STATUS_META" :key="item.label" class="flex flex-col items-center gap-1">
         <span class="size-2 rounded-full" :class="item.dot" />

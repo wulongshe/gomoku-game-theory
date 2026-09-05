@@ -18,6 +18,10 @@ import {
 
 const DAILY_HOUR_UTC = 12 // 20:00 北京时间（无夏令时，固定 UTC+8）
 const ARENA_MS = 30 * 60_000 // 配新对局的窗口；已开局的照常打完，超过窗口收官也计分
+// 一局打完后的冷却：赢家歇得更久（防连胜连刷），未打成（void）不冷却。
+const COOLDOWN_LOSS_MS = 15_000
+const COOLDOWN_DRAW_MS = 30_000
+const COOLDOWN_WIN_MS = 45_000
 const PAIR_TTL_MS = 2 * 60_000 // 配上后迟迟未开局的裁决时限
 const WRAPUP_MS = 20 * 60_000 // 窗口关闭后仍未决对局（房间悄悄死掉等）的硬兜底
 const POLL_MS = 60_000
@@ -53,6 +57,7 @@ interface TournamentState {
   players: Record<string, Player>
   bots: Record<string, Difficulty> // 本届陪打 bot 的邮箱 → 基准棋力档（每局在 ±1 档内浮动）
   queue: string[] // 匹配中（先到先配）
+  cooldowns: Record<string, number> // email → 冷却结束时点
   botSeekAt: Record<string, number> // bot → 下次「点匹配」的时点
   pairings: Pairing[]
   lastStandings: Standing[]
@@ -66,6 +71,7 @@ function defaultState(): TournamentState {
     players: {},
     bots: {},
     queue: [],
+    cooldowns: {},
     botSeekAt: {},
     pairings: [],
     lastStandings: [],
@@ -186,7 +192,7 @@ export class Tournament extends DurableObject<Env> {
     })
   }
 
-  // 「匹配对手」：每一局都由玩家手动触发，绝不自动排队。
+  // 「匹配对手」：第一局与冷却结束后都由玩家手动触发，绝不自动排队。
   async seekMatch(token: string): Promise<TournamentInfo> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const email = await this.email(token)
@@ -198,6 +204,7 @@ export class Tournament extends DurableObject<Env> {
         email in s.players &&
         now < this.matchCloseAt(s) &&
         !s.queue.includes(email) &&
+        (s.cooldowns[email] ?? 0) <= now &&
         !this.unresolvedOf(s, email)
       ) {
         s.queue.push(email)
@@ -308,6 +315,7 @@ export class Tournament extends DurableObject<Env> {
     s.registrations = []
     s.pairings = []
     s.queue = []
+    s.cooldowns = {}
     s.botSeekAt = {}
     s.startedAt = Date.now()
     s.state = 'active'
@@ -325,7 +333,12 @@ export class Tournament extends DurableObject<Env> {
       if (now < s.botSeekAt[email] - SKEW_MS) continue
       delete s.botSeekAt[email]
       if (now >= close) continue
-      if (email in s.players && !s.queue.includes(email) && !this.unresolvedOf(s, email)) {
+      if (
+        email in s.players &&
+        !s.queue.includes(email) &&
+        (s.cooldowns[email] ?? 0) <= now + SKEW_MS &&
+        !this.unresolvedOf(s, email)
+      ) {
         s.queue.push(email)
       }
     }
@@ -415,15 +428,24 @@ export class Tournament extends DurableObject<Env> {
     // void → 双方 0 分
   }
 
-  // 一局打完：真人回到空闲、随时可再点匹配；bot 隔一小段随机时间自动「点」下一局。
+  // 一局打完先冷却（期内可观战），结束后要自己再点匹配；bot 在冷却后隔一小段随机时间「点」。
   private afterResult(s: TournamentState, p: Pairing): void {
     const now = Date.now()
-    for (const email of p.players) {
-      if (!(email in s.players)) continue
-      if (email in s.bots && now < this.matchCloseAt(s)) {
-        s.botSeekAt[email] = now + 3_000 + Math.random() * 27_000
+    p.players.forEach((email, i) => {
+      if (!(email in s.players)) return
+      const cooldown =
+        p.result === 'draw'
+          ? COOLDOWN_DRAW_MS
+          : p.result === (i === 0 ? 'a' : 'b')
+            ? COOLDOWN_WIN_MS
+            : p.result === 'void'
+              ? 0
+              : COOLDOWN_LOSS_MS
+      if (cooldown > 0) s.cooldowns[email] = now + cooldown
+      if (email in s.bots && now + cooldown < this.matchCloseAt(s)) {
+        s.botSeekAt[email] = now + cooldown + 3_000 + Math.random() * 27_000
       }
-    }
+    })
   }
 
   // 窗口已关且所有对局尘埃落定才收官出榜——最后一局拖过窗口也照常计分。
@@ -442,6 +464,7 @@ export class Tournament extends DurableObject<Env> {
     s.players = {}
     s.bots = {}
     s.queue = []
+    s.cooldowns = {}
     s.botSeekAt = {}
     s.pairings = []
     await this.ctx.storage.setAlarm(this.nextStart())
@@ -485,13 +508,15 @@ export class Tournament extends DurableObject<Env> {
   }
 
   private statuses(s: TournamentState, viewer: string | null): Map<string, PlayerStatus> {
+    const now = Date.now()
     const connected = this.connectedEmails()
     if (viewer) connected.add(viewer) // 请求者本人必然在场，不会把自己看成「已离开」
     const map = new Map<string, PlayerStatus>()
     for (const email of Object.keys(s.players)) {
       const pairing = this.unresolvedOf(s, email)
       // 对局中/待进房的席位由 pairing 判定（此时真人已离开大厅去房间，不算「已离开」）；
-      // 其余空闲席位里，真人若断开了大厅连接即「已离开」，bot 永远视为在场。
+      // 刚打完的先显示冷却（人常还停在房间页、没连大厅）；其余空闲席位里，真人断开了
+      // 大厅连接即「已离开」，bot 永远视为在场。
       map.set(
         email,
         pairing
@@ -500,9 +525,11 @@ export class Tournament extends DurableObject<Env> {
             : 'readying'
           : s.queue.includes(email)
             ? 'matching'
-            : email in s.bots || connected.has(email)
-              ? 'idle'
-              : 'left',
+            : (s.cooldowns[email] ?? 0) > now
+              ? 'cooldown'
+              : email in s.bots || connected.has(email)
+                ? 'idle'
+                : 'left',
       )
     }
     return map
@@ -564,7 +591,12 @@ export class Tournament extends DurableObject<Env> {
       participating,
       myGame: myPairing ? { code: myPairing.code } : null,
       matchCloseAt: s.state === 'active' ? this.matchCloseAt(s) : null,
-      my: participating ? { status: statuses!.get(email!) ?? 'idle' } : null,
+      my: participating
+        ? {
+            status: statuses!.get(email!) ?? 'idle',
+            cooldownUntil: (s.cooldowns[email!] ?? 0) > now ? s.cooldowns[email!] : null,
+          }
+        : null,
       standings: standings.map((row) => ({
         ...row,
         email: shown(row.email),
@@ -611,6 +643,7 @@ export class Tournament extends DurableObject<Env> {
   private async load(): Promise<TournamentState> {
     const s = (await this.ctx.storage.get<TournamentState>('t')) ?? defaultState()
     s.bots ??= {}
+    s.cooldowns ??= {}
     s.queue ??= []
     s.botSeekAt ??= {}
     s.pairings ??= []
