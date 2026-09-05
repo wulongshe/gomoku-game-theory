@@ -535,7 +535,7 @@ export class Room extends DurableObject<Env> {
         this.notifyPeers(ws, { type: 'draw_offered' })
         const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
         if (aiSeat) {
-          await this.ctx.storage.put('aiDrawOffered', true)
+          await this.ctx.storage.put('aiDrawOffered', seat)
           await this.planAi(aiSeat, 800 + Math.random() * 1500)
         }
         return
@@ -756,7 +756,9 @@ export class Room extends DurableObject<Env> {
   ): Promise<void> {
     if (game.phase === 'playing') {
       const persona = botPersona(this.env.TOURNAMENT_BOTS, info.email)
-      if (await this.ctx.storage.get<boolean>('aiDrawOffered')) {
+      // 求和标志记着发起方座位：bot 对战时只有对面需要应和，发起方不消费自己的请求。
+      const offered = await this.ctx.storage.get<Seat>('aiDrawOffered')
+      if (offered && offered !== seat) {
         await this.ctx.storage.delete('aiDrawOffered')
         return this.aiRespondDraw(seat, info, game, tournament, persona)
       }
@@ -785,6 +787,16 @@ export class Room extends DurableObject<Env> {
         // 绝望局（对手已成己方挡不全的叉）按性格小概率认输——真人不会每盘都磨到底。
         if (decision.losing && Math.random() < (1 - persona.grit) * 0.3) {
           return this.aiResign(seat, game)
+        }
+        // 百回合开外的拉锯多半已成死局：不占优时按概率主动求和——对面是 bot 走 AI 应和，
+        // 是真人则正常弹窗；被拒了后续回合还会再随机发起。
+        if (game.frame > 100 && !decision.commanding && !offered && Math.random() < 0.2) {
+          this.notifyPeers(null, { type: 'draw_offered' })
+          const other: Seat = seat === 'black' ? 'white' : 'black'
+          if ((await this.aiSeats())[other]) {
+            await this.ctx.storage.put('aiDrawOffered', seat)
+            await this.planAi(other, 1200 + Math.random() * 2500)
+          }
         }
         const point = decision.point
         if (left < 3500 || budget < 4000 || slack < 1000) return submit(point)
@@ -817,10 +829,11 @@ export class Room extends DurableObject<Env> {
     // 只需胜负态势判断，走轻量研判（不做选点的虚拟对弈）。
     const { commanding, losing } = assessPosition(game, seat, info.difficulty)
     const drawFloor = tournament ? 30 : 12 // 和棋计分下限：大赛需 ≥30 手，否则判无效
+    // 落后或百回合开外的拉锯，都更愿意握手言和。
     const accept =
       !commanding &&
       game.frame >= drawFloor &&
-      Math.random() < persona.drawish + (losing ? 0.35 : 0)
+      Math.random() < persona.drawish + (losing ? 0.35 : 0) + (game.frame > 100 ? 0.35 : 0)
     if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
     this.notifyPeers(null, { type: 'draw_declined' })
     // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
