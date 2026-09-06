@@ -753,29 +753,15 @@ function exitRoom() {
           </div>
         </div>
 
-        <!-- 底部四个槽位在对局中/终局保持同高（复盘行始终占位、提示行与图标行终局保留），终局按钮出现时棋盘不位移。 -->
-        <div class="flex w-full gap-2" :class="{ invisible: stage !== 'over' || !reviewAvailable }">
-          <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
-            上一回合
-          </AppButton>
-          <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
-            下一回合
-          </AppButton>
-        </div>
-
-        <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
-          <template v-if="stage === 'playing' && !spectating">
+        <template v-if="stage === 'playing' && !spectating">
+          <p class="min-h-4 text-center text-xs text-stone-400 dark:text-stone-500">
             <template v-if="errorNotice">{{ errorNotice }}</template>
             <template v-else-if="frameSeconds > 0 && selected && !submitted">
               倒计时结束将自动提交已选落点
             </template>
             <template v-else-if="submitted && !oppSubmitted">对方提交前可取消或变更落点</template>
-          </template>
-        </p>
-
-        <div class="flex min-h-13 w-full flex-col justify-center">
+          </p>
           <AppButton
-            v-if="stage === 'playing' && !spectating"
             class="w-full"
             :disabled="submitted ? oppSubmitted : !selected"
             @click="submitted ? cancelChoice() : submitChoice()"
@@ -790,7 +776,45 @@ function exitRoom() {
                     : '点击棋盘选择落点'
             }}
           </AppButton>
-          <template v-else-if="stage === 'over' && !spectating && !tournament">
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+            <span />
+            <div class="flex items-center justify-center gap-1">
+              <button
+                class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+                aria-label="对局设置"
+                @click="showSettings = true"
+              >
+                <IconSettings class="size-5" />
+              </button>
+              <button
+                v-if="seatAccounts.black || seatAccounts.white"
+                class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+                aria-label="玩家信息"
+                @click="showPlayers = true"
+              >
+                <IconUsers class="size-5" />
+              </button>
+            </div>
+            <button
+              class="cursor-pointer justify-self-end p-1 text-xs font-medium text-stone-400 transition-colors hover:text-red-500 active:text-red-500 dark:text-stone-500 dark:hover:text-red-400 dark:active:text-red-400"
+              @click="showConcede = true"
+            >
+              认输/求和
+            </button>
+          </div>
+        </template>
+
+        <template v-else>
+          <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">
+            <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
+              上一回合
+            </AppButton>
+            <AppButton secondary class="flex-1" :disabled="reviewAtLatest" @click="review(1)">
+              下一回合
+            </AppButton>
+          </div>
+
+          <template v-if="!tournament">
             <AppButton
               v-if="!roomClosed && !oppLeft"
               class="w-full"
@@ -803,10 +827,8 @@ function exitRoom() {
               {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
             </p>
           </template>
-          <div
-            v-else-if="spectating && spectatorCanSeek"
-            class="flex w-full flex-col items-center gap-1.5"
-          >
+
+          <div v-if="spectating && spectatorCanSeek" class="flex w-full flex-col items-center gap-1.5">
             <p v-if="othersIdle" class="text-xs text-stone-400 dark:text-stone-500">有其他玩家处于空闲中</p>
             <AppButton
               :secondary="spectatorSeekStatus === 'matching'"
@@ -818,21 +840,9 @@ function exitRoom() {
               {{ spectatorSeekStatus === 'matching' ? '匹配中，点击取消' : '匹配对手' }}
             </AppButton>
           </div>
-        </div>
 
-        <div class="grid min-h-7 grid-cols-[1fr_auto_1fr] items-center">
-          <span />
-          <div class="flex items-center justify-center gap-1">
+          <div v-if="seatAccounts.black || seatAccounts.white" class="flex justify-center">
             <button
-              v-if="stage === 'playing' && !spectating"
-              class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-              aria-label="对局设置"
-              @click="showSettings = true"
-            >
-              <IconSettings class="size-5" />
-            </button>
-            <button
-              v-if="seatAccounts.black || seatAccounts.white"
               class="cursor-pointer p-1 text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
               aria-label="玩家信息"
               @click="showPlayers = true"
@@ -840,14 +850,7 @@ function exitRoom() {
               <IconUsers class="size-5" />
             </button>
           </div>
-          <button
-            v-if="stage === 'playing' && !spectating"
-            class="cursor-pointer justify-self-end p-1 text-xs font-medium text-stone-400 transition-colors hover:text-red-500 active:text-red-500 dark:text-stone-500 dark:hover:text-red-400 dark:active:text-red-400"
-            @click="showConcede = true"
-          >
-            认输/求和
-          </button>
-        </div>
+        </template>
       </div>
 
       <button
