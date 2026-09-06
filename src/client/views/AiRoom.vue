@@ -275,25 +275,23 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         />
       </div>
 
-      <div class="flex flex-1 items-center">
-        <div class="relative w-full">
-          <Board
-            :state="reviewState ?? game"
-            seat="black"
-            :selected="reviewState ? null : selected"
-            :submitted="resolving"
-            :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
-            :vanishing="reviewState ? reviewState.cleared : vanishing"
-            :interactive="playing && !resolving"
-            @select="select"
-          />
-          <ResultOverlay
-            v-if="!playing && !overlayDismissed"
-            :char="resultChar"
-            :colors="resultColors"
-            @dismiss="overlayDismissed = true"
-          />
-        </div>
+      <div class="relative w-full">
+        <Board
+          :state="reviewState ?? game"
+          seat="black"
+          :selected="reviewState ? null : selected"
+          :submitted="resolving"
+          :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
+          :vanishing="reviewState ? reviewState.cleared : vanishing"
+          :interactive="playing && !resolving"
+          @select="select"
+        />
+        <ResultOverlay
+          v-if="!playing && !overlayDismissed"
+          :char="resultChar"
+          :colors="resultColors"
+          @dismiss="overlayDismissed = true"
+        />
       </div>
 
       <template v-if="playing">
@@ -306,6 +304,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
         </AppButton>
       </template>
       <template v-else>
+        <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
         <div v-if="reviewAvailable" class="flex w-full gap-2">
           <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
             上一回合
@@ -314,8 +313,16 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
             下一回合
           </AppButton>
         </div>
-        <AppButton class="w-full" @click="openConfig">再来一局</AppButton>
       </template>
+
+      <div class="mt-auto flex items-center justify-center">
+        <button
+          class="cursor-pointer p-1 text-xs font-medium text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
+          @click="playing ? (confirmingExit = true) : exitRoom()"
+        >
+          返回首页
+        </button>
+      </div>
     </div>
 
     <GameConfigDialog
