@@ -941,7 +941,7 @@ function exitRoom() {
         认输将判对方获胜；求和需对方同意，同意后本局记为平局。
       </p>
       <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
-        大赛规则：不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
+        不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
       </p>
       <template #footer>
         <div class="flex gap-2">
@@ -956,7 +956,7 @@ function exitRoom() {
         对方提议和棋，同意后本局记为平局。{{ drawInviteSeconds }} 秒后自动拒绝。
       </p>
       <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
-        大赛规则：不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
+        不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
       </p>
       <template #footer>
         <div class="flex gap-2">
