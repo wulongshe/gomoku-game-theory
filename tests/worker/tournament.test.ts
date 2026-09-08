@@ -635,7 +635,7 @@ describe('tournament bots', () => {
     const lineup = dailyBots('2026-08-31', POOL)
     expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
     expect(lineup.length).toBeGreaterThanOrEqual(1)
-    expect(lineup.length).toBeLessThanOrEqual(3)
+    expect(lineup.length).toBeLessThanOrEqual(2)
     expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
 
     const nextDay = dailyBots('2026-09-01', POOL)
@@ -677,7 +677,7 @@ describe('tournament bots', () => {
     for (let i = 0; i < 60; i++) {
       const next = dailyBots(dateKey(i), POOL, prev).map((b) => b.email)
       expect(next.length).toBeGreaterThanOrEqual(1)
-      expect(next.length).toBeLessThanOrEqual(3)
+      expect(next.length).toBeLessThanOrEqual(2)
       sizes.add(next.length)
       if (prev.length) {
         retained += prev.filter((e) => next.includes(e)).length
@@ -685,8 +685,7 @@ describe('tournament bots', () => {
       }
       prev = next
     }
-    expect(sizes.size).toBeGreaterThanOrEqual(3)
-    expect([...sizes].some((n) => n % 2 === 1)).toBe(true)
+    expect(sizes.size).toBe(2)
     // 少量替换：平均留任率过半
     expect(retained / carried).toBeGreaterThan(0.5)
   })
