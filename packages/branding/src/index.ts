@@ -53,7 +53,6 @@ const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience
       { text: '时间到时未提交：有草稿则自动提交草稿，没有则本回合弃着', only: 'pvp' },
       { text: '对方提交前，已提交的一方仍可变更落点', only: 'pvp' },
       { text: '首回合双方只能落在中央 3×3 区域，且不能落天元（正中心）' },
-      { text: '中途退出判负', only: 'pvp' },
     ],
   },
   {
@@ -71,6 +70,7 @@ const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience
       { text: '任意方向连续棋子累计满 5 即胜，负子减 1' },
       { text: '棋盘下满仍无人连五则为和棋' },
       { text: '双方同时连五，连线棋子一起消失，对局继续' },
+      { text: '中途退出判负', only: 'pvp' },
     ],
   },
 ]
