@@ -241,6 +241,78 @@ describe('settleFrame', () => {
   })
 
 
+  // (2x+y)%5<3 花纹：任何方向的五窗都黑白混杂，单个空点四周也拼不出净五连。
+  function deadPattern(mode: GameMode): GameState {
+    const game = createGame(mode)
+    game.frame = 2
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        game.board[y * BOARD_SIZE + x] = (2 * x + y) % 5 < 3 ? 'black' : 'white'
+      }
+    }
+    return game
+  }
+
+  it.each(['forbidden', 'minus'] as const)(
+    'declares a draw in %s mode once no side can ever reach five',
+    (mode) => {
+      const game = deadPattern(mode)
+      game.board[0] = 'empty'
+      expect(game.board.filter((c) => c === 'empty')).toHaveLength(1)
+      const next = settleFrame(game, { black: null, white: null })
+      expect(next.phase).toBe('draw')
+    },
+  )
+
+  it.each([
+    ['forbidden', 'forbidden'],
+    ['minus', 'minus'],
+  ] as const)(
+    'keeps a %s game alive while the collision stones can still reach five',
+    (mode, cell) => {
+      const game = deadPattern(mode)
+      for (let x = 0; x < 4; x++) game.board[x] = cell
+      game.board[4] = 'empty'
+      const next = settleFrame(game, { black: null, white: null })
+      expect(next.phase).toBe('playing')
+    },
+  )
+
+  it.each([
+    ['forbidden', 'forbidden'],
+    ['minus', 'minus'],
+  ] as const)(
+    'sees a potential collision five needing several new stones in %s mode',
+    (mode, cell) => {
+      const game = deadPattern(mode)
+      game.board[0] = cell
+      game.board[1] = cell
+      game.board[2] = 'empty'
+      game.board[3] = 'empty'
+      game.board[4] = cell
+      const next = settleFrame(game, { black: null, white: null })
+      expect(next.phase).toBe('playing')
+    },
+  )
+
+  it('sees a potential five that crosses a minus cell (1 1 1 1 -1 0 0)', () => {
+    const game = deadPattern('minus')
+    for (let x = 0; x < 4; x++) game.board[x] = 'black'
+    game.board[4] = 'minus'
+    game.board[5] = 'empty'
+    game.board[6] = 'empty'
+    const next = settleFrame(game, { black: null, white: null })
+    expect(next.phase).toBe('playing')
+  })
+
+  it('does not declare a dead draw while a player still has room for five', () => {
+    const game = deadPattern('forbidden')
+    for (let x = 0; x < 5; x++) game.board[x] = 'empty'
+    game.board[0] = 'black'
+    const next = settleFrame(game, { black: null, white: null })
+    expect(next.phase).toBe('playing')
+  })
+
   it('rejects illegal choices and settled games', () => {
     const game = withStones({ black: [{ x: 7, y: 7 }] })
     expect(() => settleFrame(game, { black: { x: 7, y: 7 }, white: null })).toThrow()

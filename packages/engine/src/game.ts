@@ -151,6 +151,44 @@ function forbiddenRuns(board: CellState[]): number[][] {
   return runs
 }
 
+// 该方还有没有可能凑出五连：把所有空点都让给它（对碰撞出的第三方棋子即落在空点上），
+// 逐个空点当「最后一手」跑胜线判定。判否即这一方永远赢不了。
+function fivePossible(board: CellState[], seat: Seat | 'forbidden' | 'minus'): boolean {
+  const hypo = board.map((cell) => (cell === 'empty' ? seat : cell))
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== 'empty') continue
+    const point = { x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) }
+    if (seat === 'forbidden' || seat === 'minus') {
+      for (const [dx, dy] of DIRECTIONS) {
+        let run = 1
+        for (const sign of [1, -1] as const) {
+          let x = point.x + dx * sign
+          let y = point.y + dy * sign
+          while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && hypo[y * BOARD_SIZE + x] === seat) {
+            run++
+            x += dx * sign
+            y += dy * sign
+          }
+        }
+        if (run >= WIN_SCORE) return true
+      }
+    } else if (winningLines(hypo, seat, point).length) {
+      return true
+    }
+  }
+  return false
+}
+
+// 死局判和：黑、白与碰撞子三方都不可能再成五即终局。碰撞子成五必须算「还有变化」——
+// 禁子五连会清空复位、翻出新空点，不能提前判和。
+function isDeadDraw(board: CellState[], mode: GameMode): boolean {
+  return (
+    !fivePossible(board, 'black') &&
+    !fivePossible(board, 'white') &&
+    !fivePossible(board, mode === 'minus' ? 'minus' : 'forbidden')
+  )
+}
+
 export function settleFrame(state: GameState, choices: FrameChoices): GameState {
   if (state.phase !== 'playing') throw new Error('game is over')
   for (const seat of ['black', 'white'] as const) {
@@ -206,8 +244,7 @@ export function settleFrame(state: GameState, choices: FrameChoices): GameState 
       cleared.push({ origin: toCell(origin), cells: run.map(toCell) })
     }
     for (const i of runs.flat()) board[i] = 'empty'
-    // 只有棋盘再无空点才判和：禁点可成排清空复位、腾出新空点，据当前局面提前判和会误判。
-    if (!board.includes('empty')) phase = 'draw'
+    if (isDeadDraw(board, state.mode)) phase = 'draw'
   }
 
   const collided = black && white && black.x === white.x && black.y === white.y
