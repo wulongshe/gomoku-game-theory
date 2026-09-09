@@ -330,7 +330,7 @@ useEventListener(window, 'resize', updateScrollHint)
       v-model:frame="inviteFrame"
       v-model:mode="inviteMode"
       title="双人对战"
-      :confirm-text="creating ? '邀请中…' : '发起邀请'"
+      :confirm-text="creating ? '创建中…' : '开始对战'"
       :loading="creating"
       :disabled="creating"
       @cancel="showInvite = false"
