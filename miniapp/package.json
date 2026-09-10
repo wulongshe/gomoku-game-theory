@@ -1,14 +1,15 @@
 {
   "name": "gomoku-miniapp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "博弈五子棋",
   "scripts": {
     "dev": "taro build --type xhs --watch",
-    "build": "taro build --type xhs",
-    "check": "vue-tsc --noEmit",
-    "build:h5": "vite build --config h5/vite.config.ts",
-    "pack:h5": "pnpm build:h5 && python3 h5/pack.py"
+    "build": "pnpm build:xhs && pnpm build:h5",
+    "build:xhs": "taro build --type xhs",
+    "build:h5": "vite build --config targets/h5/vite.config.ts",
+    "pack:h5": "pnpm build:h5 && node targets/h5/scripts/pack.ts",
+    "check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@gomoku/branding": "workspace:*",
@@ -28,6 +29,7 @@
     "@tarojs/vite-runner": "4.2.1",
     "@vitejs/plugin-vue": "^4.6.2",
     "@vue/compiler-sfc": "^3.5.13",
+    "fflate": "^0.8.3",
     "typescript": "^5.8.0",
     "vite": "^4.5.5",
     "vue-tsc": "^2.2.0"

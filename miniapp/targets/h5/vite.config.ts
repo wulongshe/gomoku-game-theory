@@ -51,12 +51,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@tarojs/taro': fileURLToPath(new URL('./taro.ts', import.meta.url)),
-      '@': fileURLToPath(new URL('../src', import.meta.url)),
+      '@': fileURLToPath(new URL('../../src', import.meta.url)),
     },
   },
   css: { postcss: { plugins: [rpxToRem] } },
   build: {
-    outDir: fileURLToPath(new URL('../dist-h5', import.meta.url)),
+    outDir: fileURLToPath(new URL('./dist', import.meta.url)),
     emptyOutDir: true,
     target: ['es2017', 'chrome61'],
     cssCodeSplit: false,
