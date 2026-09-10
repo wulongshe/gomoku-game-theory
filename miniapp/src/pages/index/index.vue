@@ -5,6 +5,7 @@ import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
 
 useShareAppMessage(() => ({
   title: `${TITLE}｜${TAGLINE}`,
@@ -31,7 +32,7 @@ function start(config: GameConfig): void {
 </script>
 
 <template>
-  <view class="page">
+  <view class="page" :style="PAGE_MIN_HEIGHT">
     <text class="rules-entry" @tap="showRules = true">? 游戏规则</text>
 
     <view class="hero">
@@ -72,11 +73,10 @@ function start(config: GameConfig): void {
 .page {
   position: relative;
   min-height: 100vh;
-  padding: 48rpx;
+  padding: 104rpx 48rpx 48rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 56rpx;
   box-sizing: border-box;
 }
