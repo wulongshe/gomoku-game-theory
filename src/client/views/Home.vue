@@ -270,7 +270,7 @@ useEventListener(window, 'resize', updateScrollHint)
           <IconBilibili class="size-5" />
         </a>
         <a
-          href="https://github.com/wulongshe"
+          href="https://github.com/wulongshe/gomoku-game-theory"
           target="_blank"
           rel="noopener"
           aria-label="GitHub"
