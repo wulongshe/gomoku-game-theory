@@ -5,6 +5,7 @@ import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { helpIcon } from '@/utils/icons'
 import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
 
 useShareAppMessage(() => ({
@@ -12,6 +13,7 @@ useShareAppMessage(() => ({
   path: '/pages/index/index',
 }))
 
+const HELP_ICON = helpIcon('#a8a29e')
 const RULES = rules()
 const savedConfig = ref(loadConfig())
 const showConfig = ref(false)
@@ -33,7 +35,10 @@ function start(config: GameConfig): void {
 
 <template>
   <view class="page" :style="PAGE_MIN_HEIGHT">
-    <text class="rules-entry" @tap="showRules = true">? 游戏规则</text>
+    <view class="rules-entry" @tap="showRules = true">
+      <image class="icon" :src="HELP_ICON" />
+      <text>游戏规则</text>
+    </view>
 
     <view class="hero">
       <view class="stones">
@@ -84,9 +89,16 @@ function start(config: GameConfig): void {
   position: absolute;
   top: 24rpx;
   right: 48rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   padding: 16rpx;
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #a8a29e;
+}
+.icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 .hero {
   display: flex;

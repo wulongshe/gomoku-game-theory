@@ -6,6 +6,7 @@ import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { startAiMove, type AiJob } from '@/game/ai'
 import { saveConfig, type GameConfig } from '@/game/config'
+import { helpIcon } from '@/utils/icons'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
@@ -17,6 +18,8 @@ import {
   type GameState,
   type Point,
 } from '@gomoku/engine/game'
+
+const HELP_ICON = helpIcon('#78716c')
 
 const params = Taro.getCurrentInstance().router?.params ?? {}
 const rawMode = params.mode as GameMode
@@ -175,9 +178,11 @@ function exitGame(): void {
       </view>
       <view class="vs">
         <text>AI · {{ DIFFICULTY_LABELS[difficulty] }}</text>
-        <text class="vs-exit" @tap="confirmingExit = true">退出</text>
       </view>
-      <text class="mode" @tap="showRules = true">{{ MODE_LABELS[mode] }}模式 ?</text>
+      <view class="mode" @tap="showRules = true">
+        <text>{{ MODE_LABELS[mode] }}模式</text>
+        <image class="icon" :src="HELP_ICON" />
+      </view>
     </view>
 
     <view class="status">
@@ -264,13 +269,14 @@ function exitGame(): void {
 }
 .head {
   width: 690rpx;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   font-size: 26rpx;
   color: #57534e;
 }
 .seat {
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: 8rpx;
@@ -306,11 +312,17 @@ function exitGame(): void {
   font-size: 24rpx;
   color: #78716c;
 }
-.vs-exit {
-  color: #f87171;
-}
 .mode {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-weight: 500;
   color: #78716c;
+}
+.icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 .status {
   width: 690rpx;
