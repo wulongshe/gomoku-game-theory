@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "taro build --type xhs --watch",
     "build": "taro build --type xhs",
-    "check": "vue-tsc --noEmit"
+    "check": "vue-tsc --noEmit",
+    "build:h5": "vite build --config h5/vite.config.ts",
+    "pack:h5": "pnpm build:h5 && python3 h5/pack.py"
   },
   "dependencies": {
     "@gomoku/branding": "workspace:*",

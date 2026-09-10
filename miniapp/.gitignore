@@ -3,3 +3,5 @@ dist
 .temp/
 .swc/
 *.log
+dist-h5
+*.zip

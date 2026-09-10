@@ -145,12 +145,14 @@ const winLines = computed(() =>
 type TapEvent = {
   detail?: { x?: number; y?: number }
   changedTouches?: { pageX: number; pageY: number }[]
+  pageX?: number
+  pageY?: number
 }
 
 function onBoardTap(e: TapEvent): void {
   if (!props.interactive) return
-  const px = e.detail?.x ?? e.changedTouches?.[0]?.pageX
-  const py = e.detail?.y ?? e.changedTouches?.[0]?.pageY
+  const px = e.detail?.x ?? e.changedTouches?.[0]?.pageX ?? e.pageX
+  const py = e.detail?.y ?? e.changedTouches?.[0]?.pageY ?? e.pageY
   if (px == null || py == null) return
   Taro.createSelectorQuery()
     .select('#board')
