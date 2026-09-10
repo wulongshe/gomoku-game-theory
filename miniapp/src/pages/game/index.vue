@@ -9,7 +9,14 @@ import { saveConfig, type GameConfig } from '@/game/config'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
-import { createGame, isLegalChoice, settleFrame, type GameMode, type Point } from '@gomoku/engine/game'
+import {
+  createGame,
+  isLegalChoice,
+  settleFrame,
+  type GameMode,
+  type GameState,
+  type Point,
+} from '@gomoku/engine/game'
 
 const params = Taro.getCurrentInstance().router?.params ?? {}
 const rawMode = params.mode as GameMode
@@ -32,10 +39,35 @@ const selected = ref<Point | null>(null)
 const resolving = ref(false)
 const showRules = ref(false)
 const showConfig = ref(false)
+const confirmingExit = ref(false)
+const overlayDismissed = ref(false)
 
 const playing = computed(() => game.value.phase === 'playing')
-// 进行中 frame 表示「正在下第 N 回合」；终局态被引擎 +1 过，显示已下完的回合数。
-const displayFrame = computed(() => (playing.value ? game.value.frame : game.value.frame - 1))
+
+// 终局回看：缓存每个已结算回合的局面（不含开局空盘），结束后逐回合前后翻看；null = 停在最新一帧。
+const history = ref<GameState[]>([])
+const reviewIndex = ref<number | null>(null)
+const reviewState = computed(() =>
+  reviewIndex.value === null ? null : (history.value[reviewIndex.value] ?? null),
+)
+const reviewAtFirst = computed(() => (reviewIndex.value ?? history.value.length - 1) <= 0)
+const reviewAtLatest = computed(() => reviewIndex.value === null)
+const reviewAvailable = computed(() => history.value.length > 1)
+
+// 翻回合时顺带收起结果遮罩，露出棋盘。
+function review(delta: number): void {
+  overlayDismissed.value = true
+  const last = history.value.length - 1
+  if (last < 0) return
+  const next = Math.min(last, Math.max(0, (reviewIndex.value ?? last) + delta))
+  reviewIndex.value = next === last ? null : next
+}
+
+const shown = computed(() => reviewState.value ?? game.value)
+// 对局中 frame 表示「正在下第 N 回合」；回放与终局态按已下完的回合数显示（引擎 +1 过）。
+const displayFrame = computed(() =>
+  shown.value.phase === 'playing' && !reviewState.value ? shown.value.frame : shown.value.frame - 1,
+)
 
 // 帧正计时（人机恒不限时，Ns/∞），随每帧重置。
 const now = ref(Date.now())
@@ -54,18 +86,10 @@ onUnmounted(() => {
   clearInterval(clock)
 })
 
-const result = computed(() => {
-  switch (game.value.phase) {
-    case 'black_won':
-      return '你赢了'
-    case 'white_won':
-      return 'AI 获胜'
-    case 'draw':
-      return '和棋'
-    default:
-      return ''
-  }
-})
+const decided = computed(() => game.value.phase === 'black_won' || game.value.phase === 'white_won')
+const won = computed(() => game.value.phase === 'black_won')
+const resultChar = computed(() => (!decided.value ? '和' : won.value ? '赢' : '输'))
+const resultCls = computed(() => (!decided.value ? 'res-draw' : won.value ? 'res-won' : 'res-lost'))
 
 // 小程序端 AI 在提交后才同步搜索，如实显示：resolving 即思考中。
 const aiStatus = computed(() => {
@@ -88,11 +112,9 @@ async function submit(): Promise<void> {
   resolving.value = true
   await nextTickPaint()
   const white = aiMove(game.value, difficulty.value)
-  const next = settleFrame(game.value, {
-    black: selected.value,
-    white,
-    first: Math.random() < 0.5 ? 'black' : 'white',
-  })
+  const next = settleFrame(game.value, { black: selected.value, white })
+  history.value.push(next)
+  reviewIndex.value = null
   game.value = next
   selected.value = null
   resolving.value = false
@@ -101,8 +123,11 @@ async function submit(): Promise<void> {
 
 function restart(): void {
   game.value = createGame(mode.value)
+  history.value = []
+  reviewIndex.value = null
   selected.value = null
   resolving.value = false
+  overlayDismissed.value = false
   beginFrame()
 }
 
@@ -127,8 +152,12 @@ function exitGame(): void {
       <view class="seat">
         <view class="mini-stone" />
         <text>你执黑</text>
+        <text v-if="!playing" class="head-result" :class="resultCls">· {{ resultChar }}</text>
       </view>
-      <text class="vs">AI · {{ DIFFICULTY_LABELS[difficulty] }}</text>
+      <view class="vs">
+        <text>AI · {{ DIFFICULTY_LABELS[difficulty] }}</text>
+        <text class="vs-exit" @tap="confirmingExit = true">退出</text>
+      </view>
       <text class="mode" @tap="showRules = true">{{ MODE_LABELS[mode] }}模式 ?</text>
     </view>
 
@@ -141,13 +170,20 @@ function exitGame(): void {
       <text class="timer">{{ elapsedSeconds }}s/<text class="inf">∞</text></text>
     </view>
 
-    <Board
-      :state="game"
-      :selected="selected"
-      :last-moves="game.lastMoves"
-      :interactive="playing && !resolving"
-      @select="onSelect"
-    />
+    <view class="board-wrap">
+      <Board
+        :state="shown"
+        :selected="reviewState ? null : selected"
+        :submitted="resolving"
+        :last-moves="shown.lastMoves"
+        :interactive="playing && !resolving"
+        @select="onSelect"
+      />
+      <view v-if="!playing && !overlayDismissed" class="overlay" @tap="overlayDismissed = true">
+        <text class="stamp" :class="resultCls">{{ resultChar }}</text>
+        <text class="overlay-hint">点击查看棋盘</text>
+      </view>
+    </view>
 
     <view v-if="playing" class="actions">
       <view
@@ -159,9 +195,19 @@ function exitGame(): void {
       </view>
     </view>
     <view v-else class="actions">
-      <text class="result">{{ result }}</text>
       <view class="btn btn-primary" @tap="showConfig = true">再来一局</view>
-      <text class="exit" @tap="exitGame">返回首页</text>
+      <view v-if="reviewAvailable" class="review">
+        <view class="btn btn-secondary" :class="{ 'btn-disabled': reviewAtFirst }" @tap="review(-1)">
+          上一回合
+        </view>
+        <view class="btn btn-secondary" :class="{ 'btn-disabled': reviewAtLatest }" @tap="review(1)">
+          下一回合
+        </view>
+      </view>
+    </view>
+
+    <view class="footer">
+      <text class="exit" @tap="playing ? (confirmingExit = true) : exitGame()">返回首页</text>
     </view>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
@@ -173,16 +219,29 @@ function exitGame(): void {
       @cancel="showConfig = false"
       @confirm="applyConfig"
     />
+
+    <view v-if="confirmingExit" class="mask">
+      <view class="panel">
+        <text class="panel-title">退出人机对战？</text>
+        <text class="panel-text">退出后本局将清空，无法继续。</text>
+        <view class="panel-actions">
+          <view class="dialog-btn dialog-btn-secondary" @tap="confirmingExit = false">取消</view>
+          <view class="dialog-btn dialog-btn-danger" @tap="exitGame">退出</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <style>
 .page {
+  min-height: 100vh;
   padding: 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20rpx;
+  box-sizing: border-box;
 }
 .head {
   width: 690rpx;
@@ -205,10 +264,31 @@ function exitGame(): void {
   border-radius: 50%;
   background: #1c1917;
 }
+.head-result {
+  font-weight: 700;
+}
+.res-won {
+  color: #f59e0b;
+}
+.res-lost {
+  color: #a8a29e;
+}
+.res-draw {
+  color: #ffffff;
+  text-shadow: 0 1rpx 2rpx rgba(28, 25, 23, 0.45);
+}
 .vs {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   background: rgba(255, 255, 255, 0.7);
   padding: 4rpx 16rpx;
   border-radius: 999rpx;
+  font-size: 24rpx;
+  color: #78716c;
+}
+.vs-exit {
+  color: #f87171;
 }
 .mode {
   color: #78716c;
@@ -255,21 +335,133 @@ function exitGame(): void {
   position: relative;
   top: 0.05em;
 }
+.board-wrap {
+  position: relative;
+  width: 690rpx;
+  height: 690rpx;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+}
+.stamp {
+  font-size: 220rpx;
+  line-height: 1;
+  font-weight: 900;
+  font-family: STKaiti, KaiTi, 'Noto Serif SC', serif;
+  text-shadow: 0 6rpx 16rpx rgba(28, 25, 23, 0.45);
+  animation: stamp 0.4s ease-out;
+}
+.stamp.res-won {
+  color: #f59e0b;
+}
+.stamp.res-lost {
+  color: #78716c;
+}
+.stamp.res-draw {
+  color: #f5f5f4;
+}
+.overlay-hint {
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 24rpx;
+  color: #ffffff;
+}
+@keyframes stamp {
+  from {
+    transform: rotate(-8deg) scale(2.4);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-8deg) scale(0.92);
+    opacity: 1;
+  }
+  to {
+    transform: rotate(-8deg) scale(1);
+    opacity: 1;
+  }
+}
 .actions {
   width: 690rpx;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
+  gap: 16rpx;
 }
-.result {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #292524;
+.review {
+  display: flex;
+  gap: 16rpx;
+}
+.review .btn {
+  flex: 1;
+  width: auto;
+}
+.footer {
+  margin-top: auto;
+  padding-top: 12rpx;
 }
 .exit {
-  font-size: 26rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+  color: #a8a29e;
+  padding: 8rpx;
+}
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(0, 0, 0, 0.4);
+}
+.panel {
+  width: 100%;
+  max-width: 640rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  padding: 48rpx;
+  border-radius: 32rpx;
+  background: #ffffff;
+  box-shadow: 0 20rpx 50rpx rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+}
+.panel-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #292524;
+}
+.panel-text {
+  font-size: 28rpx;
   color: #78716c;
-  padding: 8rpx 24rpx;
+}
+.panel-actions {
+  display: flex;
+  gap: 16rpx;
+}
+.dialog-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx 0;
+  border-radius: 24rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+}
+.dialog-btn-secondary {
+  background: #e7e5e4;
+  color: #44403c;
+}
+.dialog-btn-danger {
+  background: #ef4444;
+  color: #ffffff;
 }
 </style>

@@ -6,17 +6,25 @@ page {
 
 .btn {
   width: 100%;
-  text-align: center;
-  padding: 24rpx 0;
-  border-radius: 16rpx;
-  font-size: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx 48rpx;
+  border-radius: 24rpx;
+  font-size: 36rpx;
+  font-weight: 500;
+  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
 }
 .btn-primary {
-  background: #1c1917;
-  color: #fafaf9;
+  background: #292524;
+  color: #ffffff;
+}
+.btn-secondary {
+  border: 1px solid #d6d3d1;
+  background: rgba(255, 255, 255, 0.8);
+  color: #44403c;
 }
 .btn-disabled {
-  background: #d6d3d1;
-  color: #a8a29e;
+  opacity: 0.5;
 }

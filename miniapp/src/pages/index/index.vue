@@ -11,7 +11,7 @@ useShareAppMessage(() => ({
   path: '/pages/index/index',
 }))
 
-const RULES = rules('ai')
+const RULES = rules()
 const savedConfig = ref(loadConfig())
 const showConfig = ref(false)
 const showRules = ref(false)

@@ -6,6 +6,7 @@ import { BOARD_SIZE, cellAt, type CellState, type GameState, type Point } from '
 const props = defineProps<{
   state: GameState
   selected: Point | null
+  submitted: boolean
   lastMoves: Point[]
   interactive: boolean
 }>()
@@ -20,6 +21,15 @@ const INNER = BOARD - PAD * 2
 const LAST_DOT = 11
 const RING_R = STONE_R + 4.5
 const LINE_W = 8
+// 已提交标记：四角 L 形括号，几何比例对齐 web（MARK_D=STONE_R+5、MARK_L=8 / U40）。
+const MARK_D = STONE_R + 5.6
+const MARK_L = 9
+const MARK_CORNERS = [
+  ['tl', -1, -1],
+  ['tr', 1, -1],
+  ['bl', -1, 1],
+  ['br', 1, 1],
+] as const
 const STARS = [
   { x: 3, y: 3 },
   { x: 11, y: 3 },
@@ -278,14 +288,22 @@ function onBoardTap(e: TapEvent): void {
       <view class="beam-fill beam-win" />
     </view>
 
-    <template v-if="interactive && selected">
+    <template v-if="selected">
       <view
         class="stone-still stone-black preview"
         :style="`left:${pos(selected.x) - STONE_R}rpx;top:${pos(selected.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
       />
       <view
+        v-if="!submitted"
         class="ring"
         :style="`left:${pos(selected.x) - RING_R}rpx;top:${pos(selected.y) - RING_R}rpx;width:${RING_R * 2}rpx;height:${RING_R * 2}rpx`"
+      />
+      <view
+        v-for="[corner, sx, sy] in MARK_CORNERS"
+        v-else
+        :key="corner"
+        :class="['mark-corner', `mark-corner-${corner}`]"
+        :style="`left:${pos(selected.x) + sx * MARK_D - (sx > 0 ? MARK_L : 0)}rpx;top:${pos(selected.y) + sy * MARK_D - (sy > 0 ? MARK_L : 0)}rpx;width:${MARK_L}rpx;height:${MARK_L}rpx`"
       />
     </template>
   </view>
@@ -379,7 +397,7 @@ function onBoardTap(e: TapEvent): void {
 /* 白色描边遮住穿过中心的符号线，观感与棋子上的圆点一致 */
 .last-dot-mark {
   box-sizing: content-box;
-  border: 4rpx solid #ffffff;
+  border: 2.5rpx solid #ffffff;
   background: #1c1917;
 }
 .mark-cell,
@@ -413,11 +431,11 @@ function onBoardTap(e: TapEvent): void {
   border-radius: 3rpx;
 }
 .bar-minus {
-  width: 60%;
+  width: 45%;
   background: #7c3aed;
 }
 .bar-cross {
-  width: 84%;
+  width: 64%;
   background: #ef4444;
 }
 .bar-cross-a {
@@ -456,6 +474,32 @@ function onBoardTap(e: TapEvent): void {
   border-radius: 50%;
   box-sizing: border-box;
   animation: breathe 1.6s ease-in-out infinite;
+}
+.mark-corner {
+  position: absolute;
+  box-sizing: border-box;
+  border: 0 solid #1c1917;
+  animation: mark-pop 0.25s ease-out;
+}
+.mark-corner-tl {
+  border-top-width: 3rpx;
+  border-left-width: 3rpx;
+  border-top-left-radius: 3rpx;
+}
+.mark-corner-tr {
+  border-top-width: 3rpx;
+  border-right-width: 3rpx;
+  border-top-right-radius: 3rpx;
+}
+.mark-corner-bl {
+  border-bottom-width: 3rpx;
+  border-left-width: 3rpx;
+  border-bottom-left-radius: 3rpx;
+}
+.mark-corner-br {
+  border-bottom-width: 3rpx;
+  border-right-width: 3rpx;
+  border-bottom-right-radius: 3rpx;
 }
 @keyframes breathe {
   0%,
