@@ -19,11 +19,13 @@ const U = (BOARD - PAD * 2) / (BOARD_SIZE - 1)
 const STONE_R = U * 0.46
 const INNER = BOARD - PAD * 2
 const LAST_DOT = 11
-const RING_R = STONE_R + 4.5
 const LINE_W = 8
-// 已提交标记：四角 L 形括号，几何比例对齐 web（MARK_D=STONE_R+5、MARK_L=8 / U40）。
-const MARK_D = STONE_R + 5.6
-const MARK_L = 9
+// 选点标记都挂在预览棋子盒子里、按其边缘定位，且外扩量取偶数 rpx：模拟器 1rpx = 0.5px，
+// 子盒子边坐标与棋子只差整像素，亚像素吸附时取整方向一致，环与括号才与棋子同心；
+// 真机 DPR ≥ 2，吸附误差本就不可见。呼吸环外扩 8（4 间隙 + 4 线宽），四角括号外扩 6。
+const RING_OUT = 8
+const MARK_OUT = 6
+const MARK_L = 10
 const MARK_CORNERS = [
   ['tl', -1, -1],
   ['tr', 1, -1],
@@ -222,7 +224,7 @@ function onBoardTap(e: TapEvent): void {
       />
       <view
         class="zone-frame"
-        :style="`left:${ZONE_POS}rpx;top:${ZONE_POS}rpx;width:${ZONE_SIZE}rpx;height:${ZONE_SIZE}rpx`"
+        :style="`left:${ZONE_POS}rpx;top:${ZONE_POS}rpx;right:${BOARD - ZONE_POS - ZONE_SIZE}rpx;bottom:${BOARD - ZONE_POS - ZONE_SIZE}rpx`"
       />
     </template>
 
@@ -288,24 +290,25 @@ function onBoardTap(e: TapEvent): void {
       <view class="beam-fill beam-win" />
     </view>
 
-    <template v-if="selected">
-      <view
-        class="stone-still stone-black preview"
-        :style="`left:${pos(selected.x) - STONE_R}rpx;top:${pos(selected.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
-      />
+    <view
+      v-if="selected"
+      class="pick"
+      :style="`left:${pos(selected.x) - STONE_R}rpx;top:${pos(selected.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
+    >
+      <view class="stone-still stone-black preview" />
       <view
         v-if="!submitted"
         class="ring"
-        :style="`left:${pos(selected.x) - RING_R}rpx;top:${pos(selected.y) - RING_R}rpx;width:${RING_R * 2}rpx;height:${RING_R * 2}rpx`"
+        :style="`left:${-RING_OUT}rpx;top:${-RING_OUT}rpx;right:${-RING_OUT}rpx;bottom:${-RING_OUT}rpx`"
       />
       <view
         v-for="[corner, sx, sy] in MARK_CORNERS"
         v-else
         :key="corner"
         :class="['mark-corner', `mark-corner-${corner}`]"
-        :style="`left:${pos(selected.x) + sx * MARK_D - (sx > 0 ? MARK_L : 0)}rpx;top:${pos(selected.y) + sy * MARK_D - (sy > 0 ? MARK_L : 0)}rpx;width:${MARK_L}rpx;height:${MARK_L}rpx`"
+        :style="`${sx > 0 ? 'right' : 'left'}:${-MARK_OUT}rpx;${sy > 0 ? 'bottom' : 'top'}:${-MARK_OUT}rpx;width:${MARK_L}rpx;height:${MARK_L}rpx`"
       />
-    </template>
+    </view>
   </view>
 </template>
 
@@ -360,7 +363,6 @@ function onBoardTap(e: TapEvent): void {
   position: absolute;
   border: 2px dashed #7c5a33;
   border-radius: 14rpx;
-  box-sizing: border-box;
   animation: breathe 1.6s ease-in-out infinite;
 }
 .stone,
@@ -380,7 +382,7 @@ function onBoardTap(e: TapEvent): void {
 }
 .stone-white {
   background: radial-gradient(circle at 35% 30%, #ffffff, #d6d3d1);
-  border: 1px solid #a8a29e;
+  box-shadow: inset 0 0 0 1px #a8a29e;
 }
 .last-dot {
   width: 11rpx;
@@ -418,11 +420,11 @@ function onBoardTap(e: TapEvent): void {
   height: 100%;
 }
 .mark-forbidden {
-  border: 3rpx solid #ef4444;
+  box-shadow: inset 0 0 0 3rpx #ef4444;
   background: rgba(239, 68, 68, 0.32);
 }
 .mark-minus {
-  border: 3rpx solid #7c3aed;
+  box-shadow: inset 0 0 0 3rpx #7c3aed;
   background: rgba(124, 58, 237, 0.32);
 }
 .bar {
@@ -465,12 +467,19 @@ function onBoardTap(e: TapEvent): void {
   opacity: 0.9;
   animation: beam-draw 0.5s ease-out forwards;
 }
+.pick {
+  position: absolute;
+}
 .preview {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
   opacity: 0.55;
 }
 .ring {
   position: absolute;
-  border: 3rpx solid #1c1917;
+  border: 4rpx solid #1c1917;
   border-radius: 50%;
   box-sizing: border-box;
   animation: breathe 1.6s ease-in-out infinite;
