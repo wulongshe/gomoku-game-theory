@@ -1,180 +1,43 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
-import ConfigDialog from '@/components/ConfigDialog.vue'
-import RulesDialog from '@/components/RulesDialog.vue'
-import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
-import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
-import { helpIcon } from '@/utils/icons'
-import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
+import Game from '@/components/Game.vue'
+import Home from '@/components/Home.vue'
+import { loadConfig, type GameConfig } from '@/game/config'
+import { DIFFICULTY_LABELS, TAGLINE, TITLE } from '@gomoku/branding'
+import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
+import type { Difficulty } from '@gomoku/engine/ai'
+import type { GameMode } from '@gomoku/engine/game'
 
-useShareAppMessage(() => ({
-  title: `${TITLE}｜${TAGLINE}`,
-  path: '/pages/index/index',
-}))
+// 小组件只允许一个页面：首页与对战在同一页内按状态切换。
+const config = ref<GameConfig>(loadConfig())
+const playing = ref(false)
 
-const HELP_ICON = helpIcon('#a8a29e')
-const RULES = rules()
-const savedConfig = ref(loadConfig())
-const showConfig = ref(false)
-const showRules = ref(false)
-
-function openConfig(): void {
-  savedConfig.value = loadConfig()
-  showConfig.value = true
+// 分享直达：带 mode/difficulty 参数打开时直接进入同配置对局。
+const params = Taro.getCurrentInstance().router?.params ?? {}
+const sharedMode = params.mode as GameMode
+const sharedDifficulty = params.difficulty as Difficulty
+if (AI_MODE_OPTIONS.includes(sharedMode) && DIFFICULTY_OPTIONS.includes(sharedDifficulty)) {
+  config.value = { mode: sharedMode, difficulty: sharedDifficulty }
+  playing.value = true
 }
 
-function start(config: GameConfig): void {
-  showConfig.value = false
-  saveConfig(config)
-  Taro.navigateTo({
-    url: `/pages/game/index?mode=${config.mode}&difficulty=${config.difficulty}`,
-  })
+useShareAppMessage(() =>
+  playing.value
+    ? {
+        title: `敢来挑战${DIFFICULTY_LABELS[config.value.difficulty]} AI 吗？｜${TITLE}`,
+        path: `/pages/index/index?mode=${config.value.mode}&difficulty=${config.value.difficulty}`,
+      }
+    : { title: `${TITLE}｜${TAGLINE}`, path: '/pages/index/index' },
+)
+
+function start(next: GameConfig): void {
+  config.value = next
+  playing.value = true
 }
 </script>
 
 <template>
-  <view class="page" :style="PAGE_MIN_HEIGHT">
-    <view class="rules-entry" @tap="showRules = true">
-      <image class="icon" :src="HELP_ICON" />
-      <text>游戏规则</text>
-    </view>
-
-    <view class="hero">
-      <view class="stones">
-        <view class="stone stone-black" />
-        <view class="stone stone-white" />
-      </view>
-      <text class="title">{{ TITLE }}</text>
-      <text class="tagline">{{ TAGLINE }}</text>
-      <text class="subtitle">{{ SUBTITLE }}</text>
-    </view>
-
-    <view class="cards">
-      <view v-for="rule in RULES" :key="rule.title" class="card">
-        <view class="card-icon">{{ rule.icon }}</view>
-        <view class="card-body">
-          <text class="card-title">{{ rule.title }}</text>
-          <text class="card-text">{{ rule.text }}</text>
-        </view>
-      </view>
-    </view>
-
-    <view class="btn btn-primary" @tap="openConfig">人机对战</view>
-
-    <ConfigDialog
-      v-if="showConfig"
-      :mode="savedConfig.mode"
-      :difficulty="savedConfig.difficulty"
-      @cancel="showConfig = false"
-      @confirm="start"
-    />
-
-    <RulesDialog v-if="showRules" @close="showRules = false" />
-  </view>
+  <Game v-if="playing" :config="config" @configure="config = $event" @exit="playing = false" />
+  <Home v-else @start="start" />
 </template>
-
-<style>
-.page {
-  position: relative;
-  min-height: 100vh;
-  padding: 104rpx 48rpx 48rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 56rpx;
-  box-sizing: border-box;
-}
-.rules-entry {
-  position: absolute;
-  top: 24rpx;
-  right: 48rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  padding: 16rpx;
-  font-size: 28rpx;
-  color: #a8a29e;
-}
-.icon {
-  width: 40rpx;
-  height: 40rpx;
-}
-.hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20rpx;
-}
-.stones {
-  display: flex;
-}
-.stone {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.2);
-}
-.stone-black {
-  background: radial-gradient(circle at 35% 30%, #57534e, #1c1917);
-}
-.stone-white {
-  background: radial-gradient(circle at 35% 30%, #ffffff, #d6d3d1);
-  margin-left: -16rpx;
-}
-.title {
-  font-size: 52rpx;
-  font-weight: 700;
-  letter-spacing: 4rpx;
-  color: #292524;
-}
-.tagline {
-  font-size: 30rpx;
-  font-weight: 500;
-  color: #57534e;
-}
-.subtitle {
-  font-size: 26rpx;
-  color: #78716c;
-}
-.cards {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-.card {
-  display: flex;
-  align-items: center;
-  gap: 28rpx;
-  padding: 28rpx 36rpx;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-}
-.card-icon {
-  width: 72rpx;
-  height: 72rpx;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(217, 180, 130, 0.3);
-  font-size: 32rpx;
-}
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-.card-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #292524;
-}
-.card-text {
-  font-size: 24rpx;
-  color: #78716c;
-}
-</style>

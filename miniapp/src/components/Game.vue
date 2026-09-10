@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import Taro, { useShareAppMessage } from '@tarojs/taro'
 import Board from '@/components/Board.vue'
 import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { startAiMove, type AiJob } from '@/game/ai'
 import { saveConfig, type GameConfig } from '@/game/config'
 import { helpIcon } from '@/utils/icons'
+import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
 import {
   createGame,
@@ -21,22 +20,13 @@ import {
 
 const HELP_ICON = helpIcon('#78716c')
 
-const params = Taro.getCurrentInstance().router?.params ?? {}
-const rawMode = params.mode as GameMode
-const rawDifficulty = params.difficulty as Difficulty
+const props = defineProps<{ config: GameConfig }>()
+const emit = defineEmits<{ configure: [config: GameConfig]; exit: [] }>()
 
-const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
-const difficulty = ref<Difficulty>(
-  DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
-)
+const mode = ref<GameMode>(props.config.mode)
+const difficulty = ref<Difficulty>(props.config.difficulty)
 
-// 分享当前配置，接收方直达同难度对局。
-useShareAppMessage(() => ({
-  title: `敢来挑战${DIFFICULTY_LABELS[difficulty.value]} AI 吗？｜博弈五子棋`,
-  path: `/pages/game/index?mode=${mode.value}&difficulty=${difficulty.value}`,
-}))
-
-// 每次进入对战页都是新对局；退出即弃，避免换难度后还续上一局。
+// 每次进入对战都是新对局；退出即弃，避免换难度后还续上一局。
 const game = ref(createGame(mode.value))
 const selected = ref<Point | null>(null)
 const resolving = ref(false)
@@ -158,18 +148,13 @@ function applyConfig(config: GameConfig): void {
   mode.value = config.mode
   difficulty.value = config.difficulty
   saveConfig(config)
+  emit('configure', config)
   restart()
-}
-
-// 退出优先按页面栈回退；分享直达时栈里只有本页，改用 redirect 回首页，不再堆栈。
-function exitGame(): void {
-  if (Taro.getCurrentPages().length > 1) Taro.navigateBack()
-  else Taro.redirectTo({ url: '/pages/index/index' })
 }
 </script>
 
 <template>
-  <view class="page">
+  <view class="game" :style="PAGE_MIN_HEIGHT">
     <view class="head">
       <view class="seat">
         <view class="mini-stone" />
@@ -181,7 +166,7 @@ function exitGame(): void {
       </view>
       <view class="mode" @tap="showRules = true">
         <text>{{ MODE_LABELS[mode] }}模式</text>
-        <image class="icon" :src="HELP_ICON" />
+        <image class="mode-icon" :src="HELP_ICON" />
       </view>
     </view>
 
@@ -231,7 +216,7 @@ function exitGame(): void {
     </view>
 
     <view class="footer">
-      <text class="exit" @tap="playing ? (confirmingExit = true) : exitGame()">返回首页</text>
+      <text class="exit" @tap="playing ? (confirmingExit = true) : emit('exit')">返回首页</text>
     </view>
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
@@ -244,13 +229,13 @@ function exitGame(): void {
       @confirm="applyConfig"
     />
 
-    <view v-if="confirmingExit" class="mask">
-      <view class="panel">
-        <text class="panel-title">退出人机对战？</text>
-        <text class="panel-text">退出后本局将清空，无法继续。</text>
-        <view class="panel-actions">
+    <view v-if="confirmingExit" class="confirm-mask">
+      <view class="confirm-panel">
+        <text class="confirm-title">退出人机对战？</text>
+        <text class="confirm-text">退出后本局将清空，无法继续。</text>
+        <view class="confirm-actions">
           <view class="dialog-btn dialog-btn-secondary" @tap="confirmingExit = false">取消</view>
-          <view class="dialog-btn dialog-btn-danger" @tap="exitGame">退出</view>
+          <view class="dialog-btn dialog-btn-danger" @tap="emit('exit')">退出</view>
         </view>
       </view>
     </view>
@@ -258,7 +243,7 @@ function exitGame(): void {
 </template>
 
 <style>
-.page {
+.game {
   min-height: 100vh;
   padding: 24rpx;
   display: flex;
@@ -320,7 +305,7 @@ function exitGame(): void {
   font-weight: 500;
   color: #78716c;
 }
-.icon {
+.mode-icon {
   width: 32rpx;
   height: 32rpx;
 }
@@ -448,7 +433,7 @@ function exitGame(): void {
   color: #a8a29e;
   padding: 8rpx;
 }
-.mask {
+.confirm-mask {
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -458,7 +443,7 @@ function exitGame(): void {
   padding: 48rpx;
   background: rgba(0, 0, 0, 0.4);
 }
-.panel {
+.confirm-panel {
   width: 100%;
   max-width: 640rpx;
   display: flex;
@@ -470,16 +455,16 @@ function exitGame(): void {
   box-shadow: 0 20rpx 50rpx rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
 }
-.panel-title {
+.confirm-title {
   font-size: 32rpx;
   font-weight: 600;
   color: #292524;
 }
-.panel-text {
+.confirm-text {
   font-size: 28rpx;
   color: #78716c;
 }
-.panel-actions {
+.confirm-actions {
   display: flex;
   gap: 16rpx;
 }

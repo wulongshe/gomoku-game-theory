@@ -1,8 +1,8 @@
 {
   "miniprogramRoot": "./",
-  "projectname": "gomoku-miniapp",
-  "description": "博弈五子棋 · 人机对战",
-  "appid": "touristappid",
+  "projectname": "博弈五子棋",
+  "description": "同步落子，每一手都是心理博弈",
+  "appid": "6aa239f4ff1e2100018fd4ce",
   "libVersion": "3.102.3",
   "setting": {
     "urlCheck": false,
