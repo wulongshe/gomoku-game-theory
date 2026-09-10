@@ -4,7 +4,7 @@ import Taro, { useShareAppMessage } from '@tarojs/taro'
 import Board from '@/components/Board.vue'
 import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
-import { aiMove } from '@/game/ai'
+import { startAiMove, type AiJob } from '@/game/ai'
 import { saveConfig, type GameConfig } from '@/game/config'
 import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
@@ -77,13 +77,26 @@ const elapsedSeconds = computed(() =>
   playing.value ? Math.max(0, Math.floor((now.value - frameStart.value) / 1000)) : 0,
 )
 
+// 本帧一开始就让 AI 分片开算：AI 选点只依赖帧初局面、与人本帧隐藏选点无关，
+// 故与人同时思考，提交时通常已备好，人零等待。
+const aiThinking = ref(false)
+let aiJob: AiJob | null = null
+
 function beginFrame(): void {
   frameStart.value = Date.now()
+  aiJob?.cancel()
+  const job = startAiMove(game.value, difficulty.value)
+  aiJob = job
+  aiThinking.value = true
+  job.move.then(() => {
+    if (aiJob === job) aiThinking.value = false
+  })
 }
 beginFrame()
 
 onUnmounted(() => {
   clearInterval(clock)
+  aiJob?.cancel()
 })
 
 const decided = computed(() => game.value.phase === 'black_won' || game.value.phase === 'white_won')
@@ -91,11 +104,10 @@ const won = computed(() => game.value.phase === 'black_won')
 const resultChar = computed(() => (!decided.value ? '和' : won.value ? '赢' : '输'))
 const resultCls = computed(() => (!decided.value ? 'res-draw' : won.value ? 'res-won' : 'res-lost'))
 
-// 小程序端 AI 在提交后才同步搜索，如实显示：resolving 即思考中。
 const aiStatus = computed(() => {
   if (!playing.value) return { text: '对局结束', dot: 'dot-idle', cls: 'st-muted' }
-  if (resolving.value) return { text: 'AI 思考中', dot: 'dot-think', cls: 'st-muted' }
-  return { text: 'AI 已提交', dot: 'dot-idle', cls: 'st-muted' }
+  if (aiThinking.value) return { text: 'AI 思考中', dot: 'dot-think', cls: 'st-muted' }
+  return { text: 'AI 已提交', dot: 'dot-ready', cls: 'st-ready' }
 })
 
 function onSelect(point: Point): void {
@@ -103,15 +115,21 @@ function onSelect(point: Point): void {
   selected.value = point
 }
 
-function nextTickPaint(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 24))
+// AI 未出手期间可撤回提交；撤回后本次结算作废，selected 保留可改点重交。
+let submitSeq = 0
+function cancelChoice(): void {
+  if (!resolving.value) return
+  submitSeq++
+  resolving.value = false
 }
 
 async function submit(): Promise<void> {
-  if (!playing.value || !selected.value || resolving.value) return
+  if (!playing.value || !selected.value || resolving.value || !aiJob) return
   resolving.value = true
-  await nextTickPaint()
-  const white = aiMove(game.value, difficulty.value)
+  const seq = ++submitSeq
+  aiJob.hurry()
+  const white = await aiJob.move
+  if (seq !== submitSeq) return
   const next = settleFrame(game.value, { black: selected.value, white })
   history.value.push(next)
   reviewIndex.value = null
@@ -122,6 +140,7 @@ async function submit(): Promise<void> {
 }
 
 function restart(): void {
+  submitSeq++
   game.value = createGame(mode.value)
   history.value = []
   reviewIndex.value = null
@@ -188,10 +207,10 @@ function exitGame(): void {
     <view v-if="playing" class="actions">
       <view
         class="btn btn-primary"
-        :class="{ 'btn-disabled': !selected || resolving }"
-        @tap="submit"
+        :class="{ 'btn-disabled': !resolving && !selected }"
+        @tap="resolving ? cancelChoice() : submit()"
       >
-        {{ resolving ? 'AI 思考中…' : selected ? '确认提交' : '点击棋盘选择落点' }}
+        {{ resolving ? '取消提交' : selected ? '确认提交' : '点击棋盘选择落点' }}
       </view>
     </view>
     <view v-else class="actions">
@@ -313,6 +332,9 @@ function exitGame(): void {
 .st-muted {
   color: #78716c;
 }
+.st-ready {
+  color: #047857;
+}
 .dot {
   width: 14rpx;
   height: 14rpx;
@@ -323,6 +345,9 @@ function exitGame(): void {
 }
 .dot-think {
   background: #fbbf24;
+}
+.dot-ready {
+  background: #10b981;
 }
 .timer {
   justify-self: end;

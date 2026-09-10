@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { searchBestMove } from '@gomoku/engine/mcts'
+import { prepareSearch, searchBestMove } from '@gomoku/engine/mcts'
 import {
   BOARD_SIZE,
   createGame,
@@ -77,5 +77,25 @@ describe('searchBestMove', () => {
     const game = withStones({ black: row(7, [6, 7, 8]), white: row(8, [6, 7]) })
     const { iterations } = searchBestMove(game, 'white', 'easy', 60)
     expect(iterations).toBeGreaterThan(0)
+  })
+
+  // 分片跑（无 Worker 的主线程调度）：多片累计与一次跑满同样给出合法手，且迭代数随片累加。
+  it('accumulates iterations across sliced runs', () => {
+    const game = withStones({ black: row(7, [6, 7, 8]), white: row(8, [6, 7]) })
+    const search = prepareSearch(game, 'white', 'hard')
+    expect(search.budgetMs).toBeGreaterThan(0)
+    expect(search.run(30)).toBe(false)
+    const first = search.result().iterations
+    search.run(30)
+    const { point, iterations } = search.result()
+    expect(iterations).toBeGreaterThan(first)
+    expect(isLegalChoice(game, point!)).toBe(true)
+  })
+
+  it('reports a trivial search as done without running', () => {
+    const game = withStones({ white: row(7, [4, 5, 6, 7]) })
+    const search = prepareSearch(createGame(), 'white', 'easy')
+    expect(search.run(10)).toBe(false)
+    expect(prepareSearch({ ...game, phase: 'white_won' }, 'white', 'easy').run(10)).toBe(true)
   })
 })

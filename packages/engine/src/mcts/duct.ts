@@ -21,6 +21,13 @@ export interface SearchResult {
   iterations: number
 }
 
+// 可分片的搜索句柄：run 跑到本片时间盒或迭代上限（返回 true 表示已尽、无需再跑），
+// result 随时取当前最优手。无 Worker 的环境靠它把搜索切成小片穿插在主线程里。
+export interface DuctSearch {
+  run(budgetMs: number): boolean
+  result(): SearchResult
+}
+
 export function ductSearch(
   state: GameState,
   seat: Seat,
@@ -28,6 +35,17 @@ export function ductSearch(
   explore: number,
   budget: number,
 ): SearchResult {
+  const search = createDuctSearch(state, seat, candidates, explore)
+  search.run(budget)
+  return search.result()
+}
+
+export function createDuctSearch(
+  state: GameState,
+  seat: Seat,
+  candidates: number,
+  explore: number,
+): DuctSearch {
   function makeNode(s: GameState): DuctNode {
     const core = expand(s, seat, candidates)
     const size = core.expandable ? core.aiMoves.length * core.oppMoves.length : 0
@@ -97,29 +115,38 @@ export function ductSearch(
   }
 
   const root = makeNode(state)
-  if (!root.expandable) return { point: root.aiMoves[0] ?? null, iterations: 0 }
-  if (root.aiMoves.length === 1) return { point: root.aiMoves[0], iterations: 0 }
-
-  const deadline = performance.now() + budget
+  const trivial = !root.expandable || root.aiMoves.length === 1
   let iterations = 0
-  while (iterations < MAX_ITERATIONS && performance.now() < deadline) {
-    simulate(root, 0)
-    iterations++
-  }
 
-  const totalVisits = root.aiCnt.reduce((a, b) => a + b, 0)
-  if (totalVisits === 0) return { point: root.aiMoves[0], iterations }
-
-  // 困难（explore=0）取访问最多手（最强）；其余在访问频率上混入均匀探索后采样（多样、不可预判）。
-  if (explore === 0) {
-    let best = 0
-    for (let i = 1; i < root.aiCnt.length; i++) {
-      if (root.aiCnt[i] > root.aiCnt[best]) best = i
+  function run(budgetMs: number): boolean {
+    if (trivial) return true
+    const deadline = performance.now() + budgetMs
+    while (iterations < MAX_ITERATIONS && performance.now() < deadline) {
+      simulate(root, 0)
+      iterations++
     }
-    return { point: root.aiMoves[best], iterations }
+    return iterations >= MAX_ITERATIONS
   }
 
-  const n = root.aiMoves.length
-  const dist = root.aiCnt.map((c) => (1 - explore) * (c / totalVisits) + explore / n)
-  return { point: root.aiMoves[sampleIndex(dist)], iterations }
+  function result(): SearchResult {
+    if (trivial) return { point: root.aiMoves[0] ?? null, iterations: 0 }
+
+    const totalVisits = root.aiCnt.reduce((a, b) => a + b, 0)
+    if (totalVisits === 0) return { point: root.aiMoves[0], iterations }
+
+    // 困难（explore=0）取访问最多手（最强）；其余在访问频率上混入均匀探索后采样（多样、不可预判）。
+    if (explore === 0) {
+      let best = 0
+      for (let i = 1; i < root.aiCnt.length; i++) {
+        if (root.aiCnt[i] > root.aiCnt[best]) best = i
+      }
+      return { point: root.aiMoves[best], iterations }
+    }
+
+    const n = root.aiMoves.length
+    const dist = root.aiCnt.map((c) => (1 - explore) * (c / totalVisits) + explore / n)
+    return { point: root.aiMoves[sampleIndex(dist)], iterations }
+  }
+
+  return { run, result }
 }
