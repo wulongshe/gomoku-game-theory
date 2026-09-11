@@ -120,7 +120,6 @@ async function submit(): Promise<void> {
   if (!playing.value || !selected.value || resolving.value || !aiJob) return
   resolving.value = true
   const seq = ++submitSeq
-  aiJob.hurry()
   const white = await aiJob.move
   if (seq !== submitSeq) return
   const next = settleFrame(game.value, { black: selected.value, white })

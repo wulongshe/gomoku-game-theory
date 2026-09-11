@@ -3,9 +3,8 @@ import type { Difficulty } from '@gomoku/engine/ai'
 import type { GameState, Point } from '@gomoku/engine/game'
 
 // 小程序没有 Worker：把 SM-MCTS 切成小片穿插在主线程里跑，从回合一开始就与人同时思考。
-// 每片约 SLICE_MS，片间让出主线程，UI 保持可响应；人提交后若还没跑满时间盒，最多再给 HURRY_MS。
+// 每片约 SLICE_MS，片间让出主线程，UI 保持可响应；人提交后仍跑满时间盒，保证各难度实力稳定。
 const SLICE_MS = 40
-const HURRY_MS = 1500
 
 // 按难度记录上一手实际迭代数（迭代数与该难度的时间盒绑定，不可跨难度比较），
 // 供引擎做宽窄候选自适应；手机上 master 通常会稳定落在窄候选档。
@@ -26,7 +25,6 @@ function snapshot(state: GameState): GameState {
 
 export interface AiJob {
   move: Promise<Point | null>
-  hurry(): void
   cancel(): void
 }
 
@@ -54,9 +52,6 @@ export function startAiMove(state: GameState, difficulty: Difficulty): AiJob {
 
   return {
     move,
-    hurry() {
-      remaining = Math.min(remaining, HURRY_MS)
-    },
     cancel() {
       clearTimeout(timer)
     },
