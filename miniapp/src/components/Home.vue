@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ConfigDialog from '@/components/ConfigDialog.vue'
+import PvpDialog from '@/components/PvpDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
@@ -12,6 +13,7 @@ const RULES = rules()
 const savedConfig = ref(loadConfig())
 const showConfig = ref(false)
 const showRules = ref(false)
+const showPvp = ref(false)
 
 function openConfig(): void {
   savedConfig.value = loadConfig()
@@ -55,6 +57,7 @@ function start(config: GameConfig): void {
     </view>
 
     <view class="btn btn-primary" @tap="openConfig">人机对战</view>
+    <view class="btn btn-secondary pvp-entry" @tap="showPvp = true">双人对战</view>
 
     <ConfigDialog
       v-if="showConfig"
@@ -65,6 +68,7 @@ function start(config: GameConfig): void {
     />
 
     <RulesDialog v-if="showRules" @close="showRules = false" />
+    <PvpDialog v-if="showPvp" @close="showPvp = false" />
   </view>
 </template>
 
@@ -130,6 +134,9 @@ function start(config: GameConfig): void {
 .subtitle {
   font-size: 26rpx;
   color: #78716c;
+}
+.pvp-entry {
+  margin-top: -32rpx;
 }
 .cards {
   width: 100%;
