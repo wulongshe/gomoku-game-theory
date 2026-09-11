@@ -253,6 +253,7 @@ function applyConfig(config: GameConfig): void {
   box-sizing: border-box;
 }
 .head {
+  margin-top: auto;
   width: 690rpx;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
