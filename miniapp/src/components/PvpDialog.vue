@@ -12,7 +12,9 @@ const emit = defineEmits<{ close: [] }>()
         <text class="panel-close" @tap="emit('close')">✕</text>
       </view>
       <text class="group-hint">当前版本只支持本地人机对战，暂不支持联网对战。</text>
-      <text class="group-hint">想找人对弈，可以加入交流群「{{ GROUP_NAME }}」组队：长按复制下面这段邀请码，回到小红书首页即可加入。</text>
+      <text class="group-hint">想找人组队或和朋友对弈，可以加入交流群「{{ GROUP_NAME }}」</text>
+      <text class="group-hint">回到笔记页，点击笔记下方的群聊加入</text>
+      <text class="group-hint">或长按全选复制下面这段邀请码，将小红书切后台再打开即可加入</text>
       <text class="group-invite" selectable>{{ GROUP_INVITE }}</text>
     </view>
   </view>
@@ -21,7 +23,6 @@ const emit = defineEmits<{ close: [] }>()
 <style>
 .group-hint {
   font-size: 26rpx;
-  line-height: 1.5;
   color: #78716c;
 }
 .group-invite {
