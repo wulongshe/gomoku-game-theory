@@ -635,7 +635,7 @@ describe('tournament bots', () => {
     const lineup = dailyBots('2026-08-31', POOL)
     expect(dailyBots('2026-08-31', POOL)).toEqual(lineup)
     expect(lineup.length).toBeGreaterThanOrEqual(1)
-    expect(lineup.length).toBeLessThanOrEqual(2)
+    expect(lineup.length).toBeLessThanOrEqual(1)
     expect(new Set(lineup.map((b) => b.email)).size).toBe(lineup.length)
 
     const nextDay = dailyBots('2026-09-01', POOL)
@@ -669,7 +669,7 @@ describe('tournament bots', () => {
   const dateKey = (i: number) =>
     new Date(Date.UTC(2026, 8, 1) + i * 86_400_000).toISOString().slice(0, 10)
 
-  it('evolves the lineup day by day with few replacements and varied sizes', () => {
+  it('evolves the lineup day by day with few replacements', () => {
     let prev: string[] = []
     const sizes = new Set<number>()
     let retained = 0
@@ -677,7 +677,7 @@ describe('tournament bots', () => {
     for (let i = 0; i < 60; i++) {
       const next = dailyBots(dateKey(i), POOL, prev).map((b) => b.email)
       expect(next.length).toBeGreaterThanOrEqual(1)
-      expect(next.length).toBeLessThanOrEqual(2)
+      expect(next.length).toBeLessThanOrEqual(1)
       sizes.add(next.length)
       if (prev.length) {
         retained += prev.filter((e) => next.includes(e)).length
@@ -685,7 +685,7 @@ describe('tournament bots', () => {
       }
       prev = next
     }
-    expect(sizes.size).toBe(2)
+    expect(sizes.size).toBe(1)
     // 少量替换：平均留任率过半
     expect(retained / carried).toBeGreaterThan(0.5)
   })

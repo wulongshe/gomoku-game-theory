@@ -69,7 +69,7 @@ export function botPersona(raw: string | undefined, email: string | null): BotPe
 const REG_WINDOW_MS = 3 * 3600_000
 
 // 每届陪打 bot 人数上限。
-const MAX_BOTS = 2
+const MAX_BOTS = 1
 
 export interface TournamentBot {
   email: string
