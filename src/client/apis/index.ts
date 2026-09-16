@@ -32,8 +32,8 @@ export function spectateWsUrl(code: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?spectate=1${authQuery()}`
 }
 
-export function matchWsUrl(frames: number[], modes: GameMode[]): string {
-  const query = `frames=${frames.join(',')}&modes=${modes.join(',')}${authQuery()}`
+export function matchWsUrl(frames: number[]): string {
+  const query = `frames=${frames.join(',')}${authQuery()}`
   return `${wsProto()}://${location.host}/api/match/ws?${query}`
 }
 

@@ -1,12 +1,10 @@
 import { DurableObject } from 'cloudflare:workers'
-import type { GameMode } from '@gomoku/engine/game'
-import { FRAME_OPTIONS, MODE_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
+import { FRAME_OPTIONS, type LobbyServerMessage } from '@/shared/protocol'
 import { RATING_DEFAULT } from './accounts'
 import { allocateRoom } from './roomCode'
 
 export interface MatchOptions {
   frames: number[]
-  modes: GameMode[]
   rating: number
 }
 
@@ -28,31 +26,22 @@ const AI_FALLBACK_MAX_MS = 30_000
 export function parseMatchOptions(params: URLSearchParams): MatchOptions | null {
   const list = (name: string) => [...new Set((params.get(name) ?? '').split(',').filter(Boolean))]
   const frames = list('frames').map(Number)
-  const modes = list('modes') as GameMode[]
   if (!frames.length || frames.some((f) => !FRAME_OPTIONS.includes(f))) return null
-  if (!modes.length || modes.some((m) => !MODE_OPTIONS.includes(m))) return null
   const raw = params.get('rating')
   const rating = raw !== null && Number.isFinite(Number(raw)) ? Number(raw) : RATING_DEFAULT
-  return { frames, modes, rating }
+  return { frames, rating }
 }
 
-export function pickSettings(
-  frames: number[],
-  modes: GameMode[],
-  rng: () => number = Math.random,
-): { frame: number; mode: GameMode } {
-  const combos = frames.flatMap((frame) => modes.map((mode) => ({ frame, mode })))
-  return combos[Math.min(combos.length - 1, Math.floor(rng() * combos.length))]
+export function pickFrame(frames: number[], rng: () => number = Math.random): number {
+  return frames[Math.min(frames.length - 1, Math.floor(rng() * frames.length))]
 }
 
 export function tolerance(waitedMs: number): number {
   return BASE_TOLERANCE + (waitedMs / 1000) * WIDEN_PER_SEC
 }
 
-function optionOverlap(a: MatchOptions, b: MatchOptions): { frames: number[]; modes: GameMode[] } | null {
-  const frames = a.frames.filter((f) => b.frames.includes(f))
-  const modes = a.modes.filter((m) => b.modes.includes(m))
-  return frames.length && modes.length ? { frames, modes } : null
+function frameOverlap(a: MatchOptions, b: MatchOptions): number[] {
+  return a.frames.filter((f) => b.frames.includes(f))
 }
 
 export class Lobby extends DurableObject<Env> {
@@ -89,35 +78,31 @@ export class Lobby extends DurableObject<Env> {
       i: number
       j: number
       frames: number[]
-      modes: GameMode[]
       gap: number
       inBand: boolean
     }> = []
     for (let i = 0; i < waiting.length; i++) {
       for (let j = i + 1; j < waiting.length; j++) {
-        const overlap = optionOverlap(waiting[i].opts, waiting[j].opts)
-        if (!overlap) continue
+        const frames = frameOverlap(waiting[i].opts, waiting[j].opts)
+        if (!frames.length) continue
         const gap = Math.abs(waiting[i].opts.rating - waiting[j].opts.rating)
         const reach = Math.max(
           tolerance(now - waiting[i].opts.joinedAt),
           tolerance(now - waiting[j].opts.joinedAt),
         )
-        pairs.push({ i, j, ...overlap, gap, inBand: gap <= reach })
+        pairs.push({ i, j, frames, gap, inBand: gap <= reach })
       }
     }
 
     const used = new Set<WebSocket>()
     const matchable = pairs
       .filter((p) => p.inBand)
-      .sort(
-        (a, b) => a.gap - b.gap || a.frames.length * a.modes.length - b.frames.length * b.modes.length,
-      )
-    for (const { i, j, frames, modes } of matchable) {
+      .sort((a, b) => a.gap - b.gap || a.frames.length - b.frames.length)
+    for (const { i, j, frames } of matchable) {
       if (used.has(waiting[i].ws) || used.has(waiting[j].ws)) continue
       used.add(waiting[i].ws)
       used.add(waiting[j].ws)
-      const { frame, mode } = pickSettings(frames, modes)
-      const code = await allocateRoom(this.env, frame, mode, { matched: true })
+      const code = await allocateRoom(this.env, pickFrame(frames), 'forbidden', { matched: true })
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
       for (const ws of [waiting[i].ws, waiting[j].ws]) {
         try {
@@ -131,8 +116,10 @@ export class Lobby extends DurableObject<Env> {
     for (const { ws, opts } of waiting) {
       if (used.has(ws) || now < opts.aiAt) continue
       used.add(ws)
-      const { frame, mode } = pickSettings(opts.frames, opts.modes)
-      const code = await allocateRoom(this.env, frame, mode, { ai: true, matched: true })
+      const code = await allocateRoom(this.env, pickFrame(opts.frames), 'forbidden', {
+        ai: true,
+        matched: true,
+      })
       try {
         ws.send(JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage))
         ws.close(1000, 'matched')

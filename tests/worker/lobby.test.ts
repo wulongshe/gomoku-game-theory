@@ -1,14 +1,14 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { describe, expect, it, vi } from 'vitest'
 import { ROOM_CODE_PATTERN, type LobbyServerMessage } from '@/shared/protocol'
-import { pickSettings, tolerance } from '@/worker/lobby'
+import { pickFrame, tolerance } from '@/worker/lobby'
 
 interface Client {
   ws: WebSocket
   matched(): Promise<LobbyServerMessage>
 }
 
-async function joinLobby(options = 'frames=30&modes=forbidden'): Promise<Client> {
+async function joinLobby(options = 'frames=30'): Promise<Client> {
   const res = await SELF.fetch(`https://example.com/api/match/ws?${options}`, {
     headers: { Upgrade: 'websocket' },
   })
@@ -35,17 +35,16 @@ async function roomSettings(code: string): Promise<Record<string, unknown>> {
   return Object.fromEntries(entries)
 }
 
-describe('pickSettings', () => {
-  it('samples uniformly across the frame/mode combos', () => {
-    const pick = (roll: number) => pickSettings([30, 60], ['forbidden', 'minus'], () => roll)
-    expect(pick(0)).toEqual({ frame: 30, mode: 'forbidden' })
-    expect(pick(0.99)).toEqual({ frame: 60, mode: 'minus' })
+describe('pickFrame', () => {
+  it('samples uniformly across the frames', () => {
+    expect(pickFrame([30, 60], () => 0)).toBe(30)
+    expect(pickFrame([30, 60], () => 0.99)).toBe(60)
   })
 })
 
 describe('Lobby', () => {
   it('rejects non-websocket requests', async () => {
-    const res = await SELF.fetch('https://example.com/api/match/ws?frames=30&modes=forbidden')
+    const res = await SELF.fetch('https://example.com/api/match/ws?frames=30')
     expect(res.status).toBe(426)
   })
 
@@ -72,37 +71,37 @@ describe('Lobby', () => {
     expect((await c.matched()).code).toBe(second.code)
   })
 
-  it('matches only players whose option sets intersect', async () => {
-    const a = await joinLobby('frames=30&modes=forbidden')
-    const b = await joinLobby('frames=60&modes=forbidden')
-    const c = await joinLobby('frames=60&modes=minus')
-    const d = await joinLobby('frames=60&modes=forbidden')
+  it('matches only players whose frame choices intersect', async () => {
+    const a = await joinLobby('frames=30')
+    const b = await joinLobby('frames=60')
+    const c = await joinLobby('frames=0')
+    const d = await joinLobby('frames=60')
     const [msgB, msgD] = await Promise.all([b.matched(), d.matched()])
     expect(msgB).toEqual(msgD)
     expect(await roomSettings(msgB.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
-    const e = await joinLobby('frames=30&modes=forbidden,minus')
+    const e = await joinLobby('frames=30')
     expect((await e.matched()).code).toBe((await a.matched()).code)
-    const f = await joinLobby('frames=30,60&modes=minus')
+    const f = await joinLobby('frames=0,60')
     const msgC = await c.matched()
     expect((await f.matched()).code).toBe(msgC.code)
-    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 60, mode: 'minus' })
+    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 0, mode: 'forbidden' })
   })
 
-  it('settles the room on options both players accept', async () => {
-    const a = await joinLobby('frames=60&modes=minus')
-    const b = await joinLobby('frames=30,60&modes=forbidden,minus')
+  it('settles the room on a frame both players accept, always in forbidden mode', async () => {
+    const a = await joinLobby('frames=60')
+    const b = await joinLobby('frames=30,60')
     const [msgA] = await Promise.all([a.matched(), b.matched()])
-    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60, mode: 'minus' })
+    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
   })
 
   it('prefers the waiting player with the smallest option overlap', async () => {
-    const flexible = await joinLobby('frames=30&modes=forbidden,minus')
-    const picky = await joinLobby('frames=60&modes=forbidden')
-    const joiner = await joinLobby('frames=30,60&modes=forbidden,minus')
+    const flexible = await joinLobby('frames=30,0')
+    const picky = await joinLobby('frames=60')
+    const joiner = await joinLobby('frames=30,60,0')
     const [msgPicky, msgJoiner] = await Promise.all([picky.matched(), joiner.matched()])
     expect(msgJoiner).toEqual(msgPicky)
     expect(await roomSettings(msgPicky.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
-    const last = await joinLobby('frames=30&modes=minus')
+    const last = await joinLobby('frames=30')
     expect((await last.matched()).code).toBe((await flexible.matched()).code)
   })
 
@@ -122,7 +121,7 @@ describe('Lobby', () => {
 })
 
 describe('rating bands', () => {
-  async function joinRated(rating: number, options = 'frames=30&modes=forbidden'): Promise<Client> {
+  async function joinRated(rating: number, options = 'frames=30'): Promise<Client> {
     const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby'))
     const res = await stub.fetch(`https://lobby/api/match/ws?${options}&rating=${rating}`, {
       headers: { Upgrade: 'websocket' },
@@ -195,7 +194,7 @@ describe('AI fallback', () => {
   }
 
   it('hands a lone waiter an AI room once the deadline passes', async () => {
-    const a = await joinLobby('frames=0&modes=minus')
+    const a = await joinLobby('frames=0')
     await expireAiDeadline()
     const msg = await a.matched()
     expect(msg.type).toBe('matched')
@@ -209,7 +208,7 @@ describe('AI fallback', () => {
     expect(aiSeats).toHaveLength(1)
     expect(['black', 'white']).toContain(aiSeats[0])
     expect(entries.get('frameSeconds')).toBe(0)
-    expect(entries.get('mode')).toBe('minus')
+    expect(entries.get('mode')).toBe('forbidden')
   })
 
   it('keeps waiting for humans before the deadline', async () => {

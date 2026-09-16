@@ -17,17 +17,17 @@ withDefaults(
     loading?: boolean
     disabled?: boolean
     showFrame?: boolean
+    showMode?: boolean
     modeOptions?: GameMode[]
     difficulties?: Difficulty[]
   }>(),
-  { modeOptions: () => MODE_OPTIONS, showFrame: true },
+  { modeOptions: () => MODE_OPTIONS, showFrame: true, showMode: true },
 )
 const emit = defineEmits<{ cancel: []; confirm: [] }>()
 
 const frame = defineModel<number>('frame', { default: FRAME_OPTIONS[0] })
 const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
 const frames = defineModel<number[]>('frames', { default: () => [] })
-const modes = defineModel<GameMode[]>('modes', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
@@ -49,16 +49,9 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
           :disabled="disabled"
         />
       </div>
-      <div class="flex flex-col gap-2">
+      <div v-if="showMode" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">撞子后</span>
-        <SegmentedControl
-          v-model="mode"
-          v-model:values="modes"
-          :options="modeOptions"
-          :label="modeLabel"
-          :multi="multi"
-          :disabled="disabled"
-        />
+        <SegmentedControl v-model="mode" :options="modeOptions" :label="modeLabel" :disabled="disabled" />
       </div>
       <div v-if="difficulties" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">难度</span>

@@ -61,9 +61,6 @@ let matched = false
 const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
 frameChoices.value = frameChoices.value.filter((f) => FRAME_OPTIONS.includes(f))
 if (!frameChoices.value.length) frameChoices.value = [...FRAME_OPTIONS]
-const modeChoices = useStorage<GameMode[]>('mode-choices', [...MODE_OPTIONS])
-modeChoices.value = modeChoices.value.filter((m) => MODE_OPTIONS.includes(m))
-if (!modeChoices.value.length) modeChoices.value = [...MODE_OPTIONS]
 
 const sitePoster = ref<InstanceType<typeof SharePoster> | null>(null)
 const siteUrl = `${location.origin}/`
@@ -105,7 +102,7 @@ async function create() {
 }
 
 const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameChoices.value, modeChoices.value)),
+  computed(() => matchWsUrl(frameChoices.value)),
   {
     immediate: false,
     autoConnect: false,
@@ -340,10 +337,10 @@ useEventListener(window, 'resize', updateScrollHint)
     <GameConfigDialog
       v-if="showMatch"
       v-model:frames="frameChoices"
-      v-model:modes="modeChoices"
       multi
+      :show-mode="false"
       title="随机匹配"
-      hint="按双方选项的交集撮合"
+      hint="禁点模式 · 按双方选项的交集撮合"
       :confirm-text="matching ? `匹配中…${matchSeconds}s，点击取消` : '开始匹配'"
       :loading="matching"
       :disabled="matching"
