@@ -121,6 +121,21 @@ function winningLines(board: CellState[], seat: Seat, point: Point): number[][] 
   return lines
 }
 
+// 该方当前帧一手即可连五的合法空点。
+export function winningPoints(state: GameState, seat: Seat): Point[] {
+  const board = [...state.board]
+  const points: Point[] = []
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== 'empty') continue
+    const point = { x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) }
+    if (!isLegalChoice(state, point)) continue
+    board[i] = seat
+    if (winningLines(board, seat, point).length) points.push(point)
+    board[i] = 'empty'
+  }
+  return points
+}
+
 function forbiddenRuns(board: CellState[]): number[][] {
   const runs: number[][] = []
   for (let y = 0; y < BOARD_SIZE; y++) {

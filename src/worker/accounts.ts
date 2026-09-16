@@ -1,5 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
-import { maskEmail } from '@/shared/protocol'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
+import type { Difficulty } from '@gomoku/engine/ai'
+import { maskEmail, type ChallengeInfo } from '@/shared/protocol'
 import { parseBotPool } from './bots'
 
 const CODE_TTL = 10 * 60_000
@@ -44,6 +46,11 @@ interface PendingRecord {
 interface SessionRecord {
   email: string
   expires: number
+}
+
+interface ChallengeRecord {
+  difficulties: Difficulty[]
+  at: number // 最近一次新通过难度的时间，同难度按先后排序
 }
 
 interface StatsRecord {
@@ -260,6 +267,42 @@ export class Accounts extends DurableObject<Env> {
       })),
       me: index < 0 ? null : index,
     }
+  }
+
+  async challengeInfo(id: string, token: string | null = null): Promise<ChallengeInfo> {
+    const myEmail = token ? ((await this.me(token))?.email ?? null) : null
+    const records = (await this.ctx.storage.get<Record<string, ChallengeRecord>>(`challenge:${id}`)) ?? {}
+    const rank = (difficulty: Difficulty) => DIFFICULTY_OPTIONS.indexOf(difficulty)
+    const rows = Object.entries(records).map(([email, record]) => ({
+      email,
+      difficulty: record.difficulties.reduce((best, d) => (rank(d) > rank(best) ? d : best)),
+      at: record.at,
+    }))
+    rows.sort((a, b) => rank(b.difficulty) - rank(a.difficulty) || a.at - b.at)
+    const emails = await this.displayEmails(rows.map((row) => row.email))
+    return {
+      clears: rows.map((row, i) => ({ email: emails[i]!, difficulty: row.difficulty })),
+      mine: myEmail ? (records[myEmail]?.difficulties ?? []) : [],
+    }
+  }
+
+  async recordChallengeClear(
+    token: string,
+    id: string,
+    difficulty: Difficulty,
+  ): Promise<ChallengeInfo | null> {
+    const profile = await this.me(token)
+    if (!profile) return null
+    const key = `challenge:${id}`
+    const records = (await this.ctx.storage.get<Record<string, ChallengeRecord>>(key)) ?? {}
+    const record = records[profile.email] ?? { difficulties: [], at: Date.now() }
+    if (!record.difficulties.includes(difficulty)) {
+      record.difficulties.push(difficulty)
+      record.at = Date.now()
+      records[profile.email] = record
+      await this.ctx.storage.put(key, records)
+    }
+    return this.challengeInfo(id, token)
   }
 
   private async createSession(email: string): Promise<string> {

@@ -9,6 +9,7 @@ export default defineConfig({
     host: true,
   },
   plugins: [vue(), cloudflare(), tailwindcss()],
+  assetsInclude: ['**/*.bin'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

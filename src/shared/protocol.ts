@@ -1,4 +1,5 @@
 import type { GameMode, GameState, Point, Seat } from '@gomoku/engine/game'
+import type { Difficulty } from '@gomoku/engine/ai'
 
 export const FRAME_OPTIONS = [30, 60, 0]
 export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus']
@@ -138,4 +139,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   const point = msg.point as Record<string, unknown>
   if (!Number.isInteger(point.x) || !Number.isInteger(point.y)) return null
   return { type: 'submit', frame, point: { x: point.x as number, y: point.y as number }, final }
+}
+
+export interface ChallengeClear {
+  email: string
+  difficulty: Difficulty // 该用户通过的最高难度
+}
+
+export interface ChallengeInfo {
+  clears: ChallengeClear[]
+  mine: Difficulty[] // 请求者已通过的难度（未登录为空）
 }

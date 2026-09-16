@@ -39,12 +39,12 @@ function pick(option: T): void {
     <button
       v-for="option in options"
       :key="option"
-      class="inline-flex h-7 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md pb-px font-medium leading-none transition-colors"
+      class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md pb-px font-medium leading-none transition-colors"
       :class="[
         isActive(option)
           ? 'bg-white text-stone-800 shadow-sm dark:bg-stone-900 dark:text-stone-100'
           : 'text-stone-500 dark:text-stone-400',
-        optionDisabled?.(option) && 'pointer-events-none opacity-40',
+        optionDisabled?.(option) ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
       ]"
       :disabled="disabled || optionDisabled?.(option)"
       @click="pick(option)"
@@ -56,7 +56,7 @@ function pick(option: T): void {
       >
         <IconCheck v-if="isActive(option)" class="size-2.5 text-white" />
       </span>
-      {{ label(option) }}
+      <slot name="option" :option="option">{{ label(option) }}</slot>
     </button>
   </div>
 </template>

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import AuthDialog from '~/components/AuthDialog.vue'
+import ChallengeDialog from '~/components/ChallengeDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import LeaderboardDialog from '~/components/LeaderboardDialog.vue'
 import TournamentDialog from '~/components/TournamentDialog.vue'
@@ -19,7 +20,7 @@ import SharePoster from '~/components/SharePoster.vue'
 import { createRoom, fetchTournament, matchWsUrl } from '~/apis'
 import { formatDailyTime } from '~/utils/format'
 import { useAuth } from '~/composables/useAuth'
-import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { CHALLENGE_SCHEDULE, CHALLENGE_TITLE, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
 import {
   FRAME_OPTIONS,
@@ -41,9 +42,15 @@ const showAuth = ref(false)
 const showLeaderboard = ref(false)
 const showTournament = ref(false)
 const showAi = ref(false)
+const showChallenge = ref(false)
 
 function loginFromTournament() {
   showTournament.value = false
+  showAuth.value = true
+}
+
+function loginFromChallenge() {
+  showChallenge.value = false
   showAuth.value = true
 }
 
@@ -224,6 +231,19 @@ useEventListener(window, 'resize', updateScrollHint)
         </div>
         <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
       </button>
+      <button
+        class="flex cursor-pointer items-center gap-4 rounded-xl bg-white/80 px-5 py-3.5 text-left shadow-sm backdrop-blur transition-colors hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-800"
+        @click="showChallenge = true"
+      >
+        <span
+          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-wood/30 text-base leading-none"
+        ><span class="block -translate-y-px">⚔️</span></span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">{{ CHALLENGE_TITLE }}</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">{{ CHALLENGE_SCHEDULE }} · 残局挑战</p>
+        </div>
+        <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
+      </button>
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
@@ -310,6 +330,12 @@ useEventListener(window, 'resize', updateScrollHint)
       v-if="showTournament"
       @close="showTournament = false"
       @login="loginFromTournament"
+    />
+
+    <ChallengeDialog
+      v-if="showChallenge"
+      @close="showChallenge = false"
+      @login="loginFromChallenge"
     />
 
     <GameConfigDialog

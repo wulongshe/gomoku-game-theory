@@ -1,5 +1,6 @@
 import type { GameMode } from '@gomoku/engine/game'
-import type { TournamentInfo } from '@/shared/protocol'
+import type { Difficulty } from '@gomoku/engine/ai'
+import type { ChallengeInfo, TournamentInfo } from '@/shared/protocol'
 import { useAuthToken } from '~/composables/useAuthToken'
 
 const authToken = useAuthToken()
@@ -162,4 +163,20 @@ export function seekTournamentMatch(): Promise<TournamentInfo> {
 
 export function cancelTournamentSeek(): Promise<TournamentInfo> {
   return tournamentAction('unseek')
+}
+
+export async function fetchChallenge(id: string): Promise<ChallengeInfo> {
+  const res = await fetch(`/api/challenge/${id}`, { headers: bearer() })
+  if (!res.ok) throw new Error(`fetchChallenge failed: ${res.status}`)
+  return (await res.json()) as ChallengeInfo
+}
+
+export async function clearChallenge(id: string, difficulty: Difficulty): Promise<ChallengeInfo> {
+  const res = await fetch(`/api/challenge/${id}/clear`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...bearer() },
+    body: JSON.stringify({ difficulty }),
+  })
+  if (!res.ok) throw new Error(`clearChallenge failed: ${res.status}`)
+  return (await res.json()) as ChallengeInfo
 }

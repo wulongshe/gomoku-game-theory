@@ -1,4 +1,6 @@
 import { FRAME_SECONDS, type GameMode } from '@gomoku/engine/game'
+import type { Difficulty } from '@gomoku/engine/ai'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 import { EMAIL_PATTERN, FRAME_OPTIONS, MODE_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
 import { parseMatchOptions } from './lobby'
@@ -108,6 +110,25 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       if (request.method === 'POST' && url.pathname === '/api/tournament/unseek') {
         if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
         return Response.json(await tournament.cancelSeek(token))
+      }
+      return new Response('Not Found', { status: 404 })
+    }
+    const challengeMatch = url.pathname.match(/^\/api\/challenge\/([0-9a-f]{16})(\/clear)?$/)
+    if (challengeMatch) {
+      const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
+      const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
+      const id = challengeMatch[1]
+      if (!challengeMatch[2] && request.method === 'GET') {
+        return Response.json(await accounts.challengeInfo(id, token))
+      }
+      if (challengeMatch[2] && request.method === 'POST') {
+        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
+        const body = (await request.json().catch(() => null)) as { difficulty?: Difficulty } | null
+        if (!body?.difficulty || !DIFFICULTY_OPTIONS.includes(body.difficulty)) {
+          return new Response('Invalid options', { status: 400 })
+        }
+        const info = await accounts.recordChallengeClear(token, id, body.difficulty)
+        return info ? Response.json(info) : Response.json({ error: 'unauthorized' }, { status: 401 })
       }
       return new Response('Not Found', { status: 404 })
     }

@@ -14,7 +14,8 @@
     "check": "vue-tsc -b",
     "ai:battle": "node --import ./scripts/loader.ts scripts/ai-battle/main.ts",
     "test": "vitest run",
-    "typegen": "wrangler types"
+    "typegen": "wrangler types",
+    "challenge:gen": "node --import ./scripts/loader.ts scripts/challenge/main.ts"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.0",

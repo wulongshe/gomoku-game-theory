@@ -17,6 +17,18 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   master: '大师',
 }
 
+export const CHALLENGE_TITLE = '攻守易形'
+export const CHALLENGE_SCHEDULE = '每周日 0 点更新'
+
+export function challengeRules() {
+  return [
+    '禁点模式，不限时',
+    '开局AI有一个成五点',
+    '先于AI做出两个成五点则挑战成功',
+    '四个难度依次开启',
+  ]
+}
+
 export function rules() {
   return [
     {

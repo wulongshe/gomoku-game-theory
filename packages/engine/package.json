@@ -7,6 +7,7 @@
     "./game": "./src/game.ts",
     "./ai": "./src/ai.ts",
     "./eval": "./src/eval.ts",
-    "./mcts": "./src/mcts/index.ts"
+    "./mcts": "./src/mcts/index.ts",
+    "./challenge": "./src/challenge.ts"
   }
 }
