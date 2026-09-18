@@ -44,6 +44,12 @@ function aiReaction(frameMs: number, frame: number): number {
   return span * (0.3 + Math.random() * 0.7)
 }
 
+// 对面是真人时不看回合数，直接跟对方本局的平均提交用时走，只叠一层随回合渐大的随机浮动。
+function aiMirrorPace(avgMs: number, frame: number): number {
+  const amp = 0.15 + 0.35 * lateness(frame)
+  return Math.max(600, avgMs * (1 + (Math.random() * 2 - 1) * amp))
+}
+
 // 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下；
 // 再乘 bot 手速性格。上限始终由调用处按 budget 与帧长 10% 余量收口，绝不磨到超时。
 function aiThinkTime(criticality: number, late: number, speed: number): number {
@@ -94,6 +100,9 @@ interface AiSeatInfo {
 }
 
 type AiSeats = Partial<Record<Seat, AiSeatInfo>>
+
+// 真人本局各帧的提交用时累计，供 bot 跟节奏。
+type Pace = Partial<Record<Seat, { sum: number; n: number }>>
 
 type AiTimes = Partial<Record<Seat, number>>
 
@@ -438,7 +447,7 @@ export class Room extends DurableObject<Env> {
   private async startGame(): Promise<void> {
     const game = createGame(await this.mode())
     const frameSeconds = await this.frameSeconds()
-    await this.ctx.storage.delete(['choices', 'rematch', 'ready'])
+    await this.ctx.storage.delete(['choices', 'rematch', 'ready', 'pace'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
     const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
     if (tournament) {
@@ -478,9 +487,23 @@ export class Room extends DurableObject<Env> {
     }
     const reactionFrameMs = frameSeconds > 0 ? frameSeconds * 1000 : 40_000
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) {
-      await this.planAi(seat, aiReaction(reactionFrameMs, game.frame))
+      const pace = await this.humanPace(seat)
+      await this.planAi(
+        seat,
+        pace === null
+          ? aiReaction(reactionFrameMs, game.frame)
+          : Math.min(aiMirrorPace(pace, game.frame), reactionFrameMs * 0.9 - 1000),
+      )
     }
     return deadline
+  }
+
+  // 对面真人本局的平均提交用时；对面是 bot 或还没提交过则为 null。
+  private async humanPace(seat: Seat): Promise<number | null> {
+    const other: Seat = seat === 'black' ? 'white' : 'black'
+    if ((await this.aiSeats())[other]) return null
+    const sample = ((await this.ctx.storage.get<Pace>('pace')) ?? {})[other]
+    return sample?.n ? sample.sum / sample.n : null
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -577,6 +600,13 @@ export class Room extends DurableObject<Env> {
     choices[seat] = { point: msg.point, final: true }
     await this.ctx.storage.put('choices', choices)
     if (!wasFinal) {
+      const frameStart = await this.ctx.storage.get<number>('frameStart')
+      if (frameStart !== undefined) {
+        const pace = (await this.ctx.storage.get<Pace>('pace')) ?? {}
+        const prev = pace[seat] ?? { sum: 0, n: 0 }
+        pace[seat] = { sum: prev.sum + (Date.now() - frameStart), n: prev.n + 1 }
+        await this.ctx.storage.put('pace', pace)
+      }
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws) this.send(other, { type: 'opponent_submitted', submitted: true })
       }
@@ -645,6 +675,7 @@ export class Room extends DurableObject<Env> {
       'frameStart',
       'aiPlan',
       'aiArrive',
+      'pace',
     ])
     await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -800,6 +831,8 @@ export class Room extends DurableObject<Env> {
           }
         }
         const point = decision.point
+        // 跟真人节奏时等待已全放在开帧延时里，到点即交。
+        if ((await this.humanPace(seat)) !== null) return submit(point)
         if (left < 3500 || budget < 4000 || slack < 1000) return submit(point)
         const think = aiThinkTime(decision.criticality, late, persona.speed)
         if (think <= 600) return submit(point) // 明显手：略一思忖即交（≈秒下）

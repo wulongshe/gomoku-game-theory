@@ -947,6 +947,34 @@ describe('AI stand-in room', () => {
     expect(settled.state.phase).toBe('playing')
   })
 
+  it('paces its next move on the human opponent average submit time', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.1)
+    await createAiRoom('7106')
+    const aiSeat = await aiSeatOf('7106')
+    const human = await connect('7106', 'key-h')
+    await human.next('joined')
+    human.ready()
+    await fireAi('7106')
+    await human.next('start')
+    await fireAi('7106')
+    await human.next('opponent_submitted')
+
+    // 把开帧时点拨到 5s 前：真人这一手算作用时 5s。
+    await runInDurableObject(stubOf('7106'), (_i, state) =>
+      state.storage.put('frameStart', Date.now() - 5000),
+    )
+    human.submit(1, { x: 6, y: 6 })
+    await human.next('frame_settled')
+
+    const { plan, frameStart } = await runInDurableObject(stubOf('7106'), async (_i, state) => ({
+      plan: (await state.storage.get<Record<string, number>>('aiPlan'))!,
+      frameStart: (await state.storage.get<number>('frameStart'))!,
+    }))
+    // random=0.1 → 浮动取 -0.8 倍幅度；第 2 回合幅度 0.15+0.35/30 ≈ 0.162 → 5000×0.871 ≈ 4353ms
+    expect(plan[aiSeat] - frameStart).toBeGreaterThan(4300)
+    expect(plan[aiSeat] - frameStart).toBeLessThan(4400)
+  })
+
   it('declines a draw offer, credits the human loss, and accepts a rematch', async () => {
     await createAiRoom('7103')
     const session = await sessionFor('stealth@example.com')

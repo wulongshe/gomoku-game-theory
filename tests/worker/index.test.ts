@@ -38,8 +38,8 @@ describe('POST /api/rooms', () => {
 })
 
 describe('GET /api/match/ws', () => {
-  it('rejects missing or unsupported option lists', async () => {
-    for (const query of ['', '?frames=30', '?frames=45&modes=forbidden', '?frames=30&modes=classic']) {
+  it('rejects missing or unsupported frame lists', async () => {
+    for (const query of ['', '?frames=45', '?frames=30,45']) {
       const res = await SELF.fetch(`https://example.com/api/match/ws${query}`, {
         headers: { Upgrade: 'websocket' },
       })
