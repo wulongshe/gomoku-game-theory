@@ -1,7 +1,6 @@
-import type { GameMode, GameState, Point, Seat } from '@gomoku/engine/game'
+import type { GameState, Point, Seat } from '@gomoku/engine/game'
 
 export const FRAME_OPTIONS = [30, 60, 0]
-export const MODE_OPTIONS: GameMode[] = ['forbidden', 'minus']
 
 // 房号纯数字、优先 4 位好记；同长度接连撞车（房间多）才升到 6、8 位。
 export const ROOM_CODE_LENGTHS = [4, 6, 8]
@@ -28,7 +27,7 @@ export function maskEmail(email: string): string {
 export type ClientMessage =
   | { type: 'submit'; frame: number; point: Point | null; final: boolean }
   | { type: 'ready' }
-  | { type: 'rematch'; frameSeconds: number; mode: GameMode }
+  | { type: 'rematch'; frameSeconds: number }
   | { type: 'rematch_decline' }
   | { type: 'leave' }
   | { type: 'resign' }
@@ -38,7 +37,7 @@ export type ClientMessage =
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
-  | { type: 'joined'; seat: Seat; frameSeconds: number; mode: GameMode; tournament?: true; spectator?: true }
+  | { type: 'joined'; seat: Seat; frameSeconds: number; tournament?: true; spectator?: true }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | { type: 'players'; accounts: Record<Seat, string | null> }
   | {
@@ -66,7 +65,7 @@ export type ServerMessage =
   | { type: 'draw_offered' }
   | { type: 'draw_declined' }
   | { type: 'room_closed' }
-  | { type: 'rematch_requested'; frameSeconds: number; mode: GameMode }
+  | { type: 'rematch_requested'; frameSeconds: number }
   | { type: 'rematch_declined' }
   | { type: 'error'; message: string }
 
@@ -118,8 +117,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (msg.type === 'ready') return { type: 'ready' }
   if (msg.type === 'rematch') {
     if (!FRAME_OPTIONS.includes(msg.frameSeconds as number)) return null
-    if (!MODE_OPTIONS.includes(msg.mode as GameMode)) return null
-    return { type: 'rematch', frameSeconds: msg.frameSeconds as number, mode: msg.mode as GameMode }
+    return { type: 'rematch', frameSeconds: msg.frameSeconds as number }
   }
   if (msg.type === 'rematch_decline') return { type: 'rematch_decline' }
   if (msg.type === 'leave') return { type: 'leave' }

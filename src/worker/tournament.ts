@@ -29,7 +29,6 @@ const PAIR_TTL_MS = 2 * 60_000 // 配上后迟迟未开局的裁决时限
 const WRAPUP_MS = 20 * 60_000 // 窗口关闭后仍未决对局（房间悄悄死掉等）的硬兜底
 const POLL_MS = 60_000
 const TFRAME = 15
-const TMODE = 'forbidden'
 const SKEW_MS = 1000
 const DAY_MS = 86_400_000
 
@@ -397,7 +396,7 @@ export class Tournament extends DurableObject<Env> {
           ? pairedBotDifficulties(baseA, baseB)
           : [baseA && gameDifficulty(baseA), baseB && gameDifficulty(baseB)]
       try {
-        const code = await allocateRoom(this.env, TFRAME, TMODE, {
+        const code = await allocateRoom(this.env, TFRAME, {
           tournament: { players: [a, b], bots },
         })
         s.pairings.push({ code, players: [a, b], checkedIn: [], result: null, createdAt: Date.now() })

@@ -1,10 +1,9 @@
 // 由 Node 原生运行 TypeScript（Node ≥ 23.6，--import 加载 loader.ts 为相对导入补 .ts）：pnpm ai:battle
 import { Worker } from 'node:worker_threads'
-import { createGame, settleFrame, type GameMode, type GameState, type Point, type Seat } from '../../packages/engine/src/game'
+import { createGame, settleFrame, type GameState, type Point, type Seat } from '../../packages/engine/src/game'
 import { type SideConfig } from './search'
 
 // ===== 修改这里的参数 =====
-const MODE: GameMode = (process.env.MODE as GameMode) ?? 'forbidden' // forbidden 禁点 / minus 负子
 const ROUNDS = Number(process.env.ROUNDS ?? 20)
 const PARALLEL_ROUNDS = Number(process.env.PARALLEL ?? 10) // 并行对局数，每局占 2 个线程；8 核可开到 4
 const MAX_FRAMES = 200 // 单局帧数上限，超限判平（防异常对局死循环）
@@ -22,7 +21,6 @@ const WHITE: SideConfig = {
 // ==========================
 
 interface MatchConfig {
-  mode: GameMode
   black: SideConfig
   white: SideConfig
   rounds: number
@@ -89,13 +87,12 @@ function createWorkerPool(workerFile: URL, size: number, handler: { module: stri
   }
 }
 
-// 搜索只读 board/frame/mode/phase，快照一份防御性拷贝，避免搜索路径意外改动对局状态。
+// 搜索只读 board/frame/phase，快照一份防御性拷贝，避免搜索路径意外改动对局状态。
 function snapshotState(state: GameState): GameState {
   return {
     board: [...state.board],
     phase: state.phase,
     frame: state.frame,
-    mode: state.mode,
     cleared: [],
     lastMoves: [],
     winningLines: [],
@@ -131,7 +128,7 @@ async function playSingleGame(
   search: SearchFn,
   onFrame?: FrameObserver,
 ): Promise<MatchOutcome> {
-  let state = createGame(config.mode)
+  let state = createGame()
   while (state.phase === 'playing' && state.frame <= config.maxFrames) {
     const view = snapshotState(state)
     const [black, white] = await frameMoves(view, config, search)
@@ -176,7 +173,7 @@ async function runSeries(config: MatchConfig, search: SearchFn): Promise<MatchSu
   async function playRound(i: number): Promise<void> {
     const prefix = `[${i}/${config.rounds}] `
     const startedAt = performance.now()
-    process.stdout.write(`${prefix}开局：黑 ${formatSide(config.black)} vs 白 ${formatSide(config.white)}（模式 ${config.mode}）\n`)
+    process.stdout.write(`${prefix}开局：黑 ${formatSide(config.black)} vs 白 ${formatSide(config.white)}\n`)
     const outcome = await playSingleGame(config, search, (frame, black, white, next) => {
       const collided = black !== null && white !== null && black.x === white.x && black.y === white.y
       const tag = collided ? '  ⚡撞子' : isMutualFive(black, white, next) ? '  💥同5相消' : ''
@@ -209,13 +206,12 @@ function formatPercent(count: number, total: number): string {
 function printSummary(config: MatchConfig, summary: MatchSummary, elapsedMs: number): void {
   const total = config.rounds
   process.stdout.write(
-    `\n对战完成\n模式：${config.mode}\n黑方：${formatSide(config.black)}，胜 ${summary.blackWins}，负 ${summary.whiteWins}，平 ${summary.draws}\n白方：${formatSide(config.white)}，胜 ${summary.whiteWins}，负 ${summary.blackWins}，平 ${summary.draws}\n黑方胜率：${formatPercent(summary.blackWins, total)}，白方胜率：${formatPercent(summary.whiteWins, total)}，平局率：${formatPercent(summary.draws, total)}\n总用时：${(elapsedMs / 1000).toFixed(1)}s\n`,
+    `\n对战完成\n黑方：${formatSide(config.black)}，胜 ${summary.blackWins}，负 ${summary.whiteWins}，平 ${summary.draws}\n白方：${formatSide(config.white)}，胜 ${summary.whiteWins}，负 ${summary.blackWins}，平 ${summary.draws}\n黑方胜率：${formatPercent(summary.blackWins, total)}，白方胜率：${formatPercent(summary.whiteWins, total)}，平局率：${formatPercent(summary.draws, total)}\n总用时：${(elapsedMs / 1000).toFixed(1)}s\n`,
   )
 }
 
 async function main(): Promise<void> {
   const config: MatchConfig = {
-    mode: MODE,
     black: BLACK,
     white: WHITE,
     rounds: ROUNDS,
@@ -224,7 +220,7 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write(
-    `开始测试：模式 ${config.mode}，黑方 ${formatSide(config.black)}，白方 ${formatSide(config.white)}，轮数 ${config.rounds}，并行 ${config.parallel} 局，单局帧数上限 ${config.maxFrames}\n`,
+    `开始测试：黑方 ${formatSide(config.black)}，白方 ${formatSide(config.white)}，轮数 ${config.rounds}，并行 ${config.parallel} 局，单局帧数上限 ${config.maxFrames}\n`,
   )
   const pool = createWorkerPool(
     new URL('../worker.ts', import.meta.url),

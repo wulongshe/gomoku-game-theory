@@ -4,30 +4,28 @@ import Board from '@/components/Board.vue'
 import ConfigDialog from '@/components/ConfigDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
 import { startAiMove, type AiJob } from '@/game/ai'
-import { saveConfig, type GameConfig } from '@/game/config'
+import { saveDifficulty } from '@/game/config'
 import { helpIcon } from '@/utils/icons'
 import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
-import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
+import { DIFFICULTY_LABELS } from '@gomoku/branding'
 import type { Difficulty } from '@gomoku/engine/ai'
 import {
   createGame,
   isLegalChoice,
   settleFrame,
-  type GameMode,
   type GameState,
   type Point,
 } from '@gomoku/engine/game'
 
 const HELP_ICON = helpIcon('#78716c')
 
-const props = defineProps<{ config: GameConfig }>()
-const emit = defineEmits<{ configure: [config: GameConfig]; exit: [] }>()
+const props = defineProps<{ difficulty: Difficulty }>()
+const emit = defineEmits<{ configure: [difficulty: Difficulty]; exit: [] }>()
 
-const mode = ref<GameMode>(props.config.mode)
-const difficulty = ref<Difficulty>(props.config.difficulty)
+const difficulty = ref<Difficulty>(props.difficulty)
 
 // 每次进入对战都是新对局；退出即弃，避免换难度后还续上一局。
-const game = ref(createGame(mode.value))
+const game = ref(createGame())
 const selected = ref<Point | null>(null)
 const resolving = ref(false)
 const showRules = ref(false)
@@ -133,7 +131,7 @@ async function submit(): Promise<void> {
 
 function restart(): void {
   submitSeq++
-  game.value = createGame(mode.value)
+  game.value = createGame()
   history.value = []
   reviewIndex.value = null
   selected.value = null
@@ -142,12 +140,11 @@ function restart(): void {
   beginFrame()
 }
 
-function applyConfig(config: GameConfig): void {
+function applyConfig(next: Difficulty): void {
   showConfig.value = false
-  mode.value = config.mode
-  difficulty.value = config.difficulty
-  saveConfig(config)
-  emit('configure', config)
+  difficulty.value = next
+  saveDifficulty(next)
+  emit('configure', next)
   restart()
 }
 </script>
@@ -163,9 +160,9 @@ function applyConfig(config: GameConfig): void {
       <view class="vs">
         <text>AI · {{ DIFFICULTY_LABELS[difficulty] }}</text>
       </view>
-      <view class="mode" @tap="showRules = true">
-        <text>{{ MODE_LABELS[mode] }}模式</text>
-        <image class="mode-icon" :src="HELP_ICON" />
+      <view class="rules" @tap="showRules = true">
+        <text>游戏规则</text>
+        <image class="rules-icon" :src="HELP_ICON" />
       </view>
     </view>
 
@@ -222,7 +219,6 @@ function applyConfig(config: GameConfig): void {
 
     <ConfigDialog
       v-if="showConfig"
-      :mode="mode"
       :difficulty="difficulty"
       @cancel="showConfig = false"
       @confirm="applyConfig"
@@ -297,7 +293,7 @@ function applyConfig(config: GameConfig): void {
   font-size: 24rpx;
   color: #78716c;
 }
-.mode {
+.rules {
   justify-self: end;
   display: flex;
   align-items: center;
@@ -305,7 +301,7 @@ function applyConfig(config: GameConfig): void {
   font-weight: 500;
   color: #78716c;
 }
-.mode-icon {
+.rules-icon {
   width: 32rpx;
   height: 32rpx;
 }

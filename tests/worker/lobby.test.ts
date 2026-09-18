@@ -30,7 +30,7 @@ async function joinLobby(options = 'frames=30'): Promise<Client> {
 async function roomSettings(code: string): Promise<Record<string, unknown>> {
   const stub = env.ROOM.get(env.ROOM.idFromName(code))
   const entries = await runInDurableObject(stub, (_, state) =>
-    state.storage.get(['frameSeconds', 'mode']),
+    state.storage.get(['frameSeconds']),
   )
   return Object.fromEntries(entries)
 }
@@ -78,20 +78,20 @@ describe('Lobby', () => {
     const d = await joinLobby('frames=60')
     const [msgB, msgD] = await Promise.all([b.matched(), d.matched()])
     expect(msgB).toEqual(msgD)
-    expect(await roomSettings(msgB.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
+    expect(await roomSettings(msgB.code)).toEqual({ frameSeconds: 60 })
     const e = await joinLobby('frames=30')
     expect((await e.matched()).code).toBe((await a.matched()).code)
     const f = await joinLobby('frames=0,60')
     const msgC = await c.matched()
     expect((await f.matched()).code).toBe(msgC.code)
-    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 0, mode: 'forbidden' })
+    expect(await roomSettings(msgC.code)).toEqual({ frameSeconds: 0 })
   })
 
-  it('settles the room on a frame both players accept, always in forbidden mode', async () => {
+  it('settles the room on a frame both players accept', async () => {
     const a = await joinLobby('frames=60')
     const b = await joinLobby('frames=30,60')
     const [msgA] = await Promise.all([a.matched(), b.matched()])
-    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
+    expect(await roomSettings(msgA.code)).toEqual({ frameSeconds: 60 })
   })
 
   it('prefers the waiting player with the smallest option overlap', async () => {
@@ -100,7 +100,7 @@ describe('Lobby', () => {
     const joiner = await joinLobby('frames=30,60,0')
     const [msgPicky, msgJoiner] = await Promise.all([picky.matched(), joiner.matched()])
     expect(msgJoiner).toEqual(msgPicky)
-    expect(await roomSettings(msgPicky.code)).toEqual({ frameSeconds: 60, mode: 'forbidden' })
+    expect(await roomSettings(msgPicky.code)).toEqual({ frameSeconds: 60 })
     const last = await joinLobby('frames=30')
     expect((await last.matched()).code).toBe((await flexible.matched()).code)
   })
@@ -202,13 +202,12 @@ describe('AI fallback', () => {
 
     const room = env.ROOM.get(env.ROOM.idFromName(msg.code))
     const entries = await runInDurableObject(room, (_, state) =>
-      state.storage.get(['aiSeats', 'frameSeconds', 'mode']),
+      state.storage.get(['aiSeats', 'frameSeconds']),
     )
     const aiSeats = Object.keys((entries.get('aiSeats') as Record<string, unknown>) ?? {})
     expect(aiSeats).toHaveLength(1)
     expect(['black', 'white']).toContain(aiSeats[0])
     expect(entries.get('frameSeconds')).toBe(0)
-    expect(entries.get('mode')).toBe('forbidden')
   })
 
   it('keeps waiting for humans before the deadline', async () => {

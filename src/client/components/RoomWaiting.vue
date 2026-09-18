@@ -3,9 +3,8 @@ import { ref } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
 import SharePoster from '~/components/SharePoster.vue'
-import type { GameMode } from '@gomoku/engine/game'
 
-defineProps<{ code: string; url: string; frameSeconds: number; mode: GameMode }>()
+defineProps<{ code: string; url: string; frameSeconds: number }>()
 
 const posterEl = ref<InstanceType<typeof SharePoster> | null>(null)
 const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true })
@@ -29,7 +28,6 @@ const { copy, copied, isSupported: copySupported } = useClipboard({ legacy: true
         :url="url"
         :code="code"
         :frame-seconds="frameSeconds"
-        :mode="mode"
         class="h-auto w-64 rounded-xl shadow-md"
       />
       <p class="text-sm text-stone-500 dark:text-stone-400">对方扫码或打开链接即可开始</p>

@@ -1,38 +1,21 @@
 import Taro from '@tarojs/taro'
-import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 import type { Difficulty } from '@gomoku/engine/ai'
-import type { GameMode } from '@gomoku/engine/game'
 
-export interface GameConfig {
-  mode: GameMode
-  difficulty: Difficulty
-}
+const DIFFICULTY_KEY = 'ai-difficulty'
 
-const CONFIG_KEY = 'ai-config'
-
-const DEFAULT_CONFIG: GameConfig = {
-  mode: 'forbidden',
-  difficulty: 'normal',
-}
-
-export function loadConfig(): GameConfig {
+export function loadDifficulty(): Difficulty {
   try {
-    const saved = Taro.getStorageSync(CONFIG_KEY) as Partial<GameConfig> | null
-    if (!saved) return DEFAULT_CONFIG
-    return {
-      mode: AI_MODE_OPTIONS.includes(saved.mode as GameMode) ? (saved.mode as GameMode) : DEFAULT_CONFIG.mode,
-      difficulty: DIFFICULTY_OPTIONS.includes(saved.difficulty as Difficulty)
-        ? (saved.difficulty as Difficulty)
-        : DEFAULT_CONFIG.difficulty,
-    }
+    const saved = Taro.getStorageSync(DIFFICULTY_KEY) as Difficulty
+    return DIFFICULTY_OPTIONS.includes(saved) ? saved : 'normal'
   } catch {
-    return DEFAULT_CONFIG
+    return 'normal'
   }
 }
 
-export function saveConfig(config: GameConfig): void {
+export function saveDifficulty(difficulty: Difficulty): void {
   try {
-    Taro.setStorageSync(CONFIG_KEY, config)
+    Taro.setStorageSync(DIFFICULTY_KEY, difficulty)
   } catch {
     // 存储不可用时忽略，仅影响下次默认选项。
   }

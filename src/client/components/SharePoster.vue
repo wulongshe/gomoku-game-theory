@@ -2,15 +2,13 @@
 import { computed, ref } from 'vue'
 import { encode } from 'uqr'
 import IconStones from '~/components/icons/IconStones.vue'
-import { MODE_LABELS, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { frameLabel } from '~/utils/format'
-import type { GameMode } from '@gomoku/engine/game'
 
 const props = defineProps<{
   url: string
   code?: string
   frameSeconds?: number
-  mode?: GameMode
 }>()
 
 const RULES = rules()
@@ -23,7 +21,7 @@ const CARD_TOP = 556
 
 // 竖向流式排布：卡片高度随实际内容（是否有房间号 / 对局信息）自动收缩。
 const card = computed(() => {
-  const hasSub = props.code !== undefined && props.frameSeconds !== undefined && props.mode
+  const hasSub = props.code !== undefined && props.frameSeconds !== undefined
   let y = CARD_TOP + 36
   const labelY = props.code !== undefined ? y : 0
   if (props.code !== undefined) y += 18
@@ -148,7 +146,7 @@ defineExpose({ share })
       <path :d="qrPath" fill="#292524" />
     </g>
     <text
-      v-if="code && frameSeconds !== undefined && mode"
+      v-if="code && frameSeconds !== undefined"
       x="320"
       :y="card.subY"
       text-anchor="middle"
@@ -156,7 +154,7 @@ defineExpose({ share })
       letter-spacing="3"
       fill="#78716c"
     >
-      每回合 {{ frameLabel(frameSeconds) }} · {{ MODE_LABELS[mode] }}模式
+      每回合 {{ frameLabel(frameSeconds) }}
     </text>
     <text x="320" :y="card.ctaY" text-anchor="middle" font-size="22" font-weight="600" fill="#292524">
       {{ code ? '扫码进房，来一局' : '扫码即玩，来一局' }}

@@ -3,9 +3,8 @@ import AppDialog from '~/components/AppDialog.vue'
 import DialogButton from '~/components/DialogButton.vue'
 import SegmentedControl from '~/components/SegmentedControl.vue'
 import IconSpinner from '~/components/icons/IconSpinner.vue'
-import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { FRAME_OPTIONS, MODE_OPTIONS } from '@/shared/protocol'
-import type { GameMode } from '@gomoku/engine/game'
+import { DIFFICULTY_LABELS } from '@gomoku/branding'
+import { FRAME_OPTIONS } from '@/shared/protocol'
 import type { Difficulty } from '@gomoku/engine/ai'
 
 withDefaults(
@@ -17,21 +16,17 @@ withDefaults(
     loading?: boolean
     disabled?: boolean
     showFrame?: boolean
-    showMode?: boolean
-    modeOptions?: GameMode[]
     difficulties?: Difficulty[]
   }>(),
-  { modeOptions: () => MODE_OPTIONS, showFrame: true, showMode: true },
+  { showFrame: true },
 )
 const emit = defineEmits<{ cancel: []; confirm: [] }>()
 
 const frame = defineModel<number>('frame', { default: FRAME_OPTIONS[0] })
-const mode = defineModel<GameMode>('mode', { default: MODE_OPTIONS[0] })
 const frames = defineModel<number[]>('frames', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
-const modeLabel = (option: GameMode) => MODE_LABELS[option]
 const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
 </script>
 
@@ -48,10 +43,6 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
           :multi="multi"
           :disabled="disabled"
         />
-      </div>
-      <div v-if="showMode" class="flex flex-col gap-2">
-        <span class="text-center text-stone-500 dark:text-stone-400">撞子后</span>
-        <SegmentedControl v-model="mode" :options="modeOptions" :label="modeLabel" :disabled="disabled" />
       </div>
       <div v-if="difficulties" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">难度</span>

@@ -1,5 +1,5 @@
-import { FRAME_SECONDS, type GameMode } from '@gomoku/engine/game'
-import { EMAIL_PATTERN, FRAME_OPTIONS, MODE_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
+import { FRAME_SECONDS } from '@gomoku/engine/game'
+import { EMAIL_PATTERN, FRAME_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
 import { parseMatchOptions } from './lobby'
 import { allocateRoom } from './roomCode'
@@ -113,11 +113,8 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     }
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
-      const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
-      if (!FRAME_OPTIONS.includes(frame) || !MODE_OPTIONS.includes(mode)) {
-        return new Response('Invalid options', { status: 400 })
-      }
-      const code = await allocateRoom(env, frame, mode)
+      if (!FRAME_OPTIONS.includes(frame)) return new Response('Invalid options', { status: 400 })
+      const code = await allocateRoom(env, frame)
       return Response.json({ code })
     }
     if (url.pathname === '/api/match/ws') {

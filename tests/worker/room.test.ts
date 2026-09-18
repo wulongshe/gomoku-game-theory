@@ -9,13 +9,12 @@ interface Client {
   next(type: ServerMessage['type']): Promise<ServerMessage>
   submit(frame: number, point: Point | null, final?: boolean): void
   ready(): void
-  rematch(frameSeconds?: number, mode?: string): void
+  rematch(frameSeconds?: number): void
 }
 
-async function createRoom(code: string, frame?: number, mode?: string): Promise<void> {
+async function createRoom(code: string, frame?: number): Promise<void> {
   const params = new URLSearchParams()
   if (frame !== undefined) params.set('frame', String(frame))
-  if (mode) params.set('mode', mode)
   await env.ROOM.get(env.ROOM.idFromName(code)).fetch(`https://room/create?${params}`, {
     method: 'POST',
   })
@@ -53,8 +52,8 @@ async function connect(code: string, key: string, auth?: string): Promise<Client
     ready() {
       ws.send(JSON.stringify({ type: 'ready' }))
     },
-    rematch(frameSeconds = 30, mode = 'forbidden') {
-      ws.send(JSON.stringify({ type: 'rematch', frameSeconds, mode }))
+    rematch(frameSeconds = 30) {
+      ws.send(JSON.stringify({ type: 'rematch', frameSeconds }))
     },
   }
 }
@@ -116,7 +115,7 @@ describe('Room', () => {
   it('rejects re-creating an already claimed room code with 409', async () => {
     await createRoom('1042')
     const again = await env.ROOM.get(env.ROOM.idFromName('1042')).fetch(
-      'https://room/create?frame=30&mode=forbidden',
+      'https://room/create?frame=30',
       { method: 'POST' },
     )
     expect(again.status).toBe(409)
@@ -351,7 +350,7 @@ describe('Room', () => {
   })
 
   it('turns a collision into a forbidden point', async () => {
-    await createRoom('1026', 30, 'forbidden')
+    await createRoom('1026', 30)
     const a = await connect('1026', 'key-a')
     const b = await connect('1026', 'key-b')
     await a.next('joined')
@@ -382,7 +381,7 @@ describe('Room', () => {
     expect(settled.deadline).toBeNull()
 
     a.rematch()
-    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 30, mode: 'forbidden' })
+    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 30 })
     b.rematch()
     expect(await a.next('joined')).toMatchObject({ seat: 'black', frameSeconds: 30 })
     expect(await b.next('joined')).toMatchObject({ seat: 'white', frameSeconds: 30 })
@@ -408,29 +407,28 @@ describe('Room', () => {
     const [a, b] = await startGame('1023')
     await playToBlackWin(a, b)
 
-    a.rematch(60, 'minus')
-    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
-    b.rematch(60, 'minus')
-    expect(await a.next('joined')).toMatchObject({ seat: 'black', frameSeconds: 60, mode: 'minus' })
+    a.rematch(60)
+    expect(await b.next('rematch_requested')).toMatchObject({ frameSeconds: 60 })
+    b.rematch(60)
+    expect(await a.next('joined')).toMatchObject({ seat: 'black', frameSeconds: 60 })
     await b.next('joined')
     a.ready()
     b.ready()
     const fresh = await a.next('start')
     if (fresh.type !== 'start') throw new Error('unreachable')
     expect(fresh.frameSeconds).toBe(60)
-    expect(fresh.state.mode).toBe('minus')
   })
 
   it('treats a differing rematch proposal as a counter-offer', async () => {
     const [a, b] = await startGame('1024')
     await playToBlackWin(a, b)
 
-    a.rematch(30, 'forbidden')
+    a.rematch(30)
     await b.next('rematch_requested')
-    b.rematch(60, 'minus')
-    expect(await a.next('rematch_requested')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
-    a.rematch(60, 'minus')
-    expect(await a.next('joined')).toMatchObject({ frameSeconds: 60, mode: 'minus' })
+    b.rematch(60)
+    expect(await a.next('rematch_requested')).toMatchObject({ frameSeconds: 60 })
+    a.rematch(60)
+    expect(await a.next('joined')).toMatchObject({ frameSeconds: 60 })
     await b.next('joined')
   })
 
@@ -659,7 +657,7 @@ describe('account seat recovery', () => {
     const yEmail = 'tourn-y@example.com'
     const x = await sessionFor(xEmail)
     const y = await sessionFor(yEmail)
-    const code = await allocateRoom(env, 15, 'forbidden', {
+    const code = await allocateRoom(env, 15, {
       tournament: { players: [xEmail, yEmail] },
     })
 
@@ -878,8 +876,8 @@ async function fireAi(code: string): Promise<void> {
 describe('AI stand-in room', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  async function createAiRoom(code: string, frame = 30, mode = 'forbidden'): Promise<void> {
-    await stubOf(code).fetch(`https://room/create?frame=${frame}&mode=${mode}&ai=1&matched=1`, {
+  async function createAiRoom(code: string, frame = 30): Promise<void> {
+    await stubOf(code).fetch(`https://room/create?frame=${frame}&ai=1&matched=1`, {
       method: 'POST',
     })
   }
@@ -1051,7 +1049,7 @@ describe('tournament spectating', () => {
     const viewer = 'viewer@example.com'
     const token = await sessionFor(viewer)
     await seedSpectatableTournament(viewer, true)
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: ['c@x', 'd@x'] },
     })
     const cToken = await sessionFor('c@x')
@@ -1105,7 +1103,7 @@ describe('tournament spectating', () => {
   it('never leaks draw or resign notifications to spectators', async () => {
     const viewer = 'peeker@example.com'
     const token = await sessionFor(viewer)
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: ['pc@x', 'pd@x'] },
     })
     const cToken = await sessionFor('pc@x')
@@ -1145,7 +1143,7 @@ describe('tournament spectating', () => {
   })
 
   it('admits guest spectators to tournament rooms but not to normal rooms', async () => {
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: ['c@x', 'd@x'] },
     })
     const guest = await SELF.fetch(`https://example.com/api/rooms/${code}/ws?spectate=1`, {
@@ -1199,7 +1197,7 @@ describe('tournament bot rooms', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.1)
     const human = 'tb-human@example.com'
     const bot = 'tb-bot@example.com'
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: [bot, human], bots: ['normal', null] },
     })
     await seedTournament(
@@ -1240,7 +1238,7 @@ describe('tournament bot rooms', () => {
     const token = await sessionFor(viewer)
     const b0 = 'tb-b0@example.com'
     const b1 = 'tb-b1@example.com'
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: [b0, b1], bots: ['normal', 'easy'] },
     })
     await seedTournament(
@@ -1302,7 +1300,7 @@ describe('tournament bot rooms', () => {
   it('advances a bot vs bot game on its own alarms', { timeout: 30_000 }, async () => {
     const b0 = 'tb-auto0@example.com'
     const b1 = 'tb-auto1@example.com'
-    const code = await allocateRoom(env, 30, 'forbidden', {
+    const code = await allocateRoom(env, 30, {
       tournament: { players: [b0, b1], bots: ['easy', 'easy'] },
     })
     await seedTournament(

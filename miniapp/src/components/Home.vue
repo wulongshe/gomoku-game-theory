@@ -3,29 +3,30 @@ import { ref } from 'vue'
 import ConfigDialog from '@/components/ConfigDialog.vue'
 import PvpDialog from '@/components/PvpDialog.vue'
 import RulesDialog from '@/components/RulesDialog.vue'
-import { loadConfig, saveConfig, type GameConfig } from '@/game/config'
+import { loadDifficulty, saveDifficulty } from '@/game/config'
+import type { Difficulty } from '@gomoku/engine/ai'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { helpIcon } from '@/utils/icons'
 import { PAGE_MIN_HEIGHT } from '@/utils/viewport'
 
 const HELP_ICON = helpIcon('#a8a29e')
 const RULES = rules()
-const savedConfig = ref(loadConfig())
+const savedDifficulty = ref(loadDifficulty())
 const showConfig = ref(false)
 const showRules = ref(false)
 const showPvp = ref(false)
 
 function openConfig(): void {
-  savedConfig.value = loadConfig()
+  savedDifficulty.value = loadDifficulty()
   showConfig.value = true
 }
 
-const emit = defineEmits<{ start: [config: GameConfig] }>()
+const emit = defineEmits<{ start: [difficulty: Difficulty] }>()
 
-function start(config: GameConfig): void {
+function start(difficulty: Difficulty): void {
   showConfig.value = false
-  saveConfig(config)
-  emit('start', config)
+  saveDifficulty(difficulty)
+  emit('start', difficulty)
 }
 </script>
 
@@ -61,8 +62,7 @@ function start(config: GameConfig): void {
 
     <ConfigDialog
       v-if="showConfig"
-      :mode="savedConfig.mode"
-      :difficulty="savedConfig.difficulty"
+      :difficulty="savedDifficulty"
       @cancel="showConfig = false"
       @confirm="start"
     />

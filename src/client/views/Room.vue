@@ -38,7 +38,6 @@ import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
-import { MODE_LABELS } from '@gomoku/branding'
 import { ROOM_KEY_PREFIX, ROOM_MOVES_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 import {
@@ -47,7 +46,6 @@ import {
   isLegalChoice,
   settleFrame,
   type ClearedGroup,
-  type GameMode,
   type GameState,
   type Point,
   type Seat,
@@ -89,8 +87,7 @@ const oppSubmitted = ref(false)
 const rematchAsked = ref(false)
 const rematchConfig = ref(false)
 const rematchFrame = ref(FRAME_SECONDS)
-const rematchMode = ref<GameMode>('forbidden')
-const rematchProposal = ref<{ frameSeconds: number; mode: GameMode } | null>(null)
+const rematchProposal = ref<number | null>(null)
 const rematchDeadline = ref<number | null>(null)
 const oppLeft = ref(false)
 const rematchInvite = ref(false)
@@ -110,7 +107,6 @@ const showSettings = ref(false)
 const showPlayers = ref(false)
 const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null })
 const frameSeconds = ref(FRAME_SECONDS)
-const mode = ref<GameMode>('forbidden')
 const tournament = ref(false)
 const autoSubmit = useStorage('auto-submit', false)
 const showConcede = ref(false)
@@ -212,7 +208,7 @@ function restoreMoves(state: GameState) {
       moves: FrameMoves[]
     } | null
     if (!saved || saved.code !== props.code || !saved.moves.length) return
-    let replayed = createGame(state.mode)
+    let replayed = createGame()
     for (const [black, white] of saved.moves) {
       replayed = settleFrame(replayed, { black, white })
       recordFrame(replayed)
@@ -303,7 +299,6 @@ function handleMessage(msg: ServerMessage) {
     case 'joined':
       seat.value = msg.seat
       frameSeconds.value = msg.frameSeconds
-      mode.value = msg.mode
       tournament.value = msg.tournament === true
       rematchAsked.value = false
       rematchConfig.value = false
@@ -394,7 +389,7 @@ function handleMessage(msg: ServerMessage) {
       clearMoves()
       break
     case 'rematch_requested':
-      rematchProposal.value = { frameSeconds: msg.frameSeconds, mode: msg.mode }
+      rematchProposal.value = msg.frameSeconds
       rematchAsked.value = false
       rematchDeadline.value = null
       rematchInvite.value = true
@@ -437,8 +432,6 @@ const oppStatus = computed(() => {
     }
   return { text: '对方思考中', dot: 'bg-amber-400', cls: 'text-stone-500 dark:text-stone-400' }
 })
-
-const modeLabel = computed(() => MODE_LABELS[mode.value])
 
 const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执白'))
 
@@ -527,12 +520,11 @@ function sendReady() {
 function openRematchConfig() {
   if (rematchAsked.value) return
   rematchFrame.value = frameSeconds.value
-  rematchMode.value = mode.value
   rematchConfig.value = true
 }
 
-function sendRematch(frameSeconds: number, mode: GameMode) {
-  send(JSON.stringify({ type: 'rematch', frameSeconds, mode } satisfies ClientMessage))
+function sendRematch(frameSeconds: number) {
+  send(JSON.stringify({ type: 'rematch', frameSeconds } satisfies ClientMessage))
   rematchAsked.value = true
   rematchDeadline.value = Date.now() + 30_000
 }
@@ -548,7 +540,7 @@ watch(rematchSecondsLeft, (s) => {
 
 function confirmRematch() {
   rematchConfig.value = false
-  sendRematch(rematchFrame.value, rematchMode.value)
+  sendRematch(rematchFrame.value)
 }
 
 const inviteSecondsLeft = useCountdown(inviteDeadline, 30)
@@ -560,9 +552,7 @@ watch(inviteSecondsLeft, (s) => {
 function acceptRematch() {
   rematchInvite.value = false
   inviteDeadline.value = null
-  if (rematchProposal.value) {
-    sendRematch(rematchProposal.value.frameSeconds, rematchProposal.value.mode)
-  }
+  if (rematchProposal.value !== null) sendRematch(rematchProposal.value)
 }
 
 function declineRematch() {
@@ -651,7 +641,6 @@ function exitRoom() {
       :code="props.code"
       :url="roomUrl"
       :frame-seconds="frameSeconds"
-      :mode="mode"
     />
 
     <RoomReady
@@ -659,7 +648,6 @@ function exitRoom() {
       :code="props.code"
       :frame-seconds="frameSeconds"
       :tournament="tournament"
-      :mode="mode"
       :seat="seat"
       :my-ready="myReady"
       :opp-ready="oppReady"
@@ -702,7 +690,7 @@ function exitRoom() {
             class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-200"
             @click="showRules = true"
           >
-            <template v-if="modeLabel">{{ modeLabel }}模式</template>
+            游戏规则
             <IconHelp class="size-4" />
           </button>
         </div>
@@ -904,7 +892,7 @@ function exitRoom() {
 
     <RematchInviteDialog
       v-if="rematchInvite"
-      :proposal="rematchProposal"
+      :frame-seconds="rematchProposal"
       :seconds-left="inviteSecondsLeft"
       @accept="acceptRematch"
       @decline="declineRematch"
@@ -913,7 +901,6 @@ function exitRoom() {
     <GameConfigDialog
       v-if="rematchConfig"
       v-model:frame="rematchFrame"
-      v-model:mode="rematchMode"
       title="再来一局"
       confirm-text="发起邀请"
       @cancel="rematchConfig = false"

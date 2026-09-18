@@ -20,15 +20,13 @@ import { createRoom, fetchTournament, matchWsUrl } from '~/apis'
 import { formatDailyTime } from '~/utils/format'
 import { useAuth } from '~/composables/useAuth'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 import {
   FRAME_OPTIONS,
-  MODE_OPTIONS,
   ROOM_CODE_MAX_LENGTH,
   ROOM_CODE_PATTERN,
   type LobbyServerMessage,
 } from '@/shared/protocol'
-import type { GameMode } from '@gomoku/engine/game'
 import { type Difficulty } from '@gomoku/engine/ai'
 
 const RULES = rules()
@@ -77,25 +75,21 @@ const matchStart = ref(0)
 const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchStart.value) / 1000)))
 
 const inviteFrame = useStorage('invite-frame', FRAME_OPTIONS[0])
-const inviteMode = useStorage<GameMode>('invite-mode', MODE_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
-if (!MODE_OPTIONS.includes(inviteMode.value)) inviteMode.value = MODE_OPTIONS[0]
 
-const aiMode = useStorage<GameMode>('ai-mode', 'forbidden')
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
-if (!AI_MODE_OPTIONS.includes(aiMode.value)) aiMode.value = 'forbidden'
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
 
 // 人机对战恒不限时。
 function startAi() {
-  location.assign(`/ai?mode=${aiMode.value}&difficulty=${aiDifficulty.value}`)
+  location.assign(`/ai?difficulty=${aiDifficulty.value}`)
 }
 
 async function create() {
   if (creating.value) return
   creating.value = true
   try {
-    location.assign(`/room/${await createRoom(inviteFrame.value, inviteMode.value)}`)
+    location.assign(`/room/${await createRoom(inviteFrame.value)}`)
   } catch {
     creating.value = false
   }
@@ -311,10 +305,8 @@ useEventListener(window, 'resize', updateScrollHint)
 
     <GameConfigDialog
       v-if="showAi"
-      v-model:mode="aiMode"
       v-model:difficulty="aiDifficulty"
       :show-frame="false"
-      :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"
@@ -325,7 +317,6 @@ useEventListener(window, 'resize', updateScrollHint)
     <GameConfigDialog
       v-if="showInvite"
       v-model:frame="inviteFrame"
-      v-model:mode="inviteMode"
       title="双人对战"
       :confirm-text="creating ? '创建中…' : '开始对战'"
       :loading="creating"
@@ -338,9 +329,8 @@ useEventListener(window, 'resize', updateScrollHint)
       v-if="showMatch"
       v-model:frames="frameChoices"
       multi
-      :show-mode="false"
       title="随机匹配"
-      hint="禁点模式 · 按双方选项的交集撮合"
+      hint="按双方选项的交集撮合"
       :confirm-text="matching ? `匹配中…${matchSeconds}s，点击取消` : '开始匹配'"
       :loading="matching"
       :disabled="matching"

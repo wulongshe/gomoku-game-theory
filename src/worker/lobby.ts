@@ -102,7 +102,7 @@ export class Lobby extends DurableObject<Env> {
       if (used.has(waiting[i].ws) || used.has(waiting[j].ws)) continue
       used.add(waiting[i].ws)
       used.add(waiting[j].ws)
-      const code = await allocateRoom(this.env, pickFrame(frames), 'forbidden', { matched: true })
+      const code = await allocateRoom(this.env, pickFrame(frames), { matched: true })
       const matched = JSON.stringify({ type: 'matched', code } satisfies LobbyServerMessage)
       for (const ws of [waiting[i].ws, waiting[j].ws]) {
         try {
@@ -116,7 +116,7 @@ export class Lobby extends DurableObject<Env> {
     for (const { ws, opts } of waiting) {
       if (used.has(ws) || now < opts.aiAt) continue
       used.add(ws)
-      const code = await allocateRoom(this.env, pickFrame(opts.frames), 'forbidden', {
+      const code = await allocateRoom(this.env, pickFrame(opts.frames), {
         ai: true,
         matched: true,
       })

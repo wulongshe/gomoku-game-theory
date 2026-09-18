@@ -1,12 +1,4 @@
-import {
-  BOARD_SIZE,
-  cellValue,
-  isLegalChoice,
-  type GameMode,
-  type GameState,
-  type Point,
-  type Seat,
-} from './game'
+import { BOARD_SIZE, isLegalChoice, type GameState, type Point, type Seat } from './game'
 
 const DIRECTIONS = [
   [1, 0],
@@ -19,16 +11,13 @@ export const WIN_SCORE = 1_000_000
 export const TERMINAL = 1_000_000_000
 
 // 同时落子下抢占对方强点即防守；系数衡量「与对方争抢同一点」的净收益（恒 < 1，能赢时优先自己赢）。
-const CONTEST_FACTOR: Record<GameMode, number> = {
-  forbidden: 0.9, // 撞子 → 死点，免费封杀
-  minus: 0.9, // 撞子 → 负子，封杀且反噬对方连线
-}
+const CONTEST_FACTOR = 0.9
 
 export function other(seat: Seat): Seat {
   return seat === 'black' ? 'white' : 'black'
 }
 
-// sum 为连线加权和（己子 +1、负子 -1），与判胜一致（≥5 即五连）；按「还差几子到五」分级。
+// sum 为连线己子数（≥5 即五连）；按「还差几子到五」分级。
 function lineScore(sum: number, openEnds: number): number {
   if (sum >= 5) return WIN_SCORE
   if (openEnds === 0) return 0
@@ -47,22 +36,16 @@ function placementScore(state: GameState, point: Point, seat: Seat): number {
     for (const sign of [1, -1] as const) {
       let x = point.x + dx * sign
       let y = point.y + dy * sign
-      // 与判胜同口径：每侧取加权和最大的前缀，段尾负子不摊薄连线。
-      let run = 0
-      let best = 0
       while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
         const cell = state.board[y * BOARD_SIZE + x]
-        const value = cellValue(cell, seat)
-        if (value === 0) {
+        if (cell !== seat) {
           if (cell === 'empty') openEnds++
           break
         }
-        run += value
-        if (run > best) best = run
+        sum++
         x += dx * sign
         y += dy * sign
       }
-      sum += best
     }
     total += lineScore(sum, openEnds)
   }
@@ -107,7 +90,6 @@ function insertTop(top: { point: Point; key: number }[], point: Point, key: numb
 // 同时累计双方威胁强度；免去候选、评估各扫一遍、同一分重算三遍，也省掉整盘 scored 数组与两次排序。
 export function analyzeBoard(state: GameState, seat: Seat, limit: number): BoardAnalysis {
   const opp = other(seat)
-  const contest = CONTEST_FACTOR[state.mode]
   const aiTop: { point: Point; key: number }[] = []
   const oppTop: { point: Point; key: number }[] = []
   let self1 = 0
@@ -136,8 +118,8 @@ export function analyzeBoard(state: GameState, seat: Seat, limit: number): Board
       } else if (oppScore > opp2) {
         opp2 = oppScore
       }
-      insertTop(aiTop, point, self + contest * oppScore, limit)
-      insertTop(oppTop, point, oppScore + contest * self, limit)
+      insertTop(aiTop, point, self + CONTEST_FACTOR * oppScore, limit)
+      insertTop(oppTop, point, oppScore + CONTEST_FACTOR * self, limit)
     }
   }
   return {

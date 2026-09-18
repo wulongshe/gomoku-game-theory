@@ -5,14 +5,13 @@ import {
   createGame,
   isLegalChoice,
   settleFrame,
-  type GameMode,
   type GameState,
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
 
-function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
-  const game = createGame(mode)
+function withStones(stones: Partial<Record<Seat, Point[]>>): GameState {
+  const game = createGame()
   game.frame = 2
   for (const seat of ['black', 'white'] as const) {
     for (const { x, y } of stones[seat] ?? []) {
@@ -96,35 +95,6 @@ describe('settleFrame', () => {
       [1, 2, 3, 4, 5].map((i) => ({ x: i, y: 5 })),
       [1, 2, 3, 4, 5].map((i) => ({ x: 5, y: i })),
     ])
-  })
-
-  it('turns a collision point into a minus cell in minus mode', () => {
-    const next = settleFrame(createGame('minus'), { black: { x: 6, y: 6 }, white: { x: 6, y: 6 } })
-    expect(cellAt(next, { x: 6, y: 6 })).toBe('minus')
-    expect(next.phase).toBe('playing')
-    expect(isLegalChoice(next, { x: 6, y: 6 })).toBe(false)
-  })
-
-  it('counts a minus cell as -1 for both sides', () => {
-    const game = withStones({ black: [0, 1, 2, 3].map((i) => ({ x: i, y: 5 })) }, 'minus')
-    game.board[5 * BOARD_SIZE + 4] = 'minus'
-    const next = settleFrame(game, { black: { x: 5, y: 5 }, white: { x: 8, y: 8 } })
-    expect(next.phase).toBe('playing')
-  })
-
-  it('wins on five in a row despite a minus cell just outside the run', () => {
-    const game = withStones({ black: [1, 3, 4, 5].map((i) => ({ x: i, y: 5 })) }, 'minus')
-    game.board[5 * BOARD_SIZE + 0] = 'minus'
-    const next = settleFrame(game, { black: { x: 2, y: 5 }, white: { x: 8, y: 8 } })
-    expect(next.phase).toBe('black_won')
-    expect(next.winningLines).toEqual([[1, 2, 3, 4, 5].map((i) => ({ x: i, y: 5 }))])
-  })
-
-  it('wins through a minus cell once the net count reaches five', () => {
-    const game = withStones({ black: [1, 2, 3, 5, 6].map((i) => ({ x: i, y: 5 })) }, 'minus')
-    game.board[5 * BOARD_SIZE + 4] = 'minus'
-    const next = settleFrame(game, { black: { x: 7, y: 5 }, white: { x: 8, y: 8 } })
-    expect(next.phase).toBe('black_won')
   })
 
   it('treats null as a pass, placing only the other stone', () => {
@@ -242,8 +212,8 @@ describe('settleFrame', () => {
 
 
   // (2x+y)%5<3 花纹：任何方向的五窗都黑白混杂，单个空点四周也拼不出净五连。
-  function deadPattern(mode: GameMode): GameState {
-    const game = createGame(mode)
+  function deadPattern(): GameState {
+    const game = createGame()
     game.frame = 2
     for (let y = 0; y < BOARD_SIZE; y++) {
       for (let x = 0; x < BOARD_SIZE; x++) {
@@ -253,60 +223,35 @@ describe('settleFrame', () => {
     return game
   }
 
-  it.each(['forbidden', 'minus'] as const)(
-    'declares a draw in %s mode once no side can ever reach five',
-    (mode) => {
-      const game = deadPattern(mode)
-      game.board[0] = 'empty'
-      expect(game.board.filter((c) => c === 'empty')).toHaveLength(1)
-      const next = settleFrame(game, { black: null, white: null })
-      expect(next.phase).toBe('draw')
-    },
-  )
+  it('declares a draw once no side can ever reach five', () => {
+    const game = deadPattern()
+    game.board[0] = 'empty'
+    expect(game.board.filter((c) => c === 'empty')).toHaveLength(1)
+    const next = settleFrame(game, { black: null, white: null })
+    expect(next.phase).toBe('draw')
+  })
 
-  it.each([
-    ['forbidden', 'forbidden'],
-    ['minus', 'minus'],
-  ] as const)(
-    'keeps a %s game alive while the collision stones can still reach five',
-    (mode, cell) => {
-      const game = deadPattern(mode)
-      for (let x = 0; x < 4; x++) game.board[x] = cell
-      game.board[4] = 'empty'
-      const next = settleFrame(game, { black: null, white: null })
-      expect(next.phase).toBe('playing')
-    },
-  )
+  it('keeps the game alive while the forbidden cells can still reach five', () => {
+    const game = deadPattern()
+    for (let x = 0; x < 4; x++) game.board[x] = 'forbidden'
+    game.board[4] = 'empty'
+    const next = settleFrame(game, { black: null, white: null })
+    expect(next.phase).toBe('playing')
+  })
 
-  it.each([
-    ['forbidden', 'forbidden'],
-    ['minus', 'minus'],
-  ] as const)(
-    'sees a potential collision five needing several new stones in %s mode',
-    (mode, cell) => {
-      const game = deadPattern(mode)
-      game.board[0] = cell
-      game.board[1] = cell
-      game.board[2] = 'empty'
-      game.board[3] = 'empty'
-      game.board[4] = cell
-      const next = settleFrame(game, { black: null, white: null })
-      expect(next.phase).toBe('playing')
-    },
-  )
-
-  it('sees a potential five that crosses a minus cell (1 1 1 1 -1 0 0)', () => {
-    const game = deadPattern('minus')
-    for (let x = 0; x < 4; x++) game.board[x] = 'black'
-    game.board[4] = 'minus'
-    game.board[5] = 'empty'
-    game.board[6] = 'empty'
+  it('sees a potential forbidden five needing several new collisions', () => {
+    const game = deadPattern()
+    game.board[0] = 'forbidden'
+    game.board[1] = 'forbidden'
+    game.board[2] = 'empty'
+    game.board[3] = 'empty'
+    game.board[4] = 'forbidden'
     const next = settleFrame(game, { black: null, white: null })
     expect(next.phase).toBe('playing')
   })
 
   it('does not declare a dead draw while a player still has room for five', () => {
-    const game = deadPattern('forbidden')
+    const game = deadPattern()
     for (let x = 0; x < 5; x++) game.board[x] = 'empty'
     game.board[0] = 'black'
     const next = settleFrame(game, { black: null, white: null })

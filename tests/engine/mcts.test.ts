@@ -5,14 +5,13 @@ import {
   createGame,
   inOpeningArea,
   isLegalChoice,
-  type GameMode,
   type GameState,
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
 
-function withStones(stones: Partial<Record<Seat, Point[]>>, mode: GameMode = 'forbidden'): GameState {
-  const game = createGame(mode)
+function withStones(stones: Partial<Record<Seat, Point[]>>): GameState {
+  const game = createGame()
   game.frame = 2
   for (const seat of ['black', 'white'] as const) {
     for (const { x, y } of stones[seat] ?? []) {

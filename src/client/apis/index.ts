@@ -1,11 +1,10 @@
-import type { GameMode } from '@gomoku/engine/game'
 import type { TournamentInfo } from '@/shared/protocol'
 import { useAuthToken } from '~/composables/useAuthToken'
 
 const authToken = useAuthToken()
 
-export async function createRoom(frameSeconds: number, mode: GameMode): Promise<string> {
-  const res = await fetch(`/api/rooms?frame=${frameSeconds}&mode=${mode}`, { method: 'POST' })
+export async function createRoom(frameSeconds: number): Promise<string> {
+  const res = await fetch(`/api/rooms?frame=${frameSeconds}`, { method: 'POST' })
   if (!res.ok) throw new Error(`createRoom failed: ${res.status}`)
   const { code } = (await res.json()) as { code: string }
   return code

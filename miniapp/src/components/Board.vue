@@ -77,7 +77,6 @@ const stones = computed(() =>
 )
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
-const minuses = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'minus'))
 
 // 湮灭动画：从连线原点向外逐格延迟消失，与 web 的 delay 公式一致。
 const VANISH_BASE_MS = 280
@@ -240,16 +239,6 @@ function onBoardTap(e: TapEvent): void {
     </view>
 
     <view
-      v-for="p in minuses"
-      :key="`m${p.x}-${p.y}`"
-      class="mark-cell mark-minus"
-      :style="`left:${pos(p.x) - STONE_R}rpx;top:${pos(p.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx`"
-    >
-      <view class="bar bar-minus" />
-      <view v-if="isLast(p)" class="last-dot last-dot-mark" />
-    </view>
-
-    <view
       v-for="p in forbidden"
       :key="`f${p.x}-${p.y}`"
       class="mark-cell mark-forbidden"
@@ -267,7 +256,6 @@ function onBoardTap(e: TapEvent): void {
       :style="`left:${pos(v.x) - STONE_R}rpx;top:${pos(v.y) - STONE_R}rpx;width:${STONE_R * 2}rpx;height:${STONE_R * 2}rpx;animation-delay:${v.delay}ms`"
     >
       <view v-if="v.cell === 'black' || v.cell === 'white'" :class="['stone-still', `stone-${v.cell}`]" />
-      <view v-else-if="v.cell === 'minus'" class="mark-still mark-minus"><view class="bar bar-minus" /></view>
       <view v-else-if="v.cell === 'forbidden'" class="mark-still mark-forbidden">
         <view class="bar bar-cross bar-cross-a" />
         <view class="bar bar-cross bar-cross-b" />
@@ -425,18 +413,10 @@ function onBoardTap(e: TapEvent): void {
   box-shadow: inset 0 0 0 3rpx #ef4444;
   background: rgba(239, 68, 68, 0.32);
 }
-.mark-minus {
-  box-shadow: inset 0 0 0 3rpx #7c3aed;
-  background: rgba(124, 58, 237, 0.32);
-}
 .bar {
   position: absolute;
   height: 3rpx;
   border-radius: 3rpx;
-}
-.bar-minus {
-  width: 45%;
-  background: #7c3aed;
 }
 .bar-cross {
   width: 64%;

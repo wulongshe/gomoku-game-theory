@@ -1,5 +1,4 @@
 import { customAlphabet } from 'nanoid'
-import type { GameMode } from '@gomoku/engine/game'
 import type { Difficulty } from '@gomoku/engine/ai'
 import { ROOM_CODE_LENGTHS } from '@/shared/protocol'
 
@@ -11,7 +10,6 @@ const ATTEMPTS_PER_LENGTH = 6
 export async function allocateRoom(
   env: Env,
   frame: number,
-  mode: GameMode,
   opts?: {
     tournament?: {
       players: [string, string]
@@ -24,7 +22,7 @@ export async function allocateRoom(
   for (const generate of generators) {
     for (let attempt = 0; attempt < ATTEMPTS_PER_LENGTH; attempt++) {
       const code = generate()
-      const params = new URLSearchParams({ frame: String(frame), mode })
+      const params = new URLSearchParams({ frame: String(frame) })
       if (opts?.matched) params.set('matched', '1')
       if (opts?.tournament) {
         // DO 无法从自身 id 反推房号，故把 code 与对阵双方一并写进房间。

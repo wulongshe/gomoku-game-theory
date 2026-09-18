@@ -1,14 +1,8 @@
-import type { GameMode } from '@gomoku/engine/game'
 import type { Difficulty } from '@gomoku/engine/ai'
 
 export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
 export const SUBTITLE = '经典五子棋 × 同时落子，每一手都是心理博弈'
-
-export const MODE_LABELS: Record<GameMode, string> = {
-  forbidden: '禁点',
-  minus: '负子',
-}
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',
@@ -27,7 +21,7 @@ export function rules() {
     {
       icon: '🧠',
       title: '撞子博弈，读心制胜',
-      text: '双方同一落点，该点变为禁点或负子',
+      text: '双方同一落点，该点变为禁点',
     },
     {
       icon: '⭐',
@@ -58,16 +52,14 @@ const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience
   {
     title: '🧠 撞子',
     items: [
-      { text: '双方落在同一点即为撞子，按开局时选择的模式处理' },
-      { text: '禁点模式：该点变为禁点，双方都无法再落子' },
-      { text: '负子模式：化作负子，双方连线时都减 1' },
+      { text: '双方落在同一点即为撞子，该点变为禁点，双方都无法再落子' },
       { text: '禁点连成五：整条禁点线清除，位置重新可用' },
     ],
   },
   {
     title: '⭐ 胜负',
     items: [
-      { text: '任意方向连续棋子累计满 5 即胜，负子减 1' },
+      { text: '任意方向连续五子即胜' },
       { text: '棋盘下满仍无人连五则为和棋' },
       { text: '双方同时连五，连线棋子一起消失，对局继续' },
       { text: '中途退出判负', only: 'pvp' },

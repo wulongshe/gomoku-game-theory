@@ -1,26 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Difficulty } from '@gomoku/engine/ai'
-import type { GameMode } from '@gomoku/engine/game'
-import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
-import type { GameConfig } from '@/game/config'
+import { DIFFICULTY_LABELS } from '@gomoku/branding'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 
-const props = withDefaults(
-  defineProps<{
-    mode?: GameMode
-    difficulty?: Difficulty
-  }>(),
-  { mode: 'forbidden', difficulty: 'normal' },
-)
+const props = withDefaults(defineProps<{ difficulty?: Difficulty }>(), { difficulty: 'normal' })
 
-const emit = defineEmits<{ cancel: []; confirm: [config: GameConfig] }>()
+const emit = defineEmits<{ cancel: []; confirm: [difficulty: Difficulty] }>()
 
-const mode = ref<GameMode>(props.mode)
 const difficulty = ref<Difficulty>(props.difficulty)
 
 function confirm(): void {
-  emit('confirm', { mode: mode.value, difficulty: difficulty.value })
+  emit('confirm', difficulty.value)
 }
 </script>
 
@@ -30,21 +21,6 @@ function confirm(): void {
       <view class="panel-head">
         <text class="panel-title">人机对战</text>
         <text class="panel-close" @tap="emit('cancel')">✕</text>
-      </view>
-
-      <view class="field">
-        <text class="field-label">撞子后</text>
-        <view class="seg">
-          <view
-            v-for="m in AI_MODE_OPTIONS"
-            :key="m"
-            class="seg-item"
-            :class="{ 'seg-on': m === mode }"
-            @tap="mode = m"
-          >
-            {{ MODE_LABELS[m] }}
-          </view>
-        </view>
       </view>
 
       <view class="field">

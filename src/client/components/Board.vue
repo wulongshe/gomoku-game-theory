@@ -68,8 +68,6 @@ const stones = computed(() =>
 
 const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
 
-const minuses = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'minus'))
-
 const VANISH_BASE_MS = 280
 const VANISH_STEP_MS = 90
 
@@ -231,22 +229,6 @@ function isLastMove(p: Point): boolean {
       />
     </g>
 
-    <g v-for="p in minuses" :key="`m${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
-      <g
-        stroke="#7c3aed"
-        stroke-linecap="round"
-        class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
-      >
-        <circle :r="FORBID_R" fill="#7c3aed" fill-opacity="0.32" stroke-width="2.5" />
-        <line :x1="-FORBID_R * 0.45" y1="0" :x2="FORBID_R * 0.45" y2="0" stroke-width="3" />
-      </g>
-      <!-- 白色底衬遮住穿过中心的符号线，让圆点与棋子上的最后落点标识观感一致 -->
-      <g v-if="isLastMove(p)">
-        <circle r="7" fill="#ffffff" />
-        <circle r="5" fill="#1c1917" opacity="0.85" />
-      </g>
-    </g>
-
     <g v-for="p in forbidden" :key="`f${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
       <g
         stroke="#ef4444"
@@ -257,6 +239,7 @@ function isLastMove(p: Point): boolean {
         <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
         <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
       </g>
+      <!-- 白色底衬遮住穿过中心的符号线，让圆点与棋子上的最后落点标识观感一致 -->
       <g v-if="isLastMove(p)">
         <circle r="7" fill="#ffffff" />
         <circle r="5" fill="#1c1917" opacity="0.85" />
@@ -275,12 +258,6 @@ function isLastMove(p: Point): boolean {
             :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
             stroke-width="1"
           />
-        </template>
-        <template v-else-if="v.cell === 'minus'">
-          <g stroke="#7c3aed" stroke-linecap="round">
-            <circle :r="FORBID_R" fill="#7c3aed" fill-opacity="0.32" stroke-width="2.5" />
-            <line :x1="-FORBID_R * 0.45" y1="0" :x2="FORBID_R * 0.45" y2="0" stroke-width="3" />
-          </g>
         </template>
         <template v-else-if="v.cell === 'forbidden'">
           <g stroke="#ef4444" stroke-linecap="round">

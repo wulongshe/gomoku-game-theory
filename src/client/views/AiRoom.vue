@@ -18,7 +18,6 @@ import {
   isLegalChoice,
   settleFrame,
   type ClearedGroup,
-  type GameMode,
   type GameState,
   type Point,
 } from '@gomoku/engine/game'
@@ -26,28 +25,25 @@ import { useAiOpponent } from '~/composables/useAiOpponent'
 import { useFrameClock } from '~/composables/useFrameClock'
 import { useGameReview } from '~/composables/useGameReview'
 import { useGameResult } from '~/composables/useGameResult'
-import { DIFFICULTY_LABELS, MODE_LABELS } from '@gomoku/branding'
-import { AI_MODE_OPTIONS, DIFFICULTY_OPTIONS } from '@gomoku/config'
+import { DIFFICULTY_LABELS } from '@gomoku/branding'
+import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 import { AI_FRAME_START_KEY, AI_GAME_KEY, AI_MOVES_KEY } from '~/constants/storage'
 import { backOrReplace } from '~/utils/navigation'
 import type { FrameMoves } from '@/shared/protocol'
 
 const params = new URLSearchParams(location.search)
-const rawMode = params.get('mode') as GameMode
 const rawDifficulty = params.get('difficulty') as Difficulty
 
-const mode = ref<GameMode>(AI_MODE_OPTIONS.includes(rawMode) ? rawMode : 'forbidden')
 // 人机对战恒不限时（无回合计时，仅正计时 Ns/∞）。
 const frameSeconds = 0
 const difficulty = ref<Difficulty>(
   DIFFICULTY_OPTIONS.includes(rawDifficulty) ? rawDifficulty : 'normal',
 )
 
-// 本地对局持久化：仅「刷新」续上存档（且模式一致）；从首页/直接进入（navigate）一律重开，即使配置相同。
+// 本地对局持久化：仅「刷新」续上存档；从首页/直接进入（navigate）一律重开，即使配置相同。
 function loadSavedGame(): GameState | null {
   try {
-    const saved = JSON.parse(localStorage.getItem(AI_GAME_KEY) ?? 'null') as GameState | null
-    return saved && saved.mode === mode.value ? saved : null
+    return JSON.parse(localStorage.getItem(AI_GAME_KEY) ?? 'null') as GameState | null
   } catch {
     return null
   }
@@ -56,7 +52,7 @@ const reloaded =
   (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type ===
   'reload'
 const savedGame = reloaded ? loadSavedGame() : null
-const game = ref<GameState>(savedGame ?? createGame(mode.value))
+const game = ref<GameState>(savedGame ?? createGame())
 watch(game, (g) => localStorage.setItem(AI_GAME_KEY, JSON.stringify(g)), { immediate: true })
 // 刷新续局时一并续上本回合正计时起点，避免归零。
 const savedFrameStart = savedGame ? Number(localStorage.getItem(AI_FRAME_START_KEY)) || null : null
@@ -79,7 +75,7 @@ let movesLog: FrameMoves[] = []
 if (savedGame) {
   try {
     const saved = JSON.parse(localStorage.getItem(AI_MOVES_KEY) ?? '[]') as FrameMoves[]
-    let replayed = createGame(savedGame.mode)
+    let replayed = createGame()
     for (const [black, white] of saved) {
       replayed = settleFrame(replayed, { black, white })
       recordFrame(replayed)
@@ -106,7 +102,6 @@ const ai = useAiOpponent()
 let pendingAiMove: Promise<Point | null> | null = null
 
 const showConfig = ref(false)
-const configMode = ref<GameMode>(mode.value)
 const configDifficulty = ref<Difficulty>(difficulty.value)
 
 const playing = computed(() => game.value.phase === 'playing')
@@ -182,7 +177,7 @@ const displayFrame = computed(() => {
 })
 
 function restart() {
-  game.value = createGame(mode.value)
+  game.value = createGame()
   resetReview()
   movesLog = []
   localStorage.removeItem(AI_MOVES_KEY)
@@ -204,16 +199,14 @@ function exitRoom() {
 }
 
 function openConfig() {
-  configMode.value = mode.value
   configDifficulty.value = difficulty.value
   showConfig.value = true
 }
 
 function confirmConfig() {
   showConfig.value = false
-  mode.value = configMode.value
   difficulty.value = configDifficulty.value
-  history.replaceState(null, '', `/ai?mode=${mode.value}&difficulty=${difficulty.value}`)
+  history.replaceState(null, '', `/ai?difficulty=${difficulty.value}`)
   restart()
 }
 
@@ -256,7 +249,7 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
           class="flex cursor-pointer items-center gap-1 justify-self-end font-medium text-stone-500 transition-colors hover:text-stone-700 active:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200 dark:active:text-stone-200"
           @click="showRules = true"
         >
-          {{ MODE_LABELS[game.mode] }}模式
+          游戏规则
           <IconHelp class="size-4" />
         </button>
       </div>
@@ -327,10 +320,8 @@ const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGa
 
     <GameConfigDialog
       v-if="showConfig"
-      v-model:mode="configMode"
       v-model:difficulty="configDifficulty"
       :show-frame="false"
-      :mode-options="AI_MODE_OPTIONS"
       :difficulties="DIFFICULTY_OPTIONS"
       title="人机对战"
       confirm-text="开始对战"

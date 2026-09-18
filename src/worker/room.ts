@@ -4,7 +4,6 @@ import {
   FRAME_SECONDS,
   isLegalChoice,
   settleFrame,
-  type GameMode,
   type GameState,
   type Point,
   type Seat,
@@ -81,12 +80,8 @@ type Choices = Partial<Record<Seat, { point: Point | null; final: boolean }>>
 
 type SeatFlags = Partial<Record<Seat, boolean>>
 
-interface RematchProposal {
-  frameSeconds: number
-  mode: GameMode
-}
-
-type RematchProposals = Partial<Record<Seat, RematchProposal>>
+// 再来一局提案：各座位提出的每回合秒数。
+type RematchProposals = Partial<Record<Seat, number>>
 
 interface TournamentTag {
   code: string
@@ -120,8 +115,7 @@ export class Room extends DurableObject<Env> {
         return new Response(null, { status: 409 })
       }
       const frameSeconds = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
-      const mode = (url.searchParams.get('mode') ?? 'forbidden') as GameMode
-      const entries: Record<string, unknown> = { created: true, frameSeconds, mode }
+      const entries: Record<string, unknown> = { created: true, frameSeconds }
       if (url.searchParams.get('matched') === '1') entries.matched = true
       if (url.searchParams.get('ai') === '1') {
         // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
@@ -240,7 +234,6 @@ export class Room extends DurableObject<Env> {
       type: 'joined',
       seat,
       frameSeconds: await this.frameSeconds(),
-      mode: await this.mode(),
       ...(tournament && { tournament: true as const }),
     })
     this.broadcast({ type: 'players', accounts: await this.displayAccounts(await this.seatEmails()) })
@@ -299,7 +292,6 @@ export class Room extends DurableObject<Env> {
       type: 'joined',
       seat: 'black',
       frameSeconds: await this.frameSeconds(),
-      mode: await this.mode(),
       tournament: true,
       spectator: true,
     })
@@ -440,12 +432,8 @@ export class Room extends DurableObject<Env> {
     return (await this.ctx.storage.get<number>('frameSeconds')) ?? FRAME_SECONDS
   }
 
-  private async mode(): Promise<GameMode> {
-    return (await this.ctx.storage.get<GameMode>('mode')) ?? 'forbidden'
-  }
-
   private async startGame(): Promise<void> {
-    const game = createGame(await this.mode())
+    const game = createGame()
     const frameSeconds = await this.frameSeconds()
     await this.ctx.storage.delete(['choices', 'rematch', 'ready', 'pace'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
@@ -531,10 +519,7 @@ export class Room extends DurableObject<Env> {
       return this.broadcastLobby()
     }
     if (msg.type === 'rematch') {
-      return this.handleRematch(ws, seat, game, {
-        frameSeconds: msg.frameSeconds,
-        mode: msg.mode,
-      })
+      return this.handleRematch(ws, seat, game, msg.frameSeconds)
     }
     if (msg.type === 'rematch_decline') {
       if (game && game.phase !== 'playing') {
@@ -644,28 +629,26 @@ export class Room extends DurableObject<Env> {
     ws: WebSocket,
     seat: Seat,
     game: GameState | undefined,
-    proposal: RematchProposal,
+    frameSeconds: number,
   ): Promise<void> {
     if (!game || game.phase === 'playing') {
       return this.send(ws, { type: 'error', message: 'game not finished' })
     }
     const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
-    const other = rematch[seat === 'black' ? 'white' : 'black']
-    const accepted = other?.frameSeconds === proposal.frameSeconds && other.mode === proposal.mode
-    if (!accepted) {
-      rematch[seat] = proposal
+    if (rematch[seat === 'black' ? 'white' : 'black'] !== frameSeconds) {
+      rematch[seat] = frameSeconds
       await this.ctx.storage.put('rematch', rematch)
-      this.notifyPeers(ws, { type: 'rematch_requested', ...proposal })
+      this.notifyPeers(ws, { type: 'rematch_requested', frameSeconds })
       const [aiSeat] = Object.keys(await this.aiSeats()) as Seat[]
       if (aiSeat) {
         await this.planAi(aiSeat, 1000 + Math.random() * 2500)
       }
       return
     }
-    await this.applyRematch(proposal)
+    await this.applyRematch(frameSeconds)
   }
 
-  private async applyRematch(proposal: RematchProposal): Promise<void> {
+  private async applyRematch(frameSeconds: number): Promise<void> {
     await this.ctx.storage.delete([
       'game',
       'choices',
@@ -677,11 +660,11 @@ export class Room extends DurableObject<Env> {
       'aiArrive',
       'pace',
     ])
-    await this.ctx.storage.put({ frameSeconds: proposal.frameSeconds, mode: proposal.mode })
+    await this.ctx.storage.put('frameSeconds', frameSeconds)
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as Attachment
-      this.send(socket, { type: 'joined', seat: attachment.seat, ...proposal })
+      this.send(socket, { type: 'joined', seat: attachment.seat, frameSeconds })
     }
     await this.broadcastLobby()
   }
@@ -845,7 +828,7 @@ export class Room extends DurableObject<Env> {
     if (tournament) return this.armAlarm()
     const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
     const proposal = rematch[seat === 'black' ? 'white' : 'black']
-    if (proposal) {
+    if (proposal !== undefined) {
       await this.applyRematch(proposal)
       return this.scheduleAiArrivals(await this.aiSeats(), 800 + Math.random() * 2000)
     }

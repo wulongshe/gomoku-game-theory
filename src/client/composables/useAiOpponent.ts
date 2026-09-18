@@ -9,7 +9,6 @@ function snapshot(state: GameState): GameState {
     board: [...state.board],
     phase: state.phase,
     frame: state.frame,
-    mode: state.mode,
     cleared: [],
     lastMoves: [],
     winningLines: [],
