@@ -14,7 +14,7 @@ const variants = {
 
 <template>
   <button
-    class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium"
+    class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium disabled:cursor-default disabled:opacity-50"
     :class="variants[variant]"
   >
     <slot />

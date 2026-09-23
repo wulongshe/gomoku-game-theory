@@ -53,7 +53,8 @@
     }
   ],
   "vars": {
-    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>"
+    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>",
+    "MATCH_WINDOW": "20:00-22:00"
   },
   "env": {
     "beta": {

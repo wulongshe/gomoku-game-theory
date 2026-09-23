@@ -165,6 +165,23 @@ describe('Room', () => {
     await b.next('start')
   })
 
+  it('paces matched rooms from 10s a frame regardless of the configured duration', async () => {
+    await env.ROOM.get(env.ROOM.idFromName('1021')).fetch('https://room/create?matched=1', {
+      method: 'POST',
+    })
+    const a = await connect('1021', 'key-a')
+    const b = await connect('1021', 'key-b')
+    expect(await a.next('joined')).toMatchObject({ paced: true })
+    await b.next('joined')
+    a.ready()
+    b.ready()
+    const start = await a.next('start')
+    if (start.type !== 'start') throw new Error('unreachable')
+    expect(start.deadline).toBeGreaterThan(Date.now() + 8_000)
+    expect(start.deadline).toBeLessThan(Date.now() + 11_000)
+    await b.next('start')
+  })
+
   it('clears a ready flag when a player leaves before the game', async () => {
     await createRoom('1019')
     const a = await connect('1019', 'key-a')

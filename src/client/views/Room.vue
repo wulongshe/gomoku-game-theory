@@ -41,7 +41,12 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import type { ClientMessage, FrameMoves, ServerMessage } from '@/shared/protocol'
+import {
+  matchFrameSeconds,
+  type ClientMessage,
+  type FrameMoves,
+  type ServerMessage,
+} from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
@@ -89,6 +94,8 @@ const showSettings = ref(false)
 const showPlayers = ref(false)
 const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null })
 const frameSeconds = ref(FRAME_SECONDS)
+// 匹配房帧时长按回合数渐增（与 Room DO 的 scheduleFrame 一致），进度条分母跟随当前帧。
+const paced = ref(false)
 const autoSubmit = useStorage('auto-submit', false)
 const showConcede = ref(false)
 const drawInvite = ref(false)
@@ -215,6 +222,7 @@ function handleMessage(msg: ServerMessage) {
     case 'joined':
       seat.value = msg.seat
       frameSeconds.value = msg.frameSeconds
+      paced.value = msg.paced === true
       rematchAsked.value = false
       rematchConfig.value = false
       rematchInvite.value = false
@@ -237,7 +245,7 @@ function handleMessage(msg: ServerMessage) {
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now() - msg.elapsed
-      frameSeconds.value = msg.frameSeconds
+      frameSeconds.value = paced.value ? matchFrameSeconds(msg.state.frame) : msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
@@ -263,6 +271,7 @@ function handleMessage(msg: ServerMessage) {
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
+      if (paced.value) frameSeconds.value = matchFrameSeconds(msg.state.frame)
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now()
       selected.value = null
@@ -529,6 +538,7 @@ function exitRoom() {
       v-else-if="stage === 'ready'"
       :code="props.code"
       :frame-seconds="frameSeconds"
+      :paced="paced"
       :seat="seat"
       :my-ready="myReady"
       :opp-ready="oppReady"
@@ -733,7 +743,7 @@ function exitRoom() {
 
     <RematchInviteDialog
       v-if="rematchInvite"
-      :frame-seconds="rematchProposal"
+      :frame-seconds="paced ? null : rematchProposal"
       :seconds-left="inviteSecondsLeft"
       @accept="acceptRematch"
       @decline="declineRematch"
@@ -742,6 +752,7 @@ function exitRoom() {
     <GameConfigDialog
       v-if="rematchConfig"
       v-model:frame="rematchFrame"
+      :show-frame="!paced"
       title="再来一局"
       confirm-text="发起邀请"
       @cancel="rematchConfig = false"

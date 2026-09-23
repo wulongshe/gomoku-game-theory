@@ -4,7 +4,10 @@ import { cloudflareTest } from '@cloudflare/vitest-pool-workers'
 
 export default defineConfig({
   plugins: [
-    cloudflareTest({ wrangler: { configPath: './wrangler.jsonc' } }),
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.jsonc' },
+      miniflare: { bindings: { MATCH_WINDOW: '00:00-00:00' } },
+    }),
   ],
   resolve: {
     alias: {

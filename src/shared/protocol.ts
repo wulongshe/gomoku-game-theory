@@ -7,6 +7,18 @@ export const ROOM_CODE_LENGTHS = [4, 6, 8]
 export const ROOM_CODE_MAX_LENGTH = ROOM_CODE_LENGTHS[ROOM_CODE_LENGTHS.length - 1]
 export const ROOM_CODE_PATTERN = /^\d{4,8}$/
 
+// 随机匹配对局逐帧时限：开局快节奏，中盘逐帧放宽到 45s 封顶（前 5 帧 10s，之后每帧 +1s）。
+export function matchFrameSeconds(frame: number): number {
+  return Math.min(45, Math.max(10, 10 + frame - 5))
+}
+
+// 随机匹配的当前或下一个开放时段（服务端时钟）。
+export interface MatchWindow {
+  now: number
+  opensAt: number
+  closesAt: number
+}
+
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 8
 
@@ -29,7 +41,7 @@ export type ClientMessage =
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
-  | { type: 'joined'; seat: Seat; frameSeconds: number }
+  | { type: 'joined'; seat: Seat; frameSeconds: number; paced?: true }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | { type: 'players'; accounts: Record<Seat, string | null> }
   | {

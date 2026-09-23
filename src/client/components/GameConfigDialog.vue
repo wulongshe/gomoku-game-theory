@@ -12,7 +12,6 @@ withDefaults(
     title: string
     confirmText: string
     hint?: string
-    multi?: boolean
     loading?: boolean
     disabled?: boolean
     showFrame?: boolean
@@ -23,7 +22,6 @@ withDefaults(
 const emit = defineEmits<{ cancel: []; confirm: [] }>()
 
 const frame = defineModel<number>('frame', { default: FRAME_OPTIONS[0] })
-const frames = defineModel<number[]>('frames', { default: () => [] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
@@ -35,14 +33,7 @@ const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
     <div class="flex flex-col gap-3 text-sm">
       <div v-if="showFrame" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">每回合</span>
-        <SegmentedControl
-          v-model="frame"
-          v-model:values="frames"
-          :options="FRAME_OPTIONS"
-          :label="frameLabel"
-          :multi="multi"
-          :disabled="disabled"
-        />
+        <SegmentedControl v-model="frame" :options="FRAME_OPTIONS" :label="frameLabel" :disabled="disabled" />
       </div>
       <div v-if="difficulties" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">难度</span>

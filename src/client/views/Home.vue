@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useEventListener, useStorage, useTimestamp, useWebSocket } from '@vueuse/core'
 import AppButton from '~/components/AppButton.vue'
+import AppDialog from '~/components/AppDialog.vue'
+import DialogButton from '~/components/DialogButton.vue'
 import AuthDialog from '~/components/AuthDialog.vue'
 import GameConfigDialog from '~/components/GameConfigDialog.vue'
 import LeaderboardDialog from '~/components/LeaderboardDialog.vue'
@@ -11,11 +13,13 @@ import IconChevronRight from '~/components/icons/IconChevronRight.vue'
 import IconGithub from '~/components/icons/IconGithub.vue'
 import IconHelp from '~/components/icons/IconHelp.vue'
 import IconShare from '~/components/icons/IconShare.vue'
+import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconUser from '~/components/icons/IconUser.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
-import { createRoom, matchWsUrl } from '~/apis'
+import { createRoom, fetchMatchWindow, matchWsUrl } from '~/apis'
+import { formatClock } from '~/utils/format'
 import { useAuth } from '~/composables/useAuth'
 import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { DIFFICULTY_OPTIONS } from '@gomoku/config'
@@ -24,6 +28,7 @@ import {
   ROOM_CODE_MAX_LENGTH,
   ROOM_CODE_PATTERN,
   type LobbyServerMessage,
+  type MatchWindow,
 } from '@/shared/protocol'
 import { type Difficulty } from '@gomoku/engine/ai'
 
@@ -42,10 +47,6 @@ refresh()
 const authLabel = computed(() => (loggedIn.value ? authEmail.value.split('@')[0] : '登录/注册'))
 let matched = false
 
-const frameChoices = useStorage<number[]>('frame-choices', [...FRAME_OPTIONS])
-frameChoices.value = frameChoices.value.filter((f) => FRAME_OPTIONS.includes(f))
-if (!frameChoices.value.length) frameChoices.value = [...FRAME_OPTIONS]
-
 const sitePoster = ref<InstanceType<typeof SharePoster> | null>(null)
 const siteUrl = `${location.origin}/`
 
@@ -59,6 +60,35 @@ function join() {
 const now = useTimestamp({ interval: 1000 })
 const matchStart = ref(0)
 const matchSeconds = computed(() => Math.max(0, Math.floor((now.value - matchStart.value) / 1000)))
+
+// 随机匹配限时开放：以服务端时钟校准后判断是否在时段内，时段过了再拉下一段。
+const matchWindow = ref<MatchWindow | null>(null)
+let clockOffset = 0
+function loadMatchWindow() {
+  fetchMatchWindow()
+    .then((w) => {
+      clockOffset = w.now - Date.now()
+      matchWindow.value = w
+    })
+    .catch(() => {})
+}
+loadMatchWindow()
+const matchOpen = computed(() => {
+  const w = matchWindow.value
+  if (!w) return false
+  const t = now.value + clockOffset
+  return t >= w.opensAt && t < w.closesAt
+})
+watch(
+  () => matchWindow.value !== null && now.value + clockOffset >= matchWindow.value.closesAt,
+  (passed) => passed && loadMatchWindow(),
+)
+// 全天开放（起止相同的配置）不显示时段。
+const matchHours = computed(() => {
+  const w = matchWindow.value
+  if (!w || w.closesAt - w.opensAt >= 86_400_000) return ''
+  return `${formatClock(w.opensAt)}~${formatClock(w.closesAt)}`
+})
 
 const inviteFrame = useStorage('invite-frame', FRAME_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
@@ -81,29 +111,28 @@ async function create() {
   }
 }
 
-const { open: openMatch, close: closeMatch } = useWebSocket(
-  computed(() => matchWsUrl(frameChoices.value)),
-  {
-    immediate: false,
-    autoConnect: false,
-    onMessage(_, event) {
-      const msg = JSON.parse(event.data) as LobbyServerMessage
-      if (msg.type === 'matched') {
-        matched = true
-        location.assign(`/room/${msg.code}`)
-      }
-    },
-    onDisconnected() {
-      if (!matched) matching.value = false
-    },
+const { open: openMatch, close: closeMatch } = useWebSocket(computed(matchWsUrl), {
+  immediate: false,
+  autoConnect: false,
+  onMessage(_, event) {
+    const msg = JSON.parse(event.data) as LobbyServerMessage
+    if (msg.type === 'matched') {
+      matched = true
+      location.assign(`/room/${msg.code}`)
+    }
   },
-)
+  onDisconnected() {
+    if (!matched) matching.value = false
+  },
+})
 
 function toggleMatch() {
   if (matching.value) {
     closeMatch()
     matching.value = false
-  } else {
+  } else if (matchWindow.value === null || matchOpen.value) {
+    // 时段未知（拉取失败）时照常尝试连接，由服务端裁决；顺带重拉一次时段。
+    if (matchWindow.value === null) loadMatchWindow()
     matching.value = true
     matchStart.value = Date.now()
     openMatch()
@@ -290,17 +319,20 @@ useEventListener(window, 'resize', updateScrollHint)
       @confirm="create"
     />
 
-    <GameConfigDialog
-      v-if="showMatch"
-      v-model:frames="frameChoices"
-      multi
-      title="随机匹配"
-      hint="按双方选项的交集撮合"
-      :confirm-text="matching ? `匹配中…${matchSeconds}s，点击取消` : '开始匹配'"
-      :loading="matching"
-      :disabled="matching"
-      @cancel="closeMatchDialog"
-      @confirm="toggleMatch"
-    />
+    <AppDialog v-if="showMatch" title="随机匹配" @close="closeMatchDialog">
+      <ul class="flex flex-col gap-2 text-sm text-stone-600 dark:text-stone-300">
+        <li v-if="matchHours">每天 {{ matchHours }} 限时开放</li>
+        <li>每回合从 10 秒起，逐回合放宽到 45 秒</li>
+      </ul>
+      <template #footer>
+        <div class="flex">
+          <DialogButton :disabled="matchWindow !== null && !matchOpen && !matching" @click="toggleMatch">
+            <IconSpinner v-if="matching" class="size-4" />
+            {{ matching ? `匹配中…${matchSeconds}s，点击取消` : '开始匹配' }}
+          </DialogButton>
+        </div>
+      </template>
+    </AppDialog>
+
   </main>
 </template>

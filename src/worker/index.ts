@@ -1,7 +1,7 @@
 import { FRAME_SECONDS } from '@gomoku/engine/game'
 import { EMAIL_PATTERN, FRAME_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
-import { parseMatchOptions } from './lobby'
+import { matchOpen, matchWindow } from './lobby'
 import { allocateRoom } from './roomCode'
 
 export { Room } from './room'
@@ -86,12 +86,15 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       if (!FRAME_OPTIONS.includes(frame)) return new Response('Invalid options', { status: 400 })
-      const code = await allocateRoom(env, frame)
+      const code = await allocateRoom(env, { frame })
       return Response.json({ code })
     }
+    if (request.method === 'GET' && url.pathname === '/api/match') {
+      return Response.json(matchWindow(Date.now(), env.MATCH_WINDOW))
+    }
     if (url.pathname === '/api/match/ws') {
-      if (!parseMatchOptions(url.searchParams)) {
-        return new Response('Invalid options', { status: 400 })
+      if (!matchOpen(Date.now(), env.MATCH_WINDOW)) {
+        return new Response('Matching closed', { status: 403 })
       }
       // 匹配分只认服务端解析出的账号评分，忽略客户端自带值。
       const token = url.searchParams.get('token')

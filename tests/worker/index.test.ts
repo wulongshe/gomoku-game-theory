@@ -37,14 +37,14 @@ describe('POST /api/rooms', () => {
   })
 })
 
-describe('GET /api/match/ws', () => {
-  it('rejects missing or unsupported frame lists', async () => {
-    for (const query of ['', '?frames=45', '?frames=30,45']) {
-      const res = await SELF.fetch(`https://example.com/api/match/ws${query}`, {
-        headers: { Upgrade: 'websocket' },
-      })
-      expect(res.status).toBe(400)
-    }
+describe('GET /api/match', () => {
+  it('reports the current match window from the server clock', async () => {
+    const before = Date.now()
+    const res = await SELF.fetch('https://example.com/api/match')
+    const window = await res.json<{ now: number; opensAt: number; closesAt: number }>()
+    expect(window.now).toBeGreaterThanOrEqual(before)
+    expect(window.opensAt).toBeLessThanOrEqual(window.now)
+    expect(window.closesAt).toBeGreaterThan(window.now)
   })
 })
 

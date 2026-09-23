@@ -37,7 +37,7 @@ export type RuleAudience = 'pvp' | 'ai'
 // 人机（ai）恒不限时、单步提交即结算，换用对应表述。
 const RULE_SECTIONS: { title: string; items: { text: string; only?: RuleAudience }[] }[] = [
   {
-    title: '⚡ 同时落子',
+    title: '⚡ 落子',
     items: [
       {
         text: '每回合限时 30/60 秒或不限时，双方各自秘密选点，双方都提交或时间到后同时落子',

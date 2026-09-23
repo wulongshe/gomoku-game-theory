@@ -1,3 +1,4 @@
+import type { MatchWindow } from '@/shared/protocol'
 import { useAuthToken } from '~/composables/useAuthToken'
 
 const authToken = useAuthToken()
@@ -25,9 +26,14 @@ export function roomWsUrl(code: string, key: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?key=${key}${authQuery()}`
 }
 
-export function matchWsUrl(frames: number[]): string {
-  const query = `frames=${frames.join(',')}${authQuery()}`
-  return `${wsProto()}://${location.host}/api/match/ws?${query}`
+export function matchWsUrl(): string {
+  return `${wsProto()}://${location.host}/api/match/ws?${authQuery()}`
+}
+
+export async function fetchMatchWindow(): Promise<MatchWindow> {
+  const res = await fetch('/api/match')
+  if (!res.ok) throw new Error(`fetchMatchWindow failed: ${res.status}`)
+  return (await res.json()) as MatchWindow
 }
 
 function wsProto(): string {

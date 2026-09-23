@@ -9,7 +9,13 @@ import {
   type Seat,
 } from '@gomoku/engine/game'
 import { assessPosition, decideAiMove, type Difficulty } from '@gomoku/engine/ai'
-import { maskEmail, parseClientMessage, type FrameMoves, type ServerMessage } from '@/shared/protocol'
+import {
+  maskEmail,
+  matchFrameSeconds,
+  parseClientMessage,
+  type FrameMoves,
+  type ServerMessage,
+} from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -176,7 +182,12 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
     pair[1].serializeAttachment({ seat } satisfies Attachment)
-    this.send(pair[1], { type: 'joined', seat, frameSeconds: await this.frameSeconds() })
+    this.send(pair[1], {
+      type: 'joined',
+      seat,
+      frameSeconds: await this.frameSeconds(),
+      ...((await this.paced()) && { paced: true as const }),
+    })
     this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
 
     const aiSeats = await this.aiSeats()
@@ -322,6 +333,11 @@ export class Room extends DurableObject<Env> {
     return (await this.ctx.storage.get<number>('frameSeconds')) ?? FRAME_SECONDS
   }
 
+  // 匹配房帧时长按回合数渐增，无视房间的固定帧长。
+  private async paced(): Promise<boolean> {
+    return (await this.ctx.storage.get<boolean>('matched')) === true
+  }
+
   private async startGame(): Promise<void> {
     const game = createGame()
     const frameSeconds = await this.frameSeconds()
@@ -340,6 +356,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async scheduleFrame(game: GameState, frameSeconds: number): Promise<number | null> {
+    if (await this.paced()) frameSeconds = matchFrameSeconds(game.frame)
     const frameStart = Date.now()
     let deadline: number | null = null
     if (frameSeconds === 0) {
@@ -539,9 +556,15 @@ export class Room extends DurableObject<Env> {
     ])
     await this.ctx.storage.put('frameSeconds', frameSeconds)
     await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
+    const paced = await this.paced()
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as Attachment
-      this.send(socket, { type: 'joined', seat: attachment.seat, frameSeconds })
+      this.send(socket, {
+        type: 'joined',
+        seat: attachment.seat,
+        frameSeconds,
+        ...(paced && { paced: true as const }),
+      })
     }
     await this.broadcastLobby()
   }
