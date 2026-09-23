@@ -109,7 +109,7 @@ async function handleLogout() {
       <p class="text-sm text-stone-600 dark:text-stone-300">{{ email }}</p>
       <div class="flex flex-col gap-1">
         <AppSwitch v-model="visible">允许他人查看我的完整邮箱</AppSwitch>
-        <p class="text-xs text-stone-400 dark:text-stone-500">作用于对局、排行榜与每日大赛的邮箱显示</p>
+        <p class="text-xs text-stone-400 dark:text-stone-500">作用于对局与排行榜的邮箱显示</p>
       </div>
     </template>
 

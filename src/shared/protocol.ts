@@ -10,14 +10,6 @@ export const ROOM_CODE_PATTERN = /^\d{4,8}$/
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const PASSWORD_MIN_LENGTH = 8
 
-// 大赛对局逐帧时限：开局快节奏，中盘逐帧放宽到 45s 封顶（前 5 帧 10s，之后每帧 +1s）。
-export function tournamentFrameSeconds(frame: number): number {
-  return Math.min(45, Math.max(10, 10 + frame - 5))
-}
-
-// 大赛和棋计分所需最少回合数（game.frame），不足记无效局；客户端据此在求和弹窗提示。
-export const TOURNAMENT_MIN_DRAW_MOVES = 50
-
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
   const visible = local.length > 2 ? local.slice(0, 2) : local.slice(0, 1)
@@ -37,7 +29,7 @@ export type ClientMessage =
 export type LobbyServerMessage = { type: 'matched'; code: string }
 
 export type ServerMessage =
-  | { type: 'joined'; seat: Seat; frameSeconds: number; tournament?: true; spectator?: true }
+  | { type: 'joined'; seat: Seat; frameSeconds: number }
   | { type: 'lobby'; present: Record<Seat, boolean>; ready: Record<Seat, boolean> }
   | { type: 'players'; accounts: Record<Seat, string | null> }
   | {
@@ -71,39 +63,6 @@ export type ServerMessage =
 
 // 一帧的双方落点（null = 弃着），用于复盘重放。
 export type FrameMoves = [Point | null, Point | null]
-
-export interface Standing {
-  email: string
-  score: number
-  played: number
-  status?: PlayerStatus // 仅实时积分下发
-}
-
-export type PlayerStatus = 'idle' | 'matching' | 'readying' | 'playing' | 'cooldown' | 'left'
-
-export interface Match {
-  code: string | null // 房号：观战入口（仅对当下可观战的人下发）
-  a: string
-  b: string
-  status: 'readying' | 'playing' | 'done'
-  result: 'a' | 'b' | 'draw' | 'void' | null
-}
-
-export interface TournamentInfo {
-  state: 'idle' | 'active'
-  now: number
-  startsAt: number
-  playerCount: number
-  registered: boolean // 已报名下一场
-  participating: boolean // 当前正在进行的这场的参赛者
-  myGame: { code: string } | null
-  matchCloseAt: number | null // 竞技场停止配新对局的时点；已开局的照常打完计分
-  arenaMinutes: number // 竞技场窗口时长（随 TOURNAMENT_WINDOW 配置，供文案展示）
-  my: { status: PlayerStatus; cooldownUntil: number | null } | null
-  standings: Standing[]
-  me: number | null // 我在 standings 中的下标（脱敏前定位）
-  games: Match[] // 全部对局，新的在前（仅参赛者/赛后可见）
-}
 
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown

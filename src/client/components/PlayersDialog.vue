@@ -7,7 +7,6 @@ import type { Seat } from '@gomoku/engine/game'
 const props = defineProps<{
   accounts: Record<Seat, string | null>
   seat: Seat
-  spectator?: boolean
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -17,7 +16,7 @@ const players = computed(() =>
     if (!email) return []
     const side = seat === 'black' ? '执黑' : '执白'
     return [
-      { seat, email, label: props.spectator ? side : seat === props.seat ? `你${side}` : `对方${side}` },
+      { seat, email, label: seat === props.seat ? `你${side}` : `对方${side}` },
     ]
   }),
 )

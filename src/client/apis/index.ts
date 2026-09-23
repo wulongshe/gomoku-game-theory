@@ -1,4 +1,3 @@
-import type { TournamentInfo } from '@/shared/protocol'
 import { useAuthToken } from '~/composables/useAuthToken'
 
 const authToken = useAuthToken()
@@ -24,11 +23,6 @@ export async function roomStatus(code: string, key: string): Promise<RoomStatus>
 
 export function roomWsUrl(code: string, key: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?key=${key}${authQuery()}`
-}
-
-// 大赛观战连接：无席位钥匙，凭账号 token 由服务端校验资格。
-export function spectateWsUrl(code: string): string {
-  return `${wsProto()}://${location.host}/api/rooms/${code}/ws?spectate=1${authQuery()}`
 }
 
 export function matchWsUrl(frames: number[]): string {
@@ -126,39 +120,4 @@ export async function authSetEmailVisible(visible: boolean): Promise<void> {
 
 export async function authLogout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', headers: bearer() })
-}
-
-export async function fetchTournament(): Promise<TournamentInfo> {
-  const res = await fetch('/api/tournament', { headers: bearer() })
-  if (!res.ok) throw new Error(`fetchTournament failed: ${res.status}`)
-  return (await res.json()) as TournamentInfo
-}
-
-export function tournamentWsUrl(): string {
-  const token = authToken.value ? `?token=${authToken.value}` : ''
-  return `${wsProto()}://${location.host}/api/tournament/ws${token}`
-}
-
-async function tournamentAction(
-  action: 'register' | 'withdraw' | 'seek' | 'unseek',
-): Promise<TournamentInfo> {
-  const res = await fetch(`/api/tournament/${action}`, { method: 'POST', headers: bearer() })
-  if (!res.ok) throw new Error(`${action}Tournament failed: ${res.status}`)
-  return (await res.json()) as TournamentInfo
-}
-
-export function registerTournament(): Promise<TournamentInfo> {
-  return tournamentAction('register')
-}
-
-export function withdrawTournament(): Promise<TournamentInfo> {
-  return tournamentAction('withdraw')
-}
-
-export function seekTournamentMatch(): Promise<TournamentInfo> {
-  return tournamentAction('seek')
-}
-
-export function cancelTournamentSeek(): Promise<TournamentInfo> {
-  return tournamentAction('unseek')
 }

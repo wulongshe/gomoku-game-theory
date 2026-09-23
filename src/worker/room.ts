@@ -9,16 +9,8 @@ import {
   type Seat,
 } from '@gomoku/engine/game'
 import { assessPosition, decideAiMove, type Difficulty } from '@gomoku/engine/ai'
-import {
-  maskEmail,
-  parseClientMessage,
-  TOURNAMENT_MIN_DRAW_MOVES,
-  tournamentFrameSeconds,
-  type FrameMoves,
-  type ServerMessage,
-} from '@/shared/protocol'
+import { maskEmail, parseClientMessage, type FrameMoves, type ServerMessage } from '@/shared/protocol'
 import type { GameOutcome } from './accounts'
-import { botPersona, gameDifficulty, type BotPersona } from './bots'
 
 const IDLE_TTL_MS = 10 * 60 * 1000
 
@@ -26,9 +18,21 @@ const IDLE_TTL_MS = 10 * 60 * 1000
 // 严格 >= 判定落空 → 闹钟被改挂 10 分钟 → AI 行动点孤儿化）。判定一律容忍该偏差。
 const ALARM_SKEW_MS = 1500
 
-// 顶替真人的 AI（匹配久等兜底 / 大赛陪打 bot）走启发式单步（免费层 10ms CPU 限制内），
-// 节奏拟人（见各处随机延时）。棋力：兜底 AI 固定此档，大赛 bot 用建房传入的浮动档。
+// 匹配久等时顶替真人的隐身 AI 走启发式单步（免费层 10ms CPU 限制内），节奏拟人（见各处随机延时）。
 const AI_DIFFICULTY: Difficulty = 'normal'
+// 拟人性格：绝望局按此概率认输、长局均势时按此倾向接受求和。
+const AI_RESIGN_CHANCE = 0.05
+const AI_DRAWISH = 0.12
+
+const TIERS: Difficulty[] = ['easy', 'normal', 'hard', 'master']
+
+// 每局实际棋力在基准 ±1 档内浮动（0.6 基准、上下各 0.2，越界收回），像真人的状态起伏。
+function gameDifficulty(base: Difficulty): Difficulty {
+  const i = TIERS.indexOf(base)
+  const r = Math.random()
+  const j = r < 0.6 ? i : r < 0.8 ? i - 1 : i + 1
+  return TIERS[Math.max(0, Math.min(TIERS.length - 1, j))]
+}
 
 // 拟人节奏的对局进度插值：越下越慢、越犹豫。
 function lateness(frame: number): number {
@@ -49,11 +53,11 @@ function aiMirrorPace(avgMs: number, frame: number): number {
   return Math.max(600, avgMs * (1 + (Math.random() * 2 - 1) * amp))
 }
 
-// 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下；
-// 再乘 bot 手速性格。上限始终由调用处按 budget 与帧长 10% 余量收口，绝不磨到超时。
-function aiThinkTime(criticality: number, late: number, speed: number): number {
+// 想好一手的墙钟时长：紧迫度越高（均势岔路口 + 中后盘）想得越久，必应/唯一手/可取胜近乎秒下。
+// 上限始终由调用处按 budget 与帧长 10% 余量收口，绝不磨到超时。
+function aiThinkTime(criticality: number, late: number): number {
   const base = 250 + criticality * (2200 + 3500 * late)
-  return base * (0.65 + Math.random() * 0.7) * speed
+  return base * (0.65 + Math.random() * 0.7)
 }
 
 // 提交时限随手数放宽，越往后可以长考。
@@ -61,14 +65,8 @@ function aiSubmitCap(frame: number): number {
   return 10_000 + Math.floor((frame - 1) / 5) * 5_000
 }
 
-// 大赛 bot 的进场延时：配上对手后很快入座，只留一点错峰。
-function aiArriveDelay(): number {
-  return 4_000 + Math.random() * 6_000
-}
-
 interface Attachment {
   seat: Seat
-  spectator?: true
   replaced?: boolean
   // 真人草稿挂在连接附件上（不占存储行、熬过 DO 休眠），帧超时并入自动提交；连接断开草稿即弃。
   draft?: { frame: number; point: Point | null }
@@ -83,14 +81,7 @@ type SeatFlags = Partial<Record<Seat, boolean>>
 // 再来一局提案：各座位提出的每回合秒数。
 type RematchProposals = Partial<Record<Seat, number>>
 
-interface TournamentTag {
-  code: string
-  players: [string, string]
-}
-
-// AI 占用的席位：email 为大赛 bot 的参赛邮箱（匹配兜底 AI 无身份为 null）。
 interface AiSeatInfo {
-  email: string | null
   difficulty: Difficulty
 }
 
@@ -121,41 +112,11 @@ export class Room extends DurableObject<Env> {
         // AI 随机占一席（免得对手总执同色露馅），席位钥匙不可猜、真人只能坐另一边。
         const seat: Seat = Math.random() < 0.5 ? 'black' : 'white'
         // 棋力像真人般起伏：在基准档 ±1 内随机浮动，而非每局都同一档。
-        const difficulty = gameDifficulty(AI_DIFFICULTY)
-        entries.aiSeats = { [seat]: { email: null, difficulty } } satisfies AiSeats
+        entries.aiSeats = { [seat]: { difficulty: gameDifficulty(AI_DIFFICULTY) } } satisfies AiSeats
         entries.players = { [seat]: crypto.randomUUID() } satisfies Players
       }
-      if (url.searchParams.get('tournament') === '1') {
-        const tPlayers: [string, string] = [
-          url.searchParams.get('p0') ?? '',
-          url.searchParams.get('p1') ?? '',
-        ]
-        entries.tournament = {
-          code: url.searchParams.get('code') ?? '',
-          players: tPlayers,
-        } satisfies TournamentTag
-        const bots = [url.searchParams.get('ai0'), url.searchParams.get('ai1')]
-        if (bots.some(Boolean)) {
-          // bot 席位与参赛邮箱在建房时绑定（上报赢家要对得上号），执色随机。
-          const order: [Seat, Seat] = Math.random() < 0.5 ? ['black', 'white'] : ['white', 'black']
-          const aiSeats: AiSeats = {}
-          const claims: Players = {}
-          const arrive: AiTimes = {}
-          bots.forEach((difficulty, i) => {
-            if (!difficulty) return
-            const seat = order[i]
-            aiSeats[seat] = { email: tPlayers[i], difficulty: difficulty as Difficulty }
-            claims[seat] = crypto.randomUUID()
-            arrive[seat] = Date.now() + aiArriveDelay()
-          })
-          entries.aiSeats = aiSeats
-          entries.players = claims
-          entries.aiArrive = arrive
-        }
-      }
       await this.ctx.storage.put(entries)
-      const arrivals = Object.values((entries.aiArrive as AiTimes | undefined) ?? {})
-      await this.ctx.storage.setAlarm(Math.min(Date.now() + IDLE_TTL_MS, ...arrivals))
+      await this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
       return new Response(null, { status: 204 })
     }
     const created = (await this.ctx.storage.get<boolean>('created')) ?? false
@@ -178,9 +139,6 @@ export class Room extends DurableObject<Env> {
     if (!created) {
       return new Response('Room not found', { status: 404 })
     }
-    if (url.searchParams.get('spectate') === '1') {
-      return this.acceptSpectator()
-    }
     const key = url.searchParams.get('key')
     if (!key) {
       return new Response('Missing key', { status: 400 })
@@ -189,10 +147,6 @@ export class Room extends DurableObject<Env> {
     const players = (await this.ctx.storage.get<Players>('players')) ?? {}
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const email = await this.accountEmail(url.searchParams.get('token'))
-    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    if (tournament && (email === null || !tournament.players.includes(email))) {
-      return new Response('Not a tournament participant', { status: 403 })
-    }
     let seat: Seat
     if (players.black === key) seat = 'black'
     else if (players.white === key) seat = 'white'
@@ -210,14 +164,6 @@ export class Room extends DurableObject<Env> {
       accounts[seat] = email
       await this.ctx.storage.put('accounts', accounts)
     }
-    if (tournament && email !== null) {
-      try {
-        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).checkIn({
-          code: tournament.code,
-          email,
-        })
-      } catch {}
-    }
 
     for (const other of this.ctx.getWebSockets()) {
       const attachment = other.deserializeAttachment() as Attachment
@@ -230,13 +176,8 @@ export class Room extends DurableObject<Env> {
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
     pair[1].serializeAttachment({ seat } satisfies Attachment)
-    this.send(pair[1], {
-      type: 'joined',
-      seat,
-      frameSeconds: await this.frameSeconds(),
-      ...(tournament && { tournament: true as const }),
-    })
-    this.broadcast({ type: 'players', accounts: await this.displayAccounts(await this.seatEmails()) })
+    this.send(pair[1], { type: 'joined', seat, frameSeconds: await this.frameSeconds() })
+    this.broadcast({ type: 'players', accounts: await this.displayAccounts(accounts) })
 
     const aiSeats = await this.aiSeats()
     const game = await this.ctx.storage.get<GameState>('game')
@@ -278,46 +219,6 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
 
-  // 观战连接：仅大赛房开放，不限身份（含游客）。观战者无席位、只收广播；
-  // 帧内双方选点不下发，帧结算后才能看到落子（防传点）。
-  private async acceptSpectator(): Promise<Response> {
-    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    if (!tournament) {
-      return new Response('Not allowed to spectate', { status: 403 })
-    }
-    const pair = new WebSocketPair()
-    this.ctx.acceptWebSocket(pair[1])
-    pair[1].serializeAttachment({ seat: 'black', spectator: true } satisfies Attachment)
-    this.send(pair[1], {
-      type: 'joined',
-      seat: 'black',
-      frameSeconds: await this.frameSeconds(),
-      tournament: true,
-      spectator: true,
-    })
-    this.send(pair[1], {
-      type: 'players',
-      accounts: await this.displayAccounts(await this.seatEmails()),
-    })
-    const game = await this.ctx.storage.get<GameState>('game')
-    if (game) {
-      const deadline = (await this.ctx.storage.get<number>('deadline')) ?? null
-      const frameStart = await this.ctx.storage.get<number>('frameStart')
-      const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
-      this.send(pair[1], {
-        type: 'start',
-        state: game,
-        deadline: game.phase === 'playing' ? deadline : null,
-        now: Date.now(),
-        elapsed: game.phase === 'playing' && frameStart ? Date.now() - frameStart : 0,
-        frameSeconds: await this.frameSeconds(),
-        submitted: { black: !!choices.black?.final, white: !!choices.white?.final },
-        yourChoice: null,
-      })
-    }
-    return new Response(null, { status: 101, webSocket: pair[0] })
-  }
-
   private async accountEmail(auth: string | null): Promise<string | null> {
     if (!auth) return null
     try {
@@ -346,13 +247,9 @@ export class Room extends DurableObject<Env> {
   }
 
   private playerSockets(): WebSocket[] {
-    return this.ctx.getWebSockets().filter((ws) => {
-      const attachment = ws.deserializeAttachment() as Attachment
-      return !attachment.spectator && !attachment.replaced
-    })
+    return this.ctx.getWebSockets().filter((ws) => !(ws.deserializeAttachment() as Attachment).replaced)
   }
 
-  // 求和/认输/再战/进离场等对局交互只发给对方玩家：观战者只看棋局本身，收到这些会误弹「本局你获胜」等提示。
   private notifyPeers(sender: WebSocket | null, message: ServerMessage): void {
     for (const ws of this.playerSockets()) {
       if (ws !== sender) this.send(ws, message)
@@ -361,13 +258,6 @@ export class Room extends DurableObject<Env> {
 
   private readyToStart(aiSeats: AiSeats): boolean {
     return this.playerSockets().length === 2 - Object.keys(aiSeats).length
-  }
-
-  private async seatEmails(): Promise<Players> {
-    const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
-    const aiSeats = await this.aiSeats()
-    const emailOf = (seat: Seat) => accounts[seat] ?? aiSeats[seat]?.email ?? undefined
-    return { black: emailOf('black'), white: emailOf('white') }
   }
 
   private async armAlarm(): Promise<void> {
@@ -391,7 +281,7 @@ export class Room extends DurableObject<Env> {
     await this.armAlarm()
   }
 
-  // 隐身 AI 在真人现身后才「进场」准备；大赛 bot 的进场时点建房时已定，不覆盖。
+  // 隐身 AI 在真人现身后才「进场」准备。
   private async scheduleAiArrivals(aiSeats: AiSeats, delayMs: number): Promise<void> {
     const seats = Object.keys(aiSeats) as Seat[]
     if (!seats.length) return
@@ -414,7 +304,7 @@ export class Room extends DurableObject<Env> {
     const present = { black: false, white: false }
     for (const ws of sockets) {
       const attachment = ws.deserializeAttachment() as Attachment
-      if (!attachment.replaced && !attachment.spectator) present[attachment.seat] = true
+      if (!attachment.replaced) present[attachment.seat] = true
     }
     for (const seat of Object.keys(await this.aiSeats()) as Seat[]) present[seat] = true
     const ready = (await this.ctx.storage.get<SeatFlags>('ready')) ?? {}
@@ -437,14 +327,6 @@ export class Room extends DurableObject<Env> {
     const frameSeconds = await this.frameSeconds()
     await this.ctx.storage.delete(['choices', 'rematch', 'ready', 'pace'])
     const deadline = await this.scheduleFrame(game, frameSeconds)
-    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    if (tournament) {
-      try {
-        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).gameStarted({
-          code: tournament.code,
-        })
-      } catch {}
-    }
     this.broadcast({
       type: 'start',
       state: game,
@@ -458,10 +340,6 @@ export class Room extends DurableObject<Env> {
   }
 
   private async scheduleFrame(game: GameState, frameSeconds: number): Promise<number | null> {
-    // 大赛对局逐帧变时限（10s 起步、渐宽到 30s），无视房间的固定帧长。
-    if (await this.ctx.storage.get<TournamentTag>('tournament')) {
-      frameSeconds = tournamentFrameSeconds(game.frame)
-    }
     const frameStart = Date.now()
     let deadline: number | null = null
     if (frameSeconds === 0) {
@@ -500,8 +378,7 @@ export class Room extends DurableObject<Env> {
     if (!msg) {
       return this.send(ws, { type: 'error', message: 'malformed message' })
     }
-    const { seat, spectator } = ws.deserializeAttachment() as Attachment
-    if (spectator) return
+    const { seat } = ws.deserializeAttachment() as Attachment
     const game = await this.ctx.storage.get<GameState>('game')
     if (msg.type === 'leave') {
       return this.handleLeave(ws, seat, game)
@@ -672,16 +549,10 @@ export class Room extends DurableObject<Env> {
   async alarm(): Promise<void> {
     const game = await this.ctx.storage.get<GameState>('game')
     const aiSeats = await this.aiSeats()
-    const botCount = Object.keys(aiSeats).length
-    const tournament = botCount
-      ? await this.ctx.storage.get<TournamentTag>('tournament')
-      : undefined
-    const botGame = tournament !== undefined && botCount > 0
-    // 对局中有真人在场（或大赛 bot 局，无人连接也照常推进）时 AI 正常行动；
-    // 赛前进场不看连接状态——闹钟偶发看不到 socket 时也不能把进场弄丢。
-    const live = this.playerSockets().length > 0 || botGame
-    if (botCount && (!game || live) && (await this.aiStep(game, aiSeats, tournament))) return
-    if (this.ctx.getWebSockets().length === 0 && !(botGame && game?.phase === 'playing')) {
+    // 对局中有真人在场时 AI 正常行动；赛前进场不看连接状态——闹钟偶发看不到 socket 时也不能把进场弄丢。
+    const live = this.playerSockets().length > 0
+    if (Object.keys(aiSeats).length && (!game || live) && (await this.aiStep(game, aiSeats))) return
+    if (this.ctx.getWebSockets().length === 0) {
       if (game && game.phase === 'playing') {
         const emptySince = (await this.ctx.storage.get<number>('emptySince')) ?? Date.now()
         if (Date.now() - emptySince < IDLE_TTL_MS) {
@@ -689,11 +560,7 @@ export class Room extends DurableObject<Env> {
           return this.ctx.storage.setAlarm(emptySince + IDLE_TTL_MS)
         }
       }
-      if (
-        !game &&
-        !botGame &&
-        (await this.ctx.storage.get<AiTimes>('aiArrive')) !== undefined
-      ) {
+      if (!game && (await this.ctx.storage.get<AiTimes>('aiArrive')) !== undefined) {
         // 真人掉线时隐身 AI 的进场闹钟提前敲门，不能当空房超时关房。
         await this.ctx.storage.delete(['aiArrive', 'aiPlan'])
         return this.ctx.storage.setAlarm(Date.now() + IDLE_TTL_MS)
@@ -717,11 +584,7 @@ export class Room extends DurableObject<Env> {
   }
 
   // 到点的 AI 进场/行动；返回 true 表示本次闹钟由 AI 消费（行动分支自会重挂闹钟）。
-  private async aiStep(
-    game: GameState | undefined,
-    aiSeats: AiSeats,
-    tournament: TournamentTag | undefined,
-  ): Promise<boolean> {
+  private async aiStep(game: GameState | undefined, aiSeats: AiSeats): Promise<boolean> {
     const now = Date.now()
     if (!game) {
       const arrive = (await this.ctx.storage.get<AiTimes>('aiArrive')) ?? {}
@@ -733,15 +596,6 @@ export class Room extends DurableObject<Env> {
       for (const seat of due) {
         delete arrive[seat]
         ready[seat] = true
-        const email = aiSeats[seat]?.email
-        if (tournament && email) {
-          try {
-            await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).checkIn({
-              code: tournament.code,
-              email,
-            })
-          } catch {}
-        }
       }
       await this.ctx.storage.put({ aiArrive: arrive, ready })
       if (ready.black && ready.white && this.readyToStart(aiSeats)) {
@@ -757,25 +611,19 @@ export class Room extends DurableObject<Env> {
       if (now < plan[seat]! - ALARM_SKEW_MS || !aiSeats[seat]) continue
       delete plan[seat]
       await this.ctx.storage.put('aiPlan', plan)
-      await this.aiAct(seat, aiSeats[seat], game, tournament)
+      await this.aiAct(seat, aiSeats[seat], game)
       return true
     }
     return false
   }
 
-  private async aiAct(
-    seat: Seat,
-    info: AiSeatInfo,
-    game: GameState,
-    tournament: TournamentTag | undefined,
-  ): Promise<void> {
+  private async aiAct(seat: Seat, info: AiSeatInfo, game: GameState): Promise<void> {
     if (game.phase === 'playing') {
-      const persona = botPersona(this.env.TOURNAMENT_BOTS, info.email)
-      // 求和标志记着发起方座位：bot 对战时只有对面需要应和，发起方不消费自己的请求。
+      // 求和标志记着发起方座位：AI 自己发起的求和不由自己应答。
       const offered = await this.ctx.storage.get<Seat>('aiDrawOffered')
       if (offered && offered !== seat) {
         await this.ctx.storage.delete('aiDrawOffered')
-        return this.aiRespondDraw(seat, info, game, tournament, persona)
+        return this.aiRespondDraw(seat, info, game)
       }
       const choices = (await this.ctx.storage.get<Choices>('choices')) ?? {}
       const current = choices[seat]
@@ -790,7 +638,7 @@ export class Room extends DurableObject<Env> {
         if (choices[other]?.final) return this.settle(game, choices)
         return this.armAlarm()
       }
-      // 思考时长随局面而定：必应/唯一手/可取胜近乎秒下，均势岔路口才犹豫长考；再乘手速性格。
+      // 思考时长随局面而定：必应/唯一手/可取胜近乎秒下，均势岔路口才犹豫长考。
       // 总耗时压在 aiSubmitCap 内，且至少留出帧长 10% 的余量提交，绝不磨到超时。
       const late = lateness(game.frame)
       const frameStart = (await this.ctx.storage.get<number>('frameStart')) ?? Date.now()
@@ -799,25 +647,19 @@ export class Room extends DurableObject<Env> {
         deadline !== undefined ? left - (deadline - frameStart) * 0.1 : Infinity
       if (!current) {
         const decision = decideAiMove(game, seat, info.difficulty)
-        // 绝望局（对手已成己方挡不全的叉）按性格小概率认输——真人不会每盘都磨到底。
-        if (decision.losing && Math.random() < (1 - persona.grit) * 0.3) {
+        // 绝望局（对手已成己方挡不全的叉）小概率认输——真人不会每盘都磨到底。
+        if (decision.losing && Math.random() < AI_RESIGN_CHANCE) {
           return this.aiResign(seat, game)
         }
-        // 八十回合开外的拉锯多半已成死局：不占优时按概率主动求和——对面是 bot 走 AI 应和，
-        // 是真人则正常弹窗；被拒了后续回合还会再随机发起。
+        // 八十回合开外的拉锯多半已成死局：不占优时按概率主动求和，被拒了后续回合还会再随机发起。
         if (game.frame > 80 && !decision.commanding && !offered && Math.random() < 0.2) {
           this.notifyPeers(null, { type: 'draw_offered' })
-          const other: Seat = seat === 'black' ? 'white' : 'black'
-          if ((await this.aiSeats())[other]) {
-            await this.ctx.storage.put('aiDrawOffered', seat)
-            await this.planAi(other, 1200 + Math.random() * 2500)
-          }
         }
         const point = decision.point
         // 跟真人节奏时等待已全放在开帧延时里，到点即交。
         if ((await this.humanPace(seat)) !== null) return submit(point)
         if (left < 3500 || budget < 4000 || slack < 1000) return submit(point)
-        const think = aiThinkTime(decision.criticality, late, persona.speed)
+        const think = aiThinkTime(decision.criticality, late)
         if (think <= 600) return submit(point) // 明显手：略一思忖即交（≈秒下）
         choices[seat] = { point, final: false }
         await this.ctx.storage.put('choices', choices)
@@ -825,7 +667,6 @@ export class Room extends DurableObject<Env> {
       }
       return submit(current.point)
     }
-    if (tournament) return this.armAlarm()
     const rematch = (await this.ctx.storage.get<RematchProposals>('rematch')) ?? {}
     const proposal = rematch[seat === 'black' ? 'white' : 'black']
     if (proposal !== undefined) {
@@ -835,26 +676,19 @@ export class Room extends DurableObject<Env> {
     return this.armAlarm()
   }
 
-  // 真人求和时的回应：长局且己方未占上风才按性格概率接受，落后时更愿意握手言和；否则婉拒后照常出手。
-  private async aiRespondDraw(
-    seat: Seat,
-    info: AiSeatInfo,
-    game: GameState,
-    tournament: TournamentTag | undefined,
-    persona: BotPersona,
-  ): Promise<void> {
+  // 真人求和时的回应：长局且己方未占上风才按概率接受，落后时更愿意握手言和；否则婉拒后照常出手。
+  private async aiRespondDraw(seat: Seat, info: AiSeatInfo, game: GameState): Promise<void> {
     // 只需胜负态势判断，走轻量研判（不做选点的虚拟对弈）。
     const { commanding, losing } = assessPosition(game, seat, info.difficulty)
-    const drawFloor = tournament ? TOURNAMENT_MIN_DRAW_MOVES : 12 // 和棋计分下限：不足判无效
     // 落后或八十回合开外的拉锯，都更愿意握手言和；同一局被求和，第二次必接受。
     const asked = ((await this.ctx.storage.get<number>('aiDrawAsked')) ?? 0) + 1
     await this.ctx.storage.put('aiDrawAsked', asked)
     const accept =
       !commanding &&
-      game.frame >= drawFloor &&
+      game.frame >= 12 &&
       (asked >= 2 ||
         Math.random() <
-          persona.drawish + (losing ? 0.35 : 0) + (game.frame > 80 ? 0.35 : 0) + (asked - 1) * 0.15)
+          AI_DRAWISH + (losing ? 0.35 : 0) + (game.frame > 80 ? 0.35 : 0) + (asked - 1) * 0.15)
     if (accept) return this.endGame({ ...game, phase: 'draw', cleared: [] })
     this.notifyPeers(null, { type: 'draw_declined' })
     // 求和往返吃掉了本帧的行动时点：改约的落子必须仍留在截止前（含 10% 余量），否则会白丢一帧。
@@ -868,7 +702,6 @@ export class Room extends DurableObject<Env> {
   }
 
   private async aiResign(seat: Seat, game: GameState): Promise<void> {
-    // 只通知在场的对手（不含观战者，否则观战方会误弹「本局你获胜」）。
     this.notifyPeers(null, { type: 'opponent_resigned', left: false })
     await this.endGame({
       ...game,
@@ -879,7 +712,7 @@ export class Room extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     const attachment = ws.deserializeAttachment() as Attachment
-    if (attachment.replaced || attachment.spectator) return
+    if (attachment.replaced) return
     if (!(await this.ctx.storage.get<boolean>('created'))) return
     const remaining = this.ctx.getWebSockets().filter((other) => other !== ws)
     this.notifyPeers(ws, { type: 'opponent_left' })
@@ -896,10 +729,8 @@ export class Room extends DurableObject<Env> {
       if (game && game.phase !== 'playing') await this.close()
       else if (game) await this.ctx.storage.put('emptySince', Date.now())
       else {
-        // 大赛 bot 的进场时点保留（真人始终缺席时 bot 仍到场 → 轮空胜）；隐身 AI 则随真人离场作罢。
-        if (!(await this.ctx.storage.get<TournamentTag>('tournament'))) {
-          await this.ctx.storage.delete(['aiArrive', 'aiPlan'])
-        }
+        // 隐身 AI 的进场随真人离场作罢。
+        await this.ctx.storage.delete(['aiArrive', 'aiPlan'])
         await this.armAlarm()
       }
     } else if (!game) {
@@ -933,27 +764,6 @@ export class Room extends DurableObject<Env> {
   }
 
   private async recordResult(phase: GameState['phase']): Promise<void> {
-    const tournament = await this.ctx.storage.get<TournamentTag>('tournament')
-    if (tournament) {
-      // 赢家按座位→email 实表算（bot 席位取建房时绑定的参赛邮箱）、按房号上报
-      //（座位颜色由连接顺序/建房随机定，与大赛无关）；大赛对局独立结算，不计入普通战绩/ELO。
-      const emails = await this.seatEmails()
-      const winnerEmail =
-        phase === 'black_won'
-          ? (emails.black ?? null)
-          : phase === 'white_won'
-            ? (emails.white ?? null)
-            : null
-      const game = await this.ctx.storage.get<GameState>('game')
-      try {
-        await this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName('daily')).reportResult({
-          code: tournament.code,
-          winnerEmail,
-          moves: game?.frame ?? 0,
-        })
-      } catch {}
-      return
-    }
     const accounts = (await this.ctx.storage.get<Players>('accounts')) ?? {}
     const results = (['black', 'white'] as const).flatMap((seat) => {
       const email = accounts[seat]

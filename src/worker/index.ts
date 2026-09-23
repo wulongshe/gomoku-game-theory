@@ -7,7 +7,6 @@ import { allocateRoom } from './roomCode'
 export { Room } from './room'
 export { Lobby } from './lobby'
 export { Accounts } from './accounts'
-export { Tournament } from './tournament'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
 
@@ -84,33 +83,6 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
       return Response.json(await accounts.leaderboard(token))
     }
-    if (url.pathname.startsWith('/api/tournament')) {
-      const tournament = env.TOURNAMENT.get(env.TOURNAMENT.idFromName('daily'))
-      if (url.pathname === '/api/tournament/ws') {
-        return tournament.fetch(request)
-      }
-      const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null
-      if (request.method === 'GET' && url.pathname === '/api/tournament') {
-        return Response.json(await tournament.getInfo(token))
-      }
-      if (request.method === 'POST' && url.pathname === '/api/tournament/register') {
-        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-        return Response.json(await tournament.register(token))
-      }
-      if (request.method === 'POST' && url.pathname === '/api/tournament/withdraw') {
-        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-        return Response.json(await tournament.withdraw(token))
-      }
-      if (request.method === 'POST' && url.pathname === '/api/tournament/seek') {
-        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-        return Response.json(await tournament.seekMatch(token))
-      }
-      if (request.method === 'POST' && url.pathname === '/api/tournament/unseek') {
-        if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-        return Response.json(await tournament.cancelSeek(token))
-      }
-      return new Response('Not Found', { status: 404 })
-    }
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       if (!FRAME_OPTIONS.includes(frame)) return new Response('Invalid options', { status: 400 })
@@ -130,7 +102,7 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       }
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(new Request(url, request))
     }
-    // 本地开发工具（vite dev 专用）：造测试账号 / 造大赛房，供演示脚本驱动真实对局。
+    // 本地开发工具（vite dev 专用）：造测试账号，供演示脚本驱动真实对局。
     if (DEV && url.pathname === '/api/dev/account') {
       const accounts = env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'))
       const email = url.searchParams.get('email') ?? ''

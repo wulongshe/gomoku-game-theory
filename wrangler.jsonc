@@ -27,10 +27,6 @@
       {
         "name": "ACCOUNTS",
         "class_name": "Accounts"
-      },
-      {
-        "name": "TOURNAMENT",
-        "class_name": "Tournament"
       }
     ]
   },
@@ -50,11 +46,14 @@
     {
       "tag": "v4",
       "new_sqlite_classes": ["Tournament"]
+    },
+    {
+      "tag": "v5",
+      "deleted_classes": ["Tournament"]
     }
   ],
   "vars": {
-    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>",
-    "TOURNAMENT_WINDOW": "20:00-20:30"
+    "EMAIL_FROM": "博弈五子棋 <hi@mail.recode.top>"
   },
   "env": {
     "beta": {
@@ -79,15 +78,8 @@
           {
             "name": "ACCOUNTS",
             "class_name": "Accounts"
-          },
-          {
-            "name": "TOURNAMENT",
-            "class_name": "Tournament"
           }
         ]
-      },
-      "vars": {
-        "TOURNAMENT_WINDOW": "16:50-17:20"
       }
     }
   }

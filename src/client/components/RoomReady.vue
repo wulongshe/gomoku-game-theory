@@ -13,7 +13,6 @@ const props = defineProps<{
   myReady: boolean
   oppReady: boolean
   oppLeft: boolean
-  tournament?: boolean
 }>()
 const emit = defineEmits<{ ready: [] }>()
 
@@ -60,7 +59,7 @@ const players = computed(() => [
         </p>
       </div>
       <span class="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-500 dark:bg-stone-700/60 dark:text-stone-400">
-        每回合 {{ tournament ? '10~45s' : frameLabel(frameSeconds) }}
+        每回合 {{ frameLabel(frameSeconds) }}
       </span>
       <div class="flex w-full flex-col gap-2">
         <div

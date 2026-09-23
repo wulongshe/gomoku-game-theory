@@ -17,8 +17,7 @@
 
 - **双人联机**：建房间发链接开黑，或随机匹配。随机匹配时限可多选、按双方选项的交集撮合；局终可带新设置发起「再来一局」。
 - **人机对战**：四档难度（简单 / 普通 / 困难 / 大师），AI 在 Web Worker 中搜索，不阻塞界面。
-- **每日竞技场**：每晚 20:00–20:30（北京时间）开放，登录后报名，Elo 计分并进入排行榜；人数不足时由拟人 bot 补位。
-- **邮箱登录**：仅竞技场与排行榜需要，验证码经 Resend 发送；其余功能游客可用。
+- **邮箱登录**：仅排行榜与匹配分需要，验证码经 Resend 发送；其余功能游客可用。
 - **分享海报**：生成带房间二维码的 SVG 海报，支持系统分享或保存图片。
 - **小红书小程序**：`miniapp/` 下的 Taro 工程，仅人机对战、全程本地计算，见 [miniapp/README.md](miniapp/README.md)。
 
@@ -29,7 +28,7 @@
 - **引擎**：纯函数 TypeScript 包 `@gomoku/engine`（规则 / 评估 / AI / MCTS），Web 与小程序共用
 - **测试**：Vitest（引擎单元测试 + `@cloudflare/vitest-pool-workers` Worker 集成测试）
 
-无数据库、无框架路由：房间、大厅、账号、竞技场各是一个 Durable Object，`ctx.storage` 即状态源。
+无数据库、无框架路由：房间、大厅、账号各是一个 Durable Object，`ctx.storage` 即状态源。
 
 ## 目录结构
 
@@ -40,9 +39,9 @@
 │   ├── branding/  # 产品名、标语等共享文案
 │   └── config/    # AI 难度选项
 ├── src/
-│   ├── client/    # Vue 前端（首页、联机房间、人机房间、竞技场大厅）
+│   ├── client/    # Vue 前端（首页、联机房间、人机房间）
 │   ├── shared/    # 客户端与 Worker 共享的消息协议
-│   └── worker/    # Worker 入口，Room / Lobby / Accounts / Tournament DO，邮件与 bot
+│   └── worker/    # Worker 入口，Room / Lobby / Accounts DO，邮件
 ├── miniapp/       # 小红书小程序（Taro + Vue 3）
 ├── scripts/       # AI 自对弈评测（pnpm ai:battle）
 └── tests/
@@ -66,7 +65,6 @@ pnpm ai:battle  # AI 自对弈评测（Node ≥ 23.6）
 | 变量 | 说明 |
 |---|---|
 | `RESEND_API_KEY` | 缺省时验证码打印到控制台，不发邮件 |
-| `TOURNAMENT_WINDOW` | 竞技场时段，默认 `20:00-20:30` |
 
 ## 部署
 

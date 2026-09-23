@@ -21,18 +21,9 @@ import IconHelp from '~/components/icons/IconHelp.vue'
 import IconHome from '~/components/icons/IconHome.vue'
 import IconLogout from '~/components/icons/IconLogout.vue'
 import IconSettings from '~/components/icons/IconSettings.vue'
-import IconSpinner from '~/components/icons/IconSpinner.vue'
 import IconUsers from '~/components/icons/IconUsers.vue'
 import IconStone from '~/components/icons/IconStone.vue'
-import IconStones from '~/components/icons/IconStones.vue'
-import {
-  cancelTournamentSeek,
-  roomStatus,
-  roomWsUrl,
-  seekTournamentMatch,
-  spectateWsUrl,
-  tournamentWsUrl,
-} from '~/apis'
+import { roomStatus, roomWsUrl } from '~/apis'
 import { useAuth } from '~/composables/useAuth'
 import { useCountdown } from '~/composables/useCountdown'
 import { useFrameClock } from '~/composables/useFrameClock'
@@ -50,20 +41,11 @@ import {
   type Point,
   type Seat,
 } from '@gomoku/engine/game'
-import {
-  TOURNAMENT_MIN_DRAW_MOVES,
-  tournamentFrameSeconds,
-  type ClientMessage,
-  type FrameMoves,
-  type ServerMessage,
-  type TournamentInfo,
-} from '@/shared/protocol'
+import type { ClientMessage, FrameMoves, ServerMessage } from '@/shared/protocol'
 
 const props = defineProps<{ code: string }>()
 
 const roomUrl = location.href
-// 观战模式（大赛限定）：只读连接；帧内选点不可见，帧结算后才看到双方落子。
-const spectating = new URLSearchParams(location.search).get('spectate') === '1'
 
 type Stage = 'connecting' | 'waiting' | 'ready' | 'playing' | 'over' | 'error'
 
@@ -107,7 +89,6 @@ const showSettings = ref(false)
 const showPlayers = ref(false)
 const seatAccounts = ref<Record<Seat, string | null>>({ black: null, white: null })
 const frameSeconds = ref(FRAME_SECONDS)
-const tournament = ref(false)
 const autoSubmit = useStorage('auto-submit', false)
 const showConcede = ref(false)
 const drawInvite = ref(false)
@@ -122,68 +103,8 @@ function showToast(message: string) {
 }
 
 const key = useStorage(`${ROOM_KEY_PREFIX}${props.code}`, nanoid())
-const { loggedIn, refresh: refreshAuth } = useAuth()
+const { refresh: refreshAuth } = useAuth()
 refreshAuth()
-
-// 大赛在场心跳：登录用户观战大赛对局时保持一条大厅连接，榜单不把 TA 标成「已离开」；
-// 推送顺带驱动「有人空闲、可匹配」提示。
-const tournamentInfo = ref<TournamentInfo | null>(null)
-const presence = useWebSocket(tournamentWsUrl(), {
-  immediate: false,
-  heartbeat: {
-    message: 'ping',
-    responseMessage: 'pong',
-    interval: 20_000,
-    pongTimeout: 10_000,
-  },
-  autoReconnect: { delay: 3000 },
-  onMessage(_ws, event) {
-    tournamentInfo.value = JSON.parse(event.data as string) as TournamentInfo
-  },
-})
-watch(
-  () => spectating && tournament.value && loggedIn.value,
-  (on) => (on ? presence.open() : presence.close()),
-)
-
-// 观战中配上了对手：先退回大厅（保持历史干净），由大厅自动带进自己的新对局。
-watch(
-  () => tournamentInfo.value?.myGame?.code,
-  (code) => {
-    if (code) backOrReplace('/tournament')
-  },
-)
-
-const spectatorSeekStatus = computed(() => tournamentInfo.value?.my?.status ?? null)
-const othersIdle = computed(() => {
-  const info = tournamentInfo.value
-  if (!info) return false
-  return info.standings.some(
-    (row, i) => (row.status === 'idle' || row.status === 'matching') && i !== info.me,
-  )
-})
-// 匹配按钮：本人空闲且场上还有空闲玩家时出现；点了之后保持可取消，直到配上。
-const spectatorCanSeek = computed(() => {
-  const info = tournamentInfo.value
-  if (!info?.participating || info.matchCloseAt === null) return false
-  if (info.matchCloseAt - info.now <= 0) return false
-  const status = spectatorSeekStatus.value
-  return status === 'matching' || (status === 'idle' && othersIdle.value)
-})
-const seekBusy = ref(false)
-async function spectatorSeek() {
-  if (seekBusy.value) return
-  seekBusy.value = true
-  try {
-    tournamentInfo.value = await (spectatorSeekStatus.value === 'matching'
-      ? cancelTournamentSeek()
-      : seekTournamentMatch())
-  } catch {
-    // ignore
-  } finally {
-    seekBusy.value = false
-  }
-}
 
 function forgetKey() {
   localStorage.removeItem(`${ROOM_KEY_PREFIX}${props.code}`)
@@ -227,7 +148,7 @@ const {
   send,
   open,
   status: wsStatus,
-} = useWebSocket(spectating ? spectateWsUrl(props.code) : roomWsUrl(props.code, key.value), {
+} = useWebSocket(roomWsUrl(props.code, key.value), {
   immediate: false,
   heartbeat: {
     message: 'ping',
@@ -270,11 +191,6 @@ useEventListener(document, 'visibilitychange', () => {
 useEventListener(window, 'online', reopenIfDead)
 
 onMounted(async () => {
-  if (spectating) {
-    everOpened = true
-    open()
-    return
-  }
   let status = { exists: true, full: false }
   try {
     status = await roomStatus(props.code, key.value)
@@ -299,7 +215,6 @@ function handleMessage(msg: ServerMessage) {
     case 'joined':
       seat.value = msg.seat
       frameSeconds.value = msg.frameSeconds
-      tournament.value = msg.tournament === true
       rematchAsked.value = false
       rematchConfig.value = false
       rematchInvite.value = false
@@ -318,12 +233,11 @@ function handleMessage(msg: ServerMessage) {
     }
     case 'start':
       resetReview()
-      if (!spectating) restoreMoves(msg.state)
+      restoreMoves(msg.state)
       game.value = msg.state
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now() - msg.elapsed
-      // 大赛对局逐帧变时限，进度条分母跟随当前帧（与 Room DO 的 scheduleFrame 一致）。
-      frameSeconds.value = tournament.value ? tournamentFrameSeconds(msg.state.frame) : msg.frameSeconds
+      frameSeconds.value = msg.frameSeconds
       submitted.value = msg.submitted[seat.value]
       oppSubmitted.value = msg.submitted[seat.value === 'black' ? 'white' : 'black']
       selected.value = msg.yourChoice
@@ -341,17 +255,14 @@ function handleMessage(msg: ServerMessage) {
       stage.value = msg.state.phase === 'playing' ? 'playing' : 'over'
       break
     case 'frame_settled':
-      if (!spectating && msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
+      if (msg.passed.includes(seat.value === 'black' ? 'white' : 'black')) {
         showToast('对方上一回合弃着')
       }
-      if (!spectating) {
-        recordFrame(msg.state)
-        if (msg.moves) logMove(msg.moves)
-      }
+      recordFrame(msg.state)
+      if (msg.moves) logMove(msg.moves)
       lastMoves.value = msg.state.lastMoves
       vanishing.value = msg.state.cleared
       game.value = msg.state
-      if (tournament.value) frameSeconds.value = tournamentFrameSeconds(msg.state.frame)
       deadline.value = msg.deadline === null ? null : Date.now() + (msg.deadline - msg.now)
       frameStart.value = Date.now()
       selected.value = null
@@ -437,15 +348,6 @@ const seatLabel = computed(() => (seat.value === 'black' ? '你执黑' : '你执
 
 const { char: resultChar, colors: resultColors, textCls: resultTextCls } = useGameResult(game, seat)
 
-// 观战视角不站队：终局在左上角直接报哪方赢。
-const spectatorResult = computed(() => {
-  const phase = game.value?.phase
-  if (phase === 'black_won') return { text: '黑方赢', cls: 'text-amber-500 dark:text-amber-400' }
-  if (phase === 'white_won') return { text: '白方赢', cls: 'text-amber-500 dark:text-amber-400' }
-  if (phase === 'draw') return { text: '和棋', cls: 'text-stone-500 dark:text-stone-400' }
-  return null
-})
-
 function sendChoice(point: Point, final: boolean) {
   if (!game.value) return
   const msg: ClientMessage = { type: 'submit', frame: game.value.frame, point, final }
@@ -501,11 +403,6 @@ function respondDraw(accept: boolean) {
 }
 
 const drawInviteSeconds = useCountdown(drawInviteDeadline, 5)
-
-// 大赛不足计分回合数的和棋记无效局（双方 0 分）：求和相关弹窗里提前说清，别让玩家白握手。
-const drawWouldVoid = computed(
-  () => tournament.value && (game.value?.frame ?? 0) < TOURNAMENT_MIN_DRAW_MOVES,
-)
 
 watch(drawInviteSeconds, (s) => {
   if (s === 0) respondDraw(false)
@@ -570,20 +467,6 @@ watch(homeSecondsLeft, (s) => {
   if (s === 0) backOrReplace()
 })
 
-// 大赛对局结束后留半分钟复盘再回大厅，剩余冷却在大厅读秒。
-const tournamentReturn = ref<number | null>(null)
-const tournamentReturnLeft = useCountdown(tournamentReturn)
-
-watch(tournamentReturnLeft, (s) => {
-  if (s === 0) backOrReplace('/tournament')
-})
-
-watch(stage, (s) => {
-  if (s === 'over' && tournament.value && tournamentReturn.value === null) {
-    tournamentReturn.value = Date.now() + 30_000
-  }
-})
-
 // 翻回合时顺带收起结果遮罩，露出棋盘。
 function review(delta: number) {
   overlayDismissed.value = true
@@ -609,11 +492,10 @@ function reload() {
 }
 
 function exitRoom() {
-  if (spectating) return backOrReplace('/tournament')
   clearMoves()
   send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
   forgetKey()
-  setTimeout(() => backOrReplace(tournament.value ? '/tournament' : '/'), 150)
+  setTimeout(() => backOrReplace(), 150)
 }
 </script>
 
@@ -637,17 +519,16 @@ function exitRoom() {
     </template>
 
     <RoomWaiting
-      v-else-if="stage === 'waiting' && !tournament"
+      v-else-if="stage === 'waiting'"
       :code="props.code"
       :url="roomUrl"
       :frame-seconds="frameSeconds"
     />
 
     <RoomReady
-      v-else-if="stage === 'ready' || (stage === 'waiting' && tournament)"
+      v-else-if="stage === 'ready'"
       :code="props.code"
       :frame-seconds="frameSeconds"
-      :tournament="tournament"
       :seat="seat"
       :my-ready="myReady"
       :opp-ready="oppReady"
@@ -659,20 +540,11 @@ function exitRoom() {
       <div class="flex w-full max-w-md flex-1 flex-col gap-3">
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="flex items-center gap-1.5 justify-self-start font-medium text-stone-700 dark:text-stone-200">
-            <template v-if="spectating">
-              <IconStones class="h-4" />
-              <template v-if="stage === 'over' && spectatorResult">
-                ·
-                <span class="font-semibold" :class="spectatorResult.cls">{{ spectatorResult.text }}</span>
-              </template>
-            </template>
-            <template v-else>
-              <IconStone :seat="seat" class="size-3.5" />
-              {{ seatLabel }}
-              <template v-if="stage === 'over'">
-                ·
-                <span class="font-semibold" :class="resultTextCls">{{ resultChar }}</span>
-              </template>
+            <IconStone :seat="seat" class="size-3.5" />
+            {{ seatLabel }}
+            <template v-if="stage === 'over'">
+              ·
+              <span class="font-semibold" :class="resultTextCls">{{ resultChar }}</span>
             </template>
           </span>
           <span class="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-0.5 text-xs text-stone-500 dark:bg-stone-800/70 dark:text-stone-400">
@@ -681,7 +553,7 @@ function exitRoom() {
             <button
               class="cursor-pointer text-red-400 transition-colors hover:text-red-600"
               aria-label="退出房间"
-              @click="spectating ? exitRoom() : (confirmingExit = true)"
+              @click="confirmingExit = true"
             >
               <IconLogout class="size-3.5" />
             </button>
@@ -697,14 +569,7 @@ function exitRoom() {
 
         <div class="grid grid-cols-[1fr_auto_1fr] items-center text-sm">
           <span class="justify-self-start font-medium text-stone-700 dark:text-stone-200">第 {{ displayFrame }} 回合</span>
-          <span
-            v-if="spectating"
-            class="flex items-center gap-1.5 text-stone-500 dark:text-stone-400"
-          >
-            <span class="size-2 rounded-full bg-emerald-500" />
-            观战中
-          </span>
-          <span v-else class="flex items-center gap-1.5" :class="oppStatus.cls">
+          <span class="flex items-center gap-1.5" :class="oppStatus.cls">
             <span class="size-2 rounded-full" :class="oppStatus.dot" />
             {{ oppStatus.text }}
           </span>
@@ -727,19 +592,18 @@ function exitRoom() {
             :submitted="submitted"
             :last-moves="reviewState ? reviewState.lastMoves : lastMoves"
             :vanishing="reviewState ? reviewState.cleared : vanishing"
-            :interactive="stage === 'playing' && !spectating && (!submitted || !oppSubmitted)"
+            :interactive="stage === 'playing' && (!submitted || !oppSubmitted)"
             @select="select"
           />
-          <!-- 观战方只在和棋时展示艺术字（胜负用左上角徽标，不挡观战复盘视线）。 -->
           <ResultOverlay
-            v-if="stage === 'over' && !overlayDismissed && (!spectating || game?.phase === 'draw')"
+            v-if="stage === 'over' && !overlayDismissed"
             :char="resultChar"
             :colors="resultColors"
             @dismiss="overlayDismissed = true"
           />
         </div>
 
-        <template v-if="stage === 'playing' && !spectating">
+        <template v-if="stage === 'playing'">
           <AppButton
             class="w-full"
             :disabled="submitted ? oppSubmitted : !selected"
@@ -767,7 +631,7 @@ function exitRoom() {
               class="cursor-pointer justify-self-start p-1 text-xs font-medium text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
               @click="confirmingExit = true"
             >
-              {{ tournament ? '返回大厅' : '返回首页' }}
+              返回首页
             </button>
             <div class="flex items-center justify-center gap-1">
               <button
@@ -796,19 +660,17 @@ function exitRoom() {
         </template>
 
         <template v-else>
-          <template v-if="!tournament">
-            <AppButton
-              v-if="!roomClosed && !oppLeft"
-              class="w-full"
-              :disabled="rematchAsked"
-              @click="openRematchConfig"
-            >
-              {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
-            </AppButton>
-            <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
-              {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
-            </p>
-          </template>
+          <AppButton
+            v-if="!roomClosed && !oppLeft"
+            class="w-full"
+            :disabled="rematchAsked"
+            @click="openRematchConfig"
+          >
+            {{ rematchAsked ? `等待对方…${rematchSecondsLeft}s` : '邀请对方再来一局' }}
+          </AppButton>
+          <p v-else class="text-center text-sm text-stone-500 dark:text-stone-400">
+            {{ roomClosed ? '对方已退出，房间已关闭' : '对方已退出' }}
+          </p>
 
           <div v-if="stage === 'over' && reviewAvailable" class="flex w-full gap-2">
             <AppButton secondary class="flex-1" :disabled="reviewAtFirst" @click="review(-1)">
@@ -819,29 +681,8 @@ function exitRoom() {
             </AppButton>
           </div>
 
-          <div v-if="spectating && spectatorCanSeek" class="flex w-full flex-col items-center gap-1.5">
-            <AppButton
-              :secondary="spectatorSeekStatus === 'matching'"
-              class="flex w-full items-center justify-center gap-2"
-              :disabled="seekBusy"
-              @click="spectatorSeek"
-            >
-              <IconSpinner v-if="spectatorSeekStatus === 'matching'" class="size-4" />
-              {{ spectatorSeekStatus === 'matching' ? '匹配中，点击取消' : '匹配对手' }}
-            </AppButton>
-            <p v-if="othersIdle" class="text-xs text-stone-400 dark:text-stone-500">有其他玩家处于空闲中</p>
-          </div>
-
           <div class="mt-auto grid grid-cols-[1fr_auto_1fr] items-center">
             <button
-              v-if="spectating || (stage === 'over' && tournament)"
-              class="cursor-pointer justify-self-start p-1 text-xs font-medium text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
-              @click="backOrReplace('/tournament')"
-            >
-              返回大厅
-            </button>
-            <button
-              v-else
               class="cursor-pointer justify-self-start p-1 text-xs font-medium text-stone-400 transition-colors hover:text-stone-600 active:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 dark:active:text-stone-300"
               @click="confirmingExit = true"
             >
@@ -927,9 +768,6 @@ function exitRoom() {
       <p class="text-sm text-stone-500 dark:text-stone-400">
         认输将判对方获胜；求和需对方同意，同意后本局记为平局。
       </p>
-      <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
-        不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
-      </p>
       <template #footer>
         <div class="flex gap-2">
           <DialogButton variant="secondary" @click="offerDraw">求和</DialogButton>
@@ -941,9 +779,6 @@ function exitRoom() {
     <AppDialog v-if="drawInvite" title="对方求和" :closable="false">
       <p class="text-sm text-stone-500 dark:text-stone-400">
         对方提议和棋，同意后本局记为平局。{{ drawInviteSeconds }} 秒后自动拒绝。
-      </p>
-      <p v-if="drawWouldVoid" class="mt-2 text-sm text-amber-600 dark:text-amber-400">
-        不足 {{ TOURNAMENT_MIN_DRAW_MOVES }} 回合的和棋记为无效局，双方均不得分。
       </p>
       <template #footer>
         <div class="flex gap-2">
@@ -961,7 +796,6 @@ function exitRoom() {
       v-if="showPlayers"
       :accounts="seatAccounts"
       :seat="seat"
-      :spectator="spectating"
       @close="showPlayers = false"
     />
 
