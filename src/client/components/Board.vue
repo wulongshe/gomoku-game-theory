@@ -27,8 +27,8 @@ const PAD = 34
 const SIZE = (BOARD_SIZE - 1) * U + PAD * 2
 const STONE_R = U * 0.46
 
-const MARK_D = STONE_R + 5
-const MARK_L = 8
+const MARK_D = STONE_R
+const MARK_L = 7
 const MARK_CORNERS = [
   [1, 1],
   [1, -1],
@@ -151,6 +151,13 @@ function isLastMove(p: Point): boolean {
           fill="#ffffff"
         />
       </mask>
+      <symbol id="corner-mark" overflow="visible">
+        <path
+          v-for="[sx, sy] in MARK_CORNERS"
+          :key="`c${sx},${sy}`"
+          :d="`M ${sx * (MARK_D - MARK_L)} ${sy * MARK_D} L ${sx * MARK_D} ${sy * MARK_D} L ${sx * MARK_D} ${sy * (MARK_D - MARK_L)}`"
+        />
+      </symbol>
     </defs>
 
     <rect :width="SIZE" :height="SIZE" rx="14" fill="url(#wood)" />
@@ -219,14 +226,17 @@ function isLastMove(p: Point): boolean {
         :stroke="stone.cell === 'white' ? '#a8a29e' : 'none'"
         stroke-width="1"
       />
-      <circle
-        v-if="isLastMove(stone)"
-        :cx="pos(stone.x)"
-        :cy="pos(stone.y)"
-        r="5"
-        :fill="stone.cell === 'black' ? '#ffffff' : '#1c1917'"
-        opacity="0.85"
-      />
+      <g v-if="isLastMove(stone)" :transform="`translate(${pos(stone.x)}, ${pos(stone.y)})`">
+        <g
+          :stroke="stone.cell === 'black' ? '#1c1917' : '#ffffff'"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          fill="none"
+          class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
+        >
+          <use href="#corner-mark" />
+        </g>
+      </g>
     </g>
 
     <g v-for="p in forbidden" :key="`f${p.x},${p.y}`" :transform="`translate(${pos(p.x)}, ${pos(p.y)})`">
@@ -239,10 +249,15 @@ function isLastMove(p: Point): boolean {
         <line :x1="-FORBID_R * 0.45" :y1="-FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="FORBID_R * 0.45" stroke-width="3" />
         <line :x1="-FORBID_R * 0.45" :y1="FORBID_R * 0.45" :x2="FORBID_R * 0.45" :y2="-FORBID_R * 0.45" stroke-width="3" />
       </g>
-      <!-- 白色底衬遮住穿过中心的符号线，让圆点与棋子上的最后落点标识观感一致 -->
-      <g v-if="isLastMove(p)">
-        <circle r="7" fill="#ffffff" />
-        <circle r="5" fill="#1c1917" opacity="0.85" />
+      <g
+        v-if="isLastMove(p)"
+        stroke="#1c1917"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        fill="none"
+        class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
+      >
+        <use href="#corner-mark" />
       </g>
     </g>
 
@@ -309,30 +324,14 @@ function isLastMove(p: Point): boolean {
         opacity="0.55"
       />
       <circle
-        v-if="!submitted"
         :cx="pos(selected.x)"
         :cy="pos(selected.y)"
         :r="STONE_R + 4"
         fill="none"
         :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
         stroke-width="2.5"
-        class="animate-[breathe_1.6s_ease-in-out_infinite]"
+        :class="!submitted && 'animate-[breathe_1.6s_ease-in-out_infinite]'"
       />
-      <g
-        v-else
-        :transform="`translate(${pos(selected.x)}, ${pos(selected.y)})`"
-        :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        fill="none"
-      >
-        <path
-          v-for="[sx, sy] in MARK_CORNERS"
-          :key="`c${sx},${sy}`"
-          :d="`M ${sx * (MARK_D - MARK_L)} ${sy * MARK_D} L ${sx * MARK_D} ${sy * MARK_D} L ${sx * MARK_D} ${sy * (MARK_D - MARK_L)}`"
-          class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
-        />
-      </g>
     </g>
 
     <g v-if="interactive">
