@@ -251,7 +251,7 @@ function isLastMove(p: Point): boolean {
       </g>
       <g
         v-if="isLastMove(p)"
-        stroke="#1c1917"
+        stroke="#ef4444"
         stroke-width="2.5"
         stroke-linecap="round"
         fill="none"
