@@ -10,6 +10,13 @@ export async function createRoom(frameSeconds: number): Promise<string> {
   return code
 }
 
+export async function createMelee(players: number): Promise<string> {
+  const res = await fetch(`/api/melee?players=${players}`, { method: 'POST' })
+  if (!res.ok) throw new Error(`createMelee failed: ${res.status}`)
+  const { code } = (await res.json()) as { code: string }
+  return code
+}
+
 export interface RoomStatus {
   exists: boolean
   full: boolean
@@ -24,6 +31,16 @@ export async function roomStatus(code: string, key: string): Promise<RoomStatus>
 
 export function roomWsUrl(code: string, key: string): string {
   return `${wsProto()}://${location.host}/api/rooms/${code}/ws?key=${key}${authQuery()}`
+}
+
+export async function meleeStatus(code: string, key: string): Promise<RoomStatus> {
+  const res = await fetch(`/api/melee/${code}?key=${key}`)
+  if (!res.ok) throw new Error(`meleeStatus failed: ${res.status}`)
+  return (await res.json()) as RoomStatus
+}
+
+export function meleeWsUrl(code: string, key: string): string {
+  return `${wsProto()}://${location.host}/api/melee/${code}/ws?key=${key}`
 }
 
 export function matchWsUrl(): string {

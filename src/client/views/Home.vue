@@ -18,10 +18,10 @@ import IconUser from '~/components/icons/IconUser.vue'
 import IconXiaohongshu from '~/components/icons/IconXiaohongshu.vue'
 import IconStones from '~/components/icons/IconStones.vue'
 import SharePoster from '~/components/SharePoster.vue'
-import { createRoom, fetchMatchWindow, matchWsUrl } from '~/apis'
+import { createMelee, createRoom, fetchMatchWindow, matchWsUrl } from '~/apis'
 import { formatClock } from '~/utils/format'
 import { useAuth } from '~/composables/useAuth'
-import { rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
+import { MELEE_SUBTITLE, MELEE_TITLE, rules, SUBTITLE, TAGLINE, TITLE } from '@gomoku/branding'
 import { DIFFICULTY_OPTIONS } from '@gomoku/config'
 import {
   FRAME_OPTIONS,
@@ -31,6 +31,7 @@ import {
   type MatchWindow,
 } from '@/shared/protocol'
 import { type Difficulty } from '@gomoku/engine/ai'
+import { MELEE_PLAYER_OPTIONS } from '@gomoku/engine/melee'
 
 const RULES = rules()
 const creating = ref(false)
@@ -41,6 +42,8 @@ const showMatch = ref(false)
 const showAuth = ref(false)
 const showLeaderboard = ref(false)
 const showAi = ref(false)
+const showMelee = ref(false)
+const creatingMelee = ref(false)
 
 const { email: authEmail, loggedIn, refresh } = useAuth()
 refresh()
@@ -92,6 +95,19 @@ const matchHours = computed(() => {
 
 const inviteFrame = useStorage('invite-frame', FRAME_OPTIONS[0])
 if (!FRAME_OPTIONS.includes(inviteFrame.value)) inviteFrame.value = FRAME_OPTIONS[0]
+
+const meleePlayers = useStorage('melee-players', MELEE_PLAYER_OPTIONS[0])
+if (!MELEE_PLAYER_OPTIONS.includes(meleePlayers.value)) meleePlayers.value = MELEE_PLAYER_OPTIONS[0]
+
+async function createMeleeRoom() {
+  if (creatingMelee.value) return
+  creatingMelee.value = true
+  try {
+    location.assign(`/melee/${await createMelee(meleePlayers.value)}`)
+  } catch {
+    creatingMelee.value = false
+  }
+}
 
 const aiDifficulty = useStorage<Difficulty>('ai-difficulty', 'normal')
 if (!DIFFICULTY_OPTIONS.includes(aiDifficulty.value)) aiDifficulty.value = 'normal'
@@ -215,6 +231,19 @@ useEventListener(window, 'resize', updateScrollHint)
         </div>
         <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
       </button>
+      <button
+        class="flex cursor-pointer items-center gap-4 rounded-xl bg-white/80 px-5 py-3.5 text-left shadow-sm backdrop-blur transition-colors hover:bg-white dark:bg-stone-800/80 dark:hover:bg-stone-800"
+        @click="showMelee = true"
+      >
+        <span
+          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-wood/30 text-base leading-none"
+        ><span class="block -translate-y-px">🥮</span></span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-stone-800 dark:text-stone-100">{{ MELEE_TITLE }}</p>
+          <p class="text-xs text-stone-500 dark:text-stone-400">{{ MELEE_SUBTITLE }}</p>
+        </div>
+        <IconChevronRight class="size-4 text-stone-400 dark:text-stone-500" />
+      </button>
     </div>
 
     <div class="flex w-full max-w-md flex-col items-center gap-2">
@@ -317,6 +346,20 @@ useEventListener(window, 'resize', updateScrollHint)
       :disabled="creating"
       @cancel="showInvite = false"
       @confirm="create"
+    />
+
+    <GameConfigDialog
+      v-if="showMelee"
+      v-model:players="meleePlayers"
+      :player-counts="MELEE_PLAYER_OPTIONS"
+      :show-frame="false"
+      :title="MELEE_TITLE"
+      :confirm-text="creatingMelee ? '创建中…' : '开始对战'"
+      :loading="creatingMelee"
+      :disabled="creatingMelee"
+      hint="每回合 60 秒 · 19 路棋盘"
+      @cancel="showMelee = false"
+      @confirm="createMeleeRoom"
     />
 
     <AppDialog v-if="showMatch" title="随机匹配" @close="closeMatchDialog">

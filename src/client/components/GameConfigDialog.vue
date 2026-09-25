@@ -16,6 +16,7 @@ withDefaults(
     disabled?: boolean
     showFrame?: boolean
     difficulties?: Difficulty[]
+    playerCounts?: number[]
   }>(),
   { showFrame: true },
 )
@@ -23,14 +24,20 @@ const emit = defineEmits<{ cancel: []; confirm: [] }>()
 
 const frame = defineModel<number>('frame', { default: FRAME_OPTIONS[0] })
 const difficulty = defineModel<Difficulty>('difficulty', { default: 'normal' })
+const players = defineModel<number>('players', { default: 3 })
 
 const frameLabel = (option: number) => (option ? `${option}s` : '不限')
 const difficultyLabel = (option: Difficulty) => DIFFICULTY_LABELS[option]
+const playersLabel = (option: number) => `${option} 人`
 </script>
 
 <template>
   <AppDialog :title="title" @close="emit('cancel')">
     <div class="flex flex-col gap-3 text-sm">
+      <div v-if="playerCounts" class="flex flex-col gap-2">
+        <span class="text-center text-stone-500 dark:text-stone-400">人数</span>
+        <SegmentedControl v-model="players" :options="playerCounts" :label="playersLabel" :disabled="disabled" />
+      </div>
       <div v-if="showFrame" class="flex flex-col gap-2">
         <span class="text-center text-stone-500 dark:text-stone-400">每回合</span>
         <SegmentedControl v-model="frame" :options="FRAME_OPTIONS" :label="frameLabel" :disabled="disabled" />

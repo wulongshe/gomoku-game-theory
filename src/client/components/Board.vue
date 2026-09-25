@@ -1,31 +1,42 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import StoneGlyph from '~/components/StoneGlyph.vue'
+import { STONE_PALETTE } from '~/utils/stones'
+import type { Point } from '@gomoku/engine/game'
 import {
-  BOARD_SIZE,
-  cellAt,
-  type CellState,
-  type ClearedGroup,
-  type GameState,
-  type Point,
-  type Seat,
-} from '@gomoku/engine/game'
+  MELEE_COLORS,
+  type Color,
+  type MeleeCell,
+  type MeleeClearedGroup,
+} from '@gomoku/engine/melee'
+
+// 双人对局与大乱斗共用：棋盘边长由 board 长度推出，棋子颜色可为五色之一。
+export interface BoardState {
+  board: MeleeCell[]
+  phase: string
+  frame: number
+  lastMoves: Point[]
+  winningLines: Point[][]
+}
 
 const props = defineProps<{
-  state: GameState
-  seat: Seat
+  state: BoardState
+  seat: Color
   selected: Point | null
   submitted: boolean
   lastMoves: Point[]
-  vanishing: ClearedGroup[]
+  vanishing: MeleeClearedGroup[]
   interactive: boolean
+  mooncake?: boolean
 }>()
 
 const emit = defineEmits<{ select: [point: Point] }>()
 
 const U = 40
 const PAD = 34
-const SIZE = (BOARD_SIZE - 1) * U + PAD * 2
 const STONE_R = U * 0.46
+const BOARD_SIZE = computed(() => Math.round(Math.sqrt(props.state.board.length)))
+const SIZE = computed(() => (BOARD_SIZE.value - 1) * U + PAD * 2)
 
 const MARK_D = STONE_R
 const MARK_L = 7
@@ -38,41 +49,62 @@ const MARK_CORNERS = [
 
 const FORBID_R = STONE_R
 
-const STARS: Point[] = [
-  { x: 3, y: 3 },
-  { x: 11, y: 3 },
-  { x: 7, y: 7 },
-  { x: 3, y: 11 },
-  { x: 11, y: 11 },
-]
+const CENTER = computed(() => (BOARD_SIZE.value - 1) / 2)
+// 开局区：奇数路为天元周围 3×3（挖掉天元），偶数路无天元、为正中 2×2。
+const ODD = computed(() => BOARD_SIZE.value % 2 === 1)
+const ZONE_FROM = computed(() => Math.floor(CENTER.value) - (ODD.value ? 1 : 0))
+const ZONE_SPAN = computed(() => (ODD.value ? 2 : 1))
 
-const ALL_POINTS: Point[] = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => ({
-  x: i % BOARD_SIZE,
-  y: Math.floor(i / BOARD_SIZE),
-}))
+// 星位：四角与天元，角星离边约 1/5 边长。
+const STARS = computed<Point[]>(() => {
+  const n = BOARD_SIZE.value
+  const a = Math.round(n / 5)
+  const b = n - 1 - a
+  const stars = [
+    { x: a, y: a },
+    { x: b, y: a },
+    { x: a, y: b },
+    { x: b, y: b },
+  ]
+  return ODD.value ? [...stars, { x: CENTER.value, y: CENTER.value }] : stars
+})
+
+const ALL_POINTS = computed<Point[]>(() =>
+  Array.from({ length: props.state.board.length }, (_, i) => ({
+    x: i % BOARD_SIZE.value,
+    y: Math.floor(i / BOARD_SIZE.value),
+  })),
+)
 
 function pos(i: number): number {
   return PAD + i * U
 }
 
-const CENTER = (BOARD_SIZE - 1) / 2
+function cellAt(p: Point): MeleeCell {
+  return props.state.board[p.y * BOARD_SIZE.value + p.x]
+}
+
+function isColor(cell: MeleeCell): cell is Color {
+  return (MELEE_COLORS as readonly string[]).includes(cell)
+}
+
 const ZONE_PAD = U * 0.7
 const openingZone = computed(() => props.state.frame === 1 && props.state.phase === 'playing')
 
 const stones = computed(() =>
-  ALL_POINTS.filter((p) => {
-    const cell = cellAt(props.state, p)
-    return cell === 'black' || cell === 'white'
-  }).map((p) => ({ ...p, cell: cellAt(props.state, p) as 'black' | 'white' })),
+  ALL_POINTS.value.flatMap((p) => {
+    const cell = cellAt(p)
+    return isColor(cell) ? [{ ...p, cell }] : []
+  }),
 )
 
-const forbidden = computed(() => ALL_POINTS.filter((p) => cellAt(props.state, p) === 'forbidden'))
+const forbidden = computed(() => ALL_POINTS.value.filter((p) => cellAt(p) === 'forbidden'))
 
 const VANISH_BASE_MS = 280
 const VANISH_STEP_MS = 90
 
 const vanishStones = computed(() => {
-  const map = new Map<string, { x: number; y: number; cell: CellState; delay: number }>()
+  const map = new Map<string, { x: number; y: number; cell: MeleeCell; delay: number }>()
   for (const group of props.vanishing) {
     for (const { x, y, cell } of group.cells) {
       const delay =
@@ -110,6 +142,15 @@ function isLastMove(p: Point): boolean {
   return props.lastMoves.some((m) => m.x === p.x && m.y === p.y)
 }
 
+// 选点提示环：黑白沿用深/浅描边，彩色月饼取各自的边色。
+const RING: Record<Color, string> = {
+  black: '#1c1917',
+  white: '#ffffff',
+  purple: STONE_PALETTE.purple.edge,
+  yellow: STONE_PALETTE.yellow.edge,
+  blue: STONE_PALETTE.blue.edge,
+}
+
 </script>
 
 <template>
@@ -120,13 +161,16 @@ function isLastMove(p: Point): boolean {
     aria-label="棋盘"
   >
     <defs>
-      <radialGradient id="stone-black" cx="35%" cy="30%" r="80%">
-        <stop offset="0%" stop-color="#5a5a5a" />
-        <stop offset="100%" stop-color="#111111" />
-      </radialGradient>
-      <radialGradient id="stone-white" cx="35%" cy="30%" r="80%">
-        <stop offset="0%" stop-color="#ffffff" />
-        <stop offset="100%" stop-color="#d6d3d1" />
+      <radialGradient
+        v-for="color in MELEE_COLORS"
+        :id="`stone-${color}`"
+        :key="color"
+        cx="35%"
+        cy="30%"
+        r="80%"
+      >
+        <stop offset="0%" :stop-color="STONE_PALETTE[color].light" />
+        <stop offset="100%" :stop-color="STONE_PALETTE[color].dark" />
       </radialGradient>
       <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%" stop-color="var(--color-wood)" />
@@ -135,14 +179,15 @@ function isLastMove(p: Point): boolean {
       <mask id="opening-mask">
         <rect :width="SIZE" :height="SIZE" fill="#ffffff" />
         <rect
-          :x="pos(CENTER - 1) - ZONE_PAD"
-          :y="pos(CENTER - 1) - ZONE_PAD"
-          :width="U * 2 + ZONE_PAD * 2"
-          :height="U * 2 + ZONE_PAD * 2"
+          :x="pos(ZONE_FROM) - ZONE_PAD"
+          :y="pos(ZONE_FROM) - ZONE_PAD"
+          :width="U * ZONE_SPAN + ZONE_PAD * 2"
+          :height="U * ZONE_SPAN + ZONE_PAD * 2"
           rx="12"
           fill="#000000"
         />
         <rect
+          v-if="ODD"
           :x="pos(CENTER) - U * 0.4"
           :y="pos(CENTER) - U * 0.4"
           :width="U * 0.8"
@@ -200,10 +245,10 @@ function isLastMove(p: Point): boolean {
         mask="url(#opening-mask)"
       />
       <rect
-        :x="pos(CENTER - 1) - ZONE_PAD"
-        :y="pos(CENTER - 1) - ZONE_PAD"
-        :width="U * 2 + ZONE_PAD * 2"
-        :height="U * 2 + ZONE_PAD * 2"
+        :x="pos(ZONE_FROM) - ZONE_PAD"
+        :y="pos(ZONE_FROM) - ZONE_PAD"
+        :width="U * ZONE_SPAN + ZONE_PAD * 2"
+        :height="U * ZONE_SPAN + ZONE_PAD * 2"
         rx="12"
         fill="none"
         stroke="var(--color-line)"
@@ -216,26 +261,20 @@ function isLastMove(p: Point): boolean {
     <g
       v-for="stone in stones"
       :key="`s${stone.x},${stone.y}`"
-      class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]"
+      :transform="`translate(${pos(stone.x)}, ${pos(stone.y)})`"
     >
-      <circle
-        :cx="pos(stone.x)"
-        :cy="pos(stone.y)"
-        :r="STONE_R"
-        :fill="`url(#stone-${stone.cell})`"
-        :stroke="stone.cell === 'white' ? '#a8a29e' : 'none'"
-        stroke-width="1"
-      />
-      <g v-if="isLastMove(stone)" :transform="`translate(${pos(stone.x)}, ${pos(stone.y)})`">
-        <g
-          :stroke="stone.cell === 'black' ? '#1c1917' : '#ffffff'"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          fill="none"
-          class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
-        >
-          <use href="#corner-mark" />
-        </g>
+      <g class="origin-center animate-[stone-drop_0.18s_ease-out] [transform-box:fill-box]">
+        <StoneGlyph :color="stone.cell" :r="STONE_R" :gradient="`stone-${stone.cell}`" :mooncake="mooncake" />
+      </g>
+      <g
+        v-if="isLastMove(stone)"
+        :stroke="RING[stone.cell]"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        fill="none"
+        class="origin-center animate-[mark-pop_0.25s_ease-out] [transform-box:fill-box]"
+      >
+        <use href="#corner-mark" />
       </g>
     </g>
 
@@ -266,14 +305,13 @@ function isLastMove(p: Point): boolean {
         :style="{ animationDelay: `${v.delay}ms` }"
         class="origin-center animate-[vanish_0.3s_ease-in_both] [transform-box:fill-box]"
       >
-        <template v-if="v.cell === 'black' || v.cell === 'white'">
-          <circle
-            :r="STONE_R"
-            :fill="`url(#stone-${v.cell})`"
-            :stroke="v.cell === 'white' ? '#a8a29e' : 'none'"
-            stroke-width="1"
-          />
-        </template>
+        <StoneGlyph
+          v-if="isColor(v.cell)"
+          :color="v.cell"
+          :r="STONE_R"
+          :gradient="`stone-${v.cell}`"
+          :mooncake="mooncake"
+        />
         <template v-else-if="v.cell === 'forbidden'">
           <g stroke="#ef4444" stroke-linecap="round">
             <circle :r="FORBID_R" fill="#ef4444" fill-opacity="0.32" stroke-width="2.5" />
@@ -315,20 +353,14 @@ function isLastMove(p: Point): boolean {
       class="animate-[win-line_0.5s_ease-out_forwards]"
     />
 
-    <g v-if="selected">
+    <g v-if="selected" :transform="`translate(${pos(selected.x)}, ${pos(selected.y)})`">
+      <g opacity="0.55">
+        <StoneGlyph :color="seat" :r="STONE_R" :gradient="`stone-${seat}`" :mooncake="mooncake" />
+      </g>
       <circle
-        :cx="pos(selected.x)"
-        :cy="pos(selected.y)"
-        :r="STONE_R"
-        :fill="`url(#stone-${seat})`"
-        opacity="0.55"
-      />
-      <circle
-        :cx="pos(selected.x)"
-        :cy="pos(selected.y)"
         :r="STONE_R + 4"
         fill="none"
-        :stroke="seat === 'black' ? '#1c1917' : '#ffffff'"
+        :stroke="RING[seat]"
         stroke-width="2.5"
         :class="!submitted && 'animate-[breathe_1.6s_ease-in-out_infinite]'"
       />

@@ -1,4 +1,5 @@
 import { FRAME_SECONDS } from '@gomoku/engine/game'
+import { MELEE_PLAYER_OPTIONS } from '@gomoku/engine/melee'
 import { EMAIL_PATTERN, FRAME_OPTIONS, PASSWORD_MIN_LENGTH } from '@/shared/protocol'
 import { sendVerificationEmail } from './email'
 import { matchOpen, matchWindow } from './lobby'
@@ -7,6 +8,7 @@ import { allocateRoom } from './roomCode'
 export { Room } from './room'
 export { Lobby } from './lobby'
 export { Accounts } from './accounts'
+export { Melee } from './melee'
 
 const CANONICAL_HOST = 'gomoku.recode.top'
 
@@ -86,7 +88,15 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
     if (request.method === 'POST' && url.pathname === '/api/rooms') {
       const frame = Number(url.searchParams.get('frame') ?? FRAME_SECONDS)
       if (!FRAME_OPTIONS.includes(frame)) return new Response('Invalid options', { status: 400 })
-      const code = await allocateRoom(env, { frame })
+      const code = await allocateRoom(env.ROOM, { frame })
+      return Response.json({ code })
+    }
+    if (request.method === 'POST' && url.pathname === '/api/melee') {
+      const players = Number(url.searchParams.get('players'))
+      if (!MELEE_PLAYER_OPTIONS.includes(players)) {
+        return new Response('Invalid options', { status: 400 })
+      }
+      const code = await allocateRoom(env.MELEE, { players })
       return Response.json({ code })
     }
     if (request.method === 'GET' && url.pathname === '/api/match') {
@@ -117,9 +127,10 @@ async function handle(request: Request, env: Env, url: URL): Promise<Response> {
       const login = await accounts.login(email, 'test1234')
       return login.ok ? Response.json({ token: login.token }) : authError('unauthorized', 401)
     }
-    const roomMatch = url.pathname.match(/^\/api\/rooms\/(\d{4,8})(\/ws)?$/)
+    const roomMatch = url.pathname.match(/^\/api\/(rooms|melee)\/(\d{4,8})(\/ws)?$/)
     if (roomMatch && request.method === 'GET') {
-      return env.ROOM.get(env.ROOM.idFromName(roomMatch[1])).fetch(request)
+      const rooms = roomMatch[1] === 'melee' ? env.MELEE : env.ROOM
+      return rooms.get(rooms.idFromName(roomMatch[2])).fetch(request)
     }
     return new Response('Not Found', { status: 404 })
   }

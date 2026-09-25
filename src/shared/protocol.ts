@@ -1,4 +1,5 @@
 import type { GameState, Point, Seat } from '@gomoku/engine/game'
+import type { Color, MeleeState } from '@gomoku/engine/melee'
 
 export const FRAME_OPTIONS = [30, 60, 0]
 
@@ -107,4 +108,33 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   const point = msg.point as Record<string, unknown>
   if (!Number.isInteger(point.x) || !Number.isInteger(point.y)) return null
   return { type: 'submit', frame, point: { x: point.x as number, y: point.y as number }, final }
+}
+
+// 大乱斗房间协议：席位为棋子颜色，提交/准备/退出与双人对战同形，无再来一局与求和。
+export type MeleeClientMessage =
+  | { type: 'submit'; frame: number; point: Point | null; final: boolean }
+  | { type: 'ready' }
+  | { type: 'leave' }
+
+export type MeleeServerMessage =
+  | { type: 'joined'; seat: Color; seats: Color[]; frameSeconds: number }
+  | { type: 'lobby'; present: Color[]; ready: Color[] }
+  | {
+      type: 'start'
+      state: MeleeState
+      deadline: number | null
+      now: number
+      elapsed: number
+      submitted: Color[]
+      yourChoice: Point | null
+    }
+  | { type: 'submitted'; submitted: Color[] }
+  | { type: 'frame_settled'; state: MeleeState; deadline: number | null; now: number }
+  | { type: 'dropped'; seat: Color; state: MeleeState }
+  | { type: 'error'; message: string }
+
+export function parseMeleeClientMessage(raw: string): MeleeClientMessage | null {
+  const msg = parseClientMessage(raw)
+  if (!msg) return null
+  return msg.type === 'submit' || msg.type === 'ready' || msg.type === 'leave' ? msg : null
 }

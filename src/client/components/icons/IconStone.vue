@@ -1,24 +1,21 @@
 <script setup lang="ts">
-import type { Seat } from '@gomoku/engine/game'
+import StoneGlyph from '~/components/StoneGlyph.vue'
+import { STONE_PALETTE } from '~/utils/stones'
+import type { Color } from '@gomoku/engine/melee'
 
-defineProps<{ seat: Seat }>()
+defineProps<{ seat: Color; mooncake?: boolean }>()
 </script>
 
 <template>
   <svg viewBox="0 0 30 30" aria-hidden="true">
     <defs>
       <radialGradient :id="`seat-stone-${seat}`" cx="35%" cy="30%" r="80%">
-        <stop offset="0%" :stop-color="seat === 'black' ? '#5a5a5a' : '#ffffff'" />
-        <stop offset="100%" :stop-color="seat === 'black' ? '#111111' : '#d6d3d1'" />
+        <stop offset="0%" :stop-color="STONE_PALETTE[seat].light" />
+        <stop offset="100%" :stop-color="STONE_PALETTE[seat].dark" />
       </radialGradient>
     </defs>
-    <circle
-      cx="15"
-      cy="15"
-      r="13.5"
-      :fill="`url(#seat-stone-${seat})`"
-      :stroke="seat === 'white' ? '#a8a29e' : 'none'"
-      stroke-width="1"
-    />
+    <g transform="translate(15 15)">
+      <StoneGlyph :color="seat" :r="13.5" :gradient="`seat-stone-${seat}`" :mooncake="mooncake" />
+    </g>
   </svg>
 </template>

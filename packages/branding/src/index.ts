@@ -1,4 +1,5 @@
 import type { Difficulty } from '@gomoku/engine/ai'
+import type { Color } from '@gomoku/engine/melee'
 
 export const TITLE = '博弈五子棋'
 export const TAGLINE = '下棋，更是读心'
@@ -72,4 +73,37 @@ export function fullRules(audience: RuleAudience = 'pvp'): { title: string; item
     title,
     items: items.filter((item) => !item.only || item.only === audience).map((item) => item.text),
   }))
+}
+
+export const COLOR_LABELS: Record<Color, string> = {
+  black: '黑',
+  white: '白',
+  purple: '紫',
+  yellow: '黄',
+  blue: '蓝',
+}
+
+export const MELEE_TITLE = '中秋特辑'
+export const MELEE_SUBTITLE = '3~5 人月饼大乱斗'
+
+export function meleeRules(): { title: string; items: string[] }[] {
+  return [
+    {
+      title: '🥮 落子',
+      items: [
+        '所有人每回合各自秘密选点，全员提交或时间到后同时落子',
+        '首回合只能落在中央 3×3 区域，且不能落天元',
+        '两人以上撞在同一点，该点变为禁点；禁点连成五整线清除',
+      ],
+    },
+    {
+      title: '🏁 完赛',
+      items: [
+        '任意方向连成五子即完赛，按先后顺序排名，月饼留在盘上',
+        '多人同一回合连五，连线一起消失，谁都不算完赛',
+        '只剩一人或无人能再连五时终局，剩下的人垫底',
+        '中途退出即离场，不计名次',
+      ],
+    },
+  ]
 }

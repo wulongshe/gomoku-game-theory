@@ -78,14 +78,21 @@ const DIRECTIONS = [
 const WIN_SCORE = 5
 
 // 经过 point、沿 (dx,dy) 方向连续同为 cell 的格子下标，按方向顺序排列。
-function runThrough(board: CellState[], point: Point, cell: CellState, dx: number, dy: number): number[] {
-  const line = [point.y * BOARD_SIZE + point.x]
+function runThrough<C extends string>(
+  board: readonly C[],
+  size: number,
+  point: Point,
+  cell: C,
+  dx: number,
+  dy: number,
+): number[] {
+  const line = [point.y * size + point.x]
   for (const sign of [1, -1] as const) {
     let x = point.x + dx * sign
     let y = point.y + dy * sign
-    while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[y * BOARD_SIZE + x] === cell) {
-      if (sign === 1) line.push(y * BOARD_SIZE + x)
-      else line.unshift(y * BOARD_SIZE + x)
+    while (x >= 0 && x < size && y >= 0 && y < size && board[y * size + x] === cell) {
+      if (sign === 1) line.push(y * size + x)
+      else line.unshift(y * size + x)
       x += dx * sign
       y += dy * sign
     }
@@ -93,11 +100,17 @@ function runThrough(board: CellState[], point: Point, cell: CellState, dx: numbe
   return line
 }
 
-function winningLines(board: CellState[], cell: CellState, point: Point): number[][] {
-  if (board[point.y * BOARD_SIZE + point.x] !== cell) return []
+// 经过 point 的所有 ≥5 连线（每个方向至多一条），棋盘边长由 size 指定。
+export function winningLines<C extends string>(
+  board: readonly C[],
+  cell: C,
+  point: Point,
+  size = BOARD_SIZE,
+): number[][] {
+  if (board[point.y * size + point.x] !== cell) return []
   const lines: number[][] = []
   for (const [dx, dy] of DIRECTIONS) {
-    const line = runThrough(board, point, cell, dx, dy)
+    const line = runThrough(board, size, point, cell, dx, dy)
     if (line.length >= WIN_SCORE) lines.push(line)
   }
   return lines
@@ -105,11 +118,16 @@ function winningLines(board: CellState[], cell: CellState, point: Point): number
 
 // 该方还有没有可能凑出五连：把所有空点都让给它（禁点即落在空点上），逐个空点当「最后一手」查连线。
 // 判否即这一方永远赢不了。
-function fivePossible(board: CellState[], cell: Seat | 'forbidden'): boolean {
-  const hypo = board.map((c) => (c === 'empty' ? cell : c))
+export function fivePossible<C extends string>(
+  board: readonly C[],
+  cell: C,
+  empty: C,
+  size = BOARD_SIZE,
+): boolean {
+  const hypo = board.map((c) => (c === empty ? cell : c))
   for (let i = 0; i < board.length; i++) {
-    if (board[i] !== 'empty') continue
-    if (winningLines(hypo, cell, { x: i % BOARD_SIZE, y: Math.floor(i / BOARD_SIZE) }).length) return true
+    if (board[i] !== empty) continue
+    if (winningLines(hypo, cell, { x: i % size, y: Math.floor(i / size) }, size).length) return true
   }
   return false
 }
@@ -117,7 +135,11 @@ function fivePossible(board: CellState[], cell: Seat | 'forbidden'): boolean {
 // 死局判和：黑、白与禁点三方都不可能再成五即终局。禁点成五必须算「还有变化」——
 // 禁点五连会清空复位、翻出新空点，不能提前判和。
 function isDeadDraw(board: CellState[]): boolean {
-  return !fivePossible(board, 'black') && !fivePossible(board, 'white') && !fivePossible(board, 'forbidden')
+  return (
+    !fivePossible(board, 'black', 'empty') &&
+    !fivePossible(board, 'white', 'empty') &&
+    !fivePossible(board, 'forbidden', 'empty')
+  )
 }
 
 export function settleFrame(state: GameState, choices: FrameChoices): GameState {

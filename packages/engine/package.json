@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./game": "./src/game.ts",
+    "./melee": "./src/melee.ts",
     "./ai": "./src/ai.ts",
     "./eval": "./src/eval.ts",
     "./mcts": "./src/mcts/index.ts"
